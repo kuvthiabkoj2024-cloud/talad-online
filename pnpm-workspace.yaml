@@ -1,0 +1,28 @@
+packages:
+  - apps/*
+  - services/*
+  - packages/*
+
+# Dependencies permitted to run install scripts (pnpm blocks them by default)
+allowBuilds:
+  '@nestjs/core': true
+  '@prisma/engines': true
+  '@scarf/scarf': false
+  '@tailwindcss/oxide': true
+  argon2: true
+  esbuild: true
+  prisma: true
+  sharp: true
+  unrs-resolver: true
+
+minimumReleaseAgeExclude:
+  - '@expo/cli@57.0.27'
+  - '@expo/router-server@57.0.11'
+  - '@expo/ui@57.0.20'
+  - babel-preset-expo@57.0.13
+  - expo-glass-effect@57.0.4
+  - expo-linking@57.0.11
+  - expo-modules-core@57.0.19
+  - expo-modules-jsi@57.1.1
+  - expo-router@57.0.23
+  - expo@57.0.25

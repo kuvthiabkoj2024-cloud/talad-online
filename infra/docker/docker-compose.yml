@@ -1,0 +1,43 @@
+# Local development dependencies. Start with: pnpm infra:up
+name: talad
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: talad
+      POSTGRES_PASSWORD: talad
+      POSTGRES_DB: talad
+    ports: ['5433:5432'] # 5433 on the host avoids clashing with a locally installed Postgres
+    volumes: ['postgres:/var/lib/postgresql']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U talad -d talad']
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    ports: ['6379:6379']
+    volumes: ['redis:/data']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      retries: 10
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.54
+    environment:
+      MEILI_MASTER_KEY: dev-meili-master-key-change-me
+      MEILI_ENV: development
+    ports: ['7700:7700']
+    volumes: ['meili:/meili_data']
+
+  # Catches all outgoing email in dev. UI: http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:v1.31
+    ports: ['1025:1025', '8025:8025']
+
+volumes:
+  postgres:
+  redis:
+  meili:

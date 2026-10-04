@@ -1,0 +1,27 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# builds
+dist/
+build/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+coverage/
+
+# expo / native
+.expo/
+ios/
+android/
+
+# env
+.env
+.env*.local
+!.env.example
+
+# logs & os
+*.log
+.DS_Store
+.idea/

@@ -1,0 +1,7 @@
+node_modules
+dist
+coverage
+.env
+
+# Prisma client is generated from prisma/schema.prisma
+/src/generated/prisma

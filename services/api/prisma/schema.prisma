@@ -1,0 +1,765 @@
+// Taladonline — marketplace data model (MVP / Phase 1).
+// Section references (§) point to marketplace-project-scope.md.
+// Enum values must stay in sync with @talad/shared.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────────────
+
+enum AdminRole {
+  SUPER_ADMIN
+  SUPPORT
+  FINANCE
+}
+
+enum ActorType {
+  ADMIN
+  SHOP
+  CUSTOMER
+}
+
+enum TwoFactorMethod {
+  NONE
+  TOTP
+  SMS
+}
+
+enum ShopStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum KycDocumentType {
+  BUSINESS_LICENSE
+  NATIONAL_ID
+  TAX_CERTIFICATE
+  OTHER
+}
+
+enum ProductStatus {
+  DRAFT
+  PENDING
+  PUBLISHED
+  REJECTED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PACKED
+  SHIPPED
+  DELIVERED
+  COMPLETED
+  CANCELLED
+  RETURN_REQUESTED
+}
+
+enum PaymentMethod {
+  COD
+  BANK_TRANSFER
+  BCEL_ONE
+  LAPNET
+  U_MONEY
+  CARD
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  EXPIRED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum PointTransactionType {
+  EARN
+  REDEEM
+  EXPIRE
+  ADJUST
+}
+
+enum ReviewTarget {
+  PRODUCT
+  SHOP
+}
+
+enum DisputeStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED_REFUND
+  RESOLVED_REJECTED
+}
+
+enum PayoutStatus {
+  SCHEDULED
+  PROCESSING
+  PAID
+  FAILED
+}
+
+// ─── Identity & access (§2.1, §3.1, §4.1) ───────────────────────────────────
+
+model AdminUser {
+  id              String          @id @default(uuid(7))
+  email           String          @unique
+  name            String
+  passwordHash    String
+  role            AdminRole       @default(SUPPORT)
+  twoFactorMethod TwoFactorMethod @default(NONE)
+  totpSecret      String?
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  auditLogs AuditLog[]
+}
+
+/// Login sessions for every actor type — also powers device history (§3.1).
+/// `refreshTokenHash` holds the SHA-256 of the opaque session token handed to the client.
+model Session {
+  id               String    @id @default(uuid(7))
+  actorType        ActorType
+  actorId          String
+  refreshTokenHash String    @unique
+  userAgent        String?
+  ipAddress        String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([actorType, actorId])
+}
+
+/// Short-lived codes for password reset and SMS/email OTP.
+model OneTimeCode {
+  id         String    @id @default(uuid(7))
+  actorType  ActorType
+  actorId    String
+  purpose    String // e.g. "password_reset", "login_2fa", "phone_verify"
+  codeHash   String
+  /// Failed verification attempts; the code is burned after too many.
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([actorType, actorId, purpose])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid(7))
+  adminId    String?
+  action     String // e.g. "shop.approve"
+  entityType String
+  entityId   String
+  changes    Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  admin AdminUser? @relation(fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+// ─── Shops (§2.3, §3.2) ─────────────────────────────────────────────────────
+
+/// A shop belongs to a platform account (Customer). The owner signs in with that
+/// account — the same login they buy with — so shops hold no credentials of their own.
+model Shop {
+  id                   String     @id @default(uuid(7))
+  slug                 String     @unique
+  /// Owning account; one shop per account for now (staff sub-accounts are Phase 2).
+  ownerId              String?    @unique
+  name                 String
+  ownerName            String
+  /// Business contact details shown to the platform (not used to sign in).
+  email                String     @unique
+  phone                String     @unique
+  status               ShopStatus @default(PENDING)
+  rejectionReason      String?
+  logoUrl              String?
+  coverUrl             String?
+  description          String?
+  address              String?
+  latitude             Decimal?   @db.Decimal(9, 6)
+  longitude            Decimal?   @db.Decimal(9, 6)
+  businessHours        Json?
+  socialLinks          Json?
+  /// Overrides the platform default when set (§2.3).
+  commissionRate       Decimal?   @db.Decimal(5, 2)
+  /// Order deadline policy (§3.6), in hours.
+  paymentWindowHrs     Int        @default(24)
+  autoConfirmHrs       Int        @default(168)
+  /// Manual payments (§6): customers transfer to this account / QR and upload a slip.
+  paymentQrKey         String? // private storage key of the shop's LAO QR image
+  paymentBankCode      String?
+  paymentAccountName   String?
+  paymentAccountNumber String?
+  ratingAvg            Decimal    @default(0) @db.Decimal(3, 2)
+  ratingCount          Int        @default(0)
+  verifiedAt           DateTime?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  owner         Customer?          @relation("ShopOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  kycDocuments  ShopKycDocument[]
+  products      Product[]
+  orders        ShopOrder[]
+  coupons       Coupon[]
+  payouts       Payout[]
+  customerNotes ShopCustomerNote[]
+}
+
+model ShopKycDocument {
+  id         String          @id @default(uuid(7))
+  shopId     String
+  type       KycDocumentType
+  fileKey    String
+  reviewedAt DateTime?
+  createdAt  DateTime        @default(now())
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+}
+
+model ShopCustomerNote {
+  id          String   @id @default(uuid(7))
+  shopId      String
+  customerId  String
+  note        String?
+  blacklisted Boolean  @default(false)
+  updatedAt   DateTime @updatedAt
+
+  shop     Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, customerId])
+}
+
+model Payout {
+  id               String       @id @default(uuid(7))
+  shopId           String
+  periodStart      DateTime
+  periodEnd        DateTime
+  grossAmount      Decimal      @db.Decimal(14, 2)
+  commissionAmount Decimal      @db.Decimal(14, 2)
+  refundAmount     Decimal      @default(0) @db.Decimal(14, 2)
+  netAmount        Decimal      @db.Decimal(14, 2)
+  status           PayoutStatus @default(SCHEDULED)
+  paidAt           DateTime?
+  reference        String?
+  createdAt        DateTime     @default(now())
+
+  shop Shop @relation(fields: [shopId], references: [id])
+
+  @@index([shopId, periodStart])
+}
+
+// ─── Customers (§4.1, §4.2) ─────────────────────────────────────────────────
+
+/// A platform account: everyone buys with it, and it may also own a shop.
+model Customer {
+  id              String          @id @default(uuid(7))
+  email           String?         @unique
+  phone           String?         @unique
+  name            String
+  passwordHash    String?
+  phoneVerifiedAt DateTime?
+  /// Subject ids from social sign-in providers.
+  googleId        String?         @unique
+  appleId         String?         @unique
+  avatarUrl       String?
+  locale          String          @default("lo")
+  twoFactorMethod TwoFactorMethod @default(NONE)
+  totpSecret      String?
+  pointsBalance   Int             @default(0)
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  /// The shop this account owns, if any — owners still shop as customers.
+  shop          Shop?                 @relation("ShopOwner")
+  addresses     Address[]
+  bankAccounts  CustomerBankAccount[]
+  cartItems     CartItem[]
+  orders        Order[]
+  wishlist      WishlistItem[]
+  reviews       Review[]
+  points        PointTransaction[]
+  redemptions   CouponRedemption[]
+  shopNotes     ShopCustomerNote[]
+  notifications Notification[]
+}
+
+model Address {
+  id            String   @id @default(uuid(7))
+  customerId    String
+  label         String? // HOME | WORK | OTHER
+  recipientName String
+  phone         String
+  province      String // ISO 3166-2:LA code, e.g. "VT"
+  district      String
+  village       String?
+  line          String
+  latitude      Decimal? @db.Decimal(9, 6)
+  longitude     Decimal? @db.Decimal(9, 6)
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+}
+
+/// Where refunds are paid out (§2.10, §4.5).
+model CustomerBankAccount {
+  id            String   @id @default(uuid(7))
+  customerId    String
+  bankCode      String // key of LAO_BANKS in @talad/shared
+  accountName   String
+  accountNumber String
+  /// Private storage key of the customer's payment QR image (optional).
+  qrImageKey    String?
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+}
+
+// ─── Catalog (§2.5, §2.6, §3.3) ─────────────────────────────────────────────
+
+model Category {
+  id             String   @id @default(uuid(7))
+  parentId       String?
+  slug           String   @unique
+  /// Localized names: { "lo": "...", "en": "..." }
+  name           Json
+  iconUrl        String?
+  imageUrl       String?
+  sortOrder      Int      @default(0)
+  isActive       Boolean  @default(true)
+  commissionRate Decimal? @db.Decimal(5, 2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@index([parentId])
+}
+
+model Unit {
+  id        String   @id @default(uuid(7))
+  code      String   @unique // kg, pcs, box, l
+  /// Localized names: { "lo": "...", "en": "..." }
+  name      Json
+  createdAt DateTime @default(now())
+
+  products Product[]
+}
+
+model Product {
+  id                String        @id @default(uuid(7))
+  shopId            String
+  categoryId        String
+  unitId            String
+  slug              String
+  sku               String
+  name              String
+  description       String?
+  price             Decimal       @db.Decimal(14, 2)
+  compareAtPrice    Decimal?      @db.Decimal(14, 2)
+  stock             Int           @default(0)
+  lowStockThreshold Int           @default(5)
+  status            ProductStatus @default(DRAFT)
+  rejectionReason   String?
+  /// The single short product video (§2.5); transcoded asset key.
+  videoKey          String?
+  isPinned          Boolean       @default(false)
+  soldCount         Int           @default(0)
+  viewCount         Int           @default(0)
+  ratingAvg         Decimal       @default(0) @db.Decimal(3, 2)
+  ratingCount       Int           @default(0)
+  publishedAt       DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  shop       Shop             @relation(fields: [shopId], references: [id])
+  category   Category         @relation(fields: [categoryId], references: [id])
+  unit       Unit             @relation(fields: [unitId], references: [id])
+  images     ProductImage[]
+  variants   ProductVariant[]
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+  wishlistBy WishlistItem[]
+
+  @@unique([shopId, sku])
+  @@unique([shopId, slug])
+  @@index([shopId, status])
+  @@index([categoryId, status])
+  @@index([status, publishedAt])
+}
+
+model ProductImage {
+  id        String @id @default(uuid(7))
+  productId String
+  key       String
+  sortOrder Int    @default(0)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model ProductVariant {
+  id         String   @id @default(uuid(7))
+  productId  String
+  sku        String
+  /// e.g. { "size": "L", "color": "Red" }
+  attributes Json
+  price      Decimal? @db.Decimal(14, 2)
+  stock      Int      @default(0)
+
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@unique([productId, sku])
+}
+
+// ─── Cart & orders (§4.4, §4.5, §3.6) ───────────────────────────────────────
+
+model CartItem {
+  id         String   @id @default(uuid(7))
+  customerId String
+  productId  String
+  variantId  String?
+  quantity   Int
+  createdAt  DateTime @default(now())
+
+  customer Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  product  Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant  ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, productId, variantId])
+}
+
+/// A checkout. Split into one ShopOrder per shop, since each shop fulfils independently (§4.4).
+model Order {
+  id              String   @id @default(uuid(7))
+  number          String   @unique
+  customerId      String
+  shippingAddress Json // snapshot of Address at checkout
+  subtotal        Decimal  @db.Decimal(14, 2)
+  discountTotal   Decimal  @default(0) @db.Decimal(14, 2)
+  shippingTotal   Decimal  @default(0) @db.Decimal(14, 2)
+  pointsRedeemed  Int      @default(0)
+  grandTotal      Decimal  @db.Decimal(14, 2)
+  currency        String   @default("LAK")
+  /// Optional instructions from the customer (colour, size, delivery notes…).
+  note            String?
+  createdAt       DateTime @default(now())
+
+  customer   Customer    @relation(fields: [customerId], references: [id])
+  shopOrders ShopOrder[]
+  payments   Payment[]
+
+  @@index([customerId, createdAt])
+}
+
+model ShopOrder {
+  id                 String      @id @default(uuid(7))
+  number             String      @unique
+  orderId            String
+  shopId             String
+  status             OrderStatus @default(PENDING)
+  subtotal           Decimal     @db.Decimal(14, 2)
+  discountTotal      Decimal     @default(0) @db.Decimal(14, 2)
+  shippingFee        Decimal     @default(0) @db.Decimal(14, 2)
+  commissionAmount   Decimal     @default(0) @db.Decimal(14, 2)
+  total              Decimal     @db.Decimal(14, 2)
+  deliveryProviderId String?
+  trackingNumber     String?
+  /// Deadline logic (§3.6): buyers may extend each deadline a limited number of times.
+  paymentDueAt       DateTime?
+  autoConfirmAt      DateTime?
+  extensionsUsed     Int         @default(0)
+  cancelReason       String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  order            Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  shop             Shop                 @relation(fields: [shopId], references: [id])
+  deliveryProvider DeliveryProvider?    @relation(fields: [deliveryProviderId], references: [id])
+  items            OrderItem[]
+  history          OrderStatusHistory[]
+  disputes         Dispute[]
+  payments         Payment[]
+
+  @@index([shopId, status])
+  @@index([orderId])
+}
+
+model OrderItem {
+  id          String  @id @default(uuid(7))
+  shopOrderId String
+  productId   String
+  variantId   String?
+  /// Snapshots so historic orders survive product edits.
+  name        String
+  sku         String
+  unitPrice   Decimal @db.Decimal(14, 2)
+  quantity    Int
+  lineTotal   Decimal @db.Decimal(14, 2)
+
+  shopOrder ShopOrder       @relation(fields: [shopOrderId], references: [id], onDelete: Cascade)
+  product   Product         @relation(fields: [productId], references: [id])
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+  review    Review?
+
+  @@index([shopOrderId])
+}
+
+model OrderStatusHistory {
+  id          String       @id @default(uuid(7))
+  shopOrderId String
+  fromStatus  OrderStatus?
+  toStatus    OrderStatus
+  actorType   ActorType?
+  actorId     String?
+  note        String?
+  createdAt   DateTime     @default(now())
+
+  shopOrder ShopOrder @relation(fields: [shopOrderId], references: [id], onDelete: Cascade)
+
+  @@index([shopOrderId, createdAt])
+}
+
+/// One payment per shop order for manual transfers and COD (each shop is paid separately);
+/// older checkouts have a single order-level payment with shopOrderId = null.
+model Payment {
+  id             String        @id @default(uuid(7))
+  orderId        String
+  shopOrderId    String?
+  method         PaymentMethod
+  status         PaymentStatus @default(PENDING)
+  amount         Decimal       @db.Decimal(14, 2)
+  providerRef    String?
+  payload        Json?
+  paidAt         DateTime?
+  /// Transfer slip uploaded by the customer (private storage key), awaiting the shop's check.
+  slipKey        String?
+  slipUploadedAt DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  order     Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  shopOrder ShopOrder? @relation(fields: [shopOrderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([shopOrderId])
+  @@index([providerRef])
+}
+
+model Dispute {
+  id           String        @id @default(uuid(7))
+  shopOrderId  String
+  raisedBy     ActorType
+  reason       String
+  details      String?
+  evidenceKeys String[]
+  status       DisputeStatus @default(OPEN)
+  refundAmount Decimal?      @db.Decimal(14, 2)
+  resolution   String?
+  resolvedById String?
+  resolvedAt   DateTime?
+  createdAt    DateTime      @default(now())
+
+  shopOrder ShopOrder @relation(fields: [shopOrderId], references: [id])
+
+  @@index([status])
+}
+
+// ─── Delivery (§2.7) ────────────────────────────────────────────────────────
+
+model DeliveryProvider {
+  id          String   @id @default(uuid(7))
+  code        String   @unique
+  name        String
+  logoUrl     String?
+  /// "api" when integrated, otherwise "manual" assignment.
+  mode        String   @default("manual")
+  credentials Json? // encrypted at rest by the application
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  zones  ShippingZone[]
+  orders ShopOrder[]
+}
+
+model ShippingZone {
+  id                 String   @id @default(uuid(7))
+  deliveryProviderId String
+  name               String
+  provinces          String[]
+  baseFee            Decimal  @db.Decimal(14, 2)
+  perKgFee           Decimal  @default(0) @db.Decimal(14, 2)
+
+  provider DeliveryProvider @relation(fields: [deliveryProviderId], references: [id], onDelete: Cascade)
+}
+
+// ─── Promotions & loyalty (§3.4, §4.6) ──────────────────────────────────────
+
+/// shopId = null means a platform-wide coupon.
+model Coupon {
+  id             String       @id @default(uuid(7))
+  shopId         String?
+  code           String
+  type           DiscountType
+  value          Decimal      @db.Decimal(14, 2)
+  minOrderAmount Decimal?     @db.Decimal(14, 2)
+  maxDiscount    Decimal?     @db.Decimal(14, 2)
+  usageLimit     Int?
+  perCustomer    Int?         @default(1)
+  usedCount      Int          @default(0)
+  startsAt       DateTime
+  endsAt         DateTime
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+
+  shop        Shop?              @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  redemptions CouponRedemption[]
+
+  @@unique([shopId, code])
+}
+
+model CouponRedemption {
+  id         String   @id @default(uuid(7))
+  couponId   String
+  customerId String
+  orderId    String
+  amount     Decimal  @db.Decimal(14, 2)
+  createdAt  DateTime @default(now())
+
+  coupon   Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([couponId, customerId])
+}
+
+model PointTransaction {
+  id         String               @id @default(uuid(7))
+  customerId String
+  type       PointTransactionType
+  points     Int // positive for EARN/ADJUST+, negative for REDEEM/EXPIRE
+  orderId    String?
+  expiresAt  DateTime?
+  note       String?
+  createdAt  DateTime             @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, createdAt])
+}
+
+// ─── Engagement (§3.8, §4.7) ────────────────────────────────────────────────
+
+model Review {
+  id          String       @id @default(uuid(7))
+  target      ReviewTarget
+  targetId    String // productId or shopId
+  customerId  String
+  orderItemId String?      @unique
+  rating      Int
+  comment     String?
+  mediaKeys   String[]
+  reply       String?
+  repliedAt   DateTime?
+  isHidden    Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+
+  customer  Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  orderItem OrderItem? @relation(fields: [orderItemId], references: [id])
+
+  @@index([target, targetId])
+}
+
+model WishlistItem {
+  customerId String
+  productId  String
+  createdAt  DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([customerId, productId])
+}
+
+model Notification {
+  id         String    @id @default(uuid(7))
+  customerId String?
+  shopId     String?
+  type       String
+  title      String
+  body       String
+  data       Json?
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, readAt])
+  @@index([shopId, readAt])
+}
+
+// ─── CMS & settings (§2.8, §2.11) ───────────────────────────────────────────
+
+model Banner {
+  id         String   @id @default(uuid(7))
+  /// Localized titles: { "lo": "...", "en": "..." }
+  title      Json
+  imageUrl   String
+  /// e.g. "/c/electronics", "/p/<slug>", "/s/<shop-slug>"
+  linkTarget String?
+  sortOrder  Int      @default(0)
+  startsAt   DateTime
+  endsAt     DateTime
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+}
+
+model CmsPage {
+  id        String   @id @default(uuid(7))
+  slug      String   @unique // about, terms, privacy, faq
+  /// { "lo": { "title": "...", "body": "..." }, "en": {...} }
+  content   Json
+  updatedAt DateTime @updatedAt
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}

@@ -1,0 +1,32 @@
+{
+  "name": "talad-online",
+  "private": true,
+  "description": "Multi-vendor marketplace monorepo (web storefront, admin, shop, mobile, API)",
+  "packageManager": "pnpm@12.6.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "infra:up": "docker compose -f infra/docker/docker-compose.yml up -d",
+    "infra:down": "docker compose -f infra/docker/docker-compose.yml down",
+    "db:migrate": "pnpm --filter @talad/api db:migrate",
+    "db:generate": "pnpm --filter @talad/api db:generate",
+    "db:seed": "pnpm --filter @talad/api db:seed",
+    "db:studio": "pnpm --filter @talad/api db:studio"
+  },
+  "devDependencies": {
+    "turbo": "^2"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "24.21.0",
+      "onFail": "download"
+    }
+  }
+}

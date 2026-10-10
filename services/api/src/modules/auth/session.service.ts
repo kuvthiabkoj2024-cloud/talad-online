@@ -25,9 +25,9 @@ const hashToken = (token: string) => createHash('sha256').update(token).digest('
 export class SessionService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async issue(actorType: ActorType, actorId: string, client: ClientInfo): Promise<IssuedSession> {
+  async issue(actorType: ActorType, actorId: string, client: ClientInfo, ttlMs = SESSION_TTL_MS): Promise<IssuedSession> {
     const token = randomBytes(32).toString('base64url');
-    const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
+    const expiresAt = new Date(Date.now() + ttlMs);
     await this.prisma.session.create({
       data: {
         actorType,
@@ -48,6 +48,42 @@ export class SessionService {
     });
     if (!session || session.revokedAt || session.expiresAt < new Date()) return null;
     return session;
+  }
+
+  /** An account's sessions, newest first: active ones and recent sign-in history. */
+  async list(actorType: ActorType, actorId: string, currentToken: string) {
+    const rows = await this.prisma.session.findMany({
+      where: { actorType, actorId },
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+    });
+    const now = new Date();
+    const current = hashToken(currentToken);
+    return rows.map((s) => ({
+      id: s.id,
+      userAgent: s.userAgent,
+      ipAddress: s.ipAddress,
+      createdAt: s.createdAt,
+      expiresAt: s.expiresAt,
+      revokedAt: s.revokedAt,
+      active: !s.revokedAt && s.expiresAt > now,
+      current: s.refreshTokenHash === current,
+    }));
+  }
+
+  /** Signs out one device (`id`), or every device except the current one. */
+  async revokeFor(actorType: ActorType, actorId: string, currentToken: string, id?: string): Promise<number> {
+    const { count } = await this.prisma.session.updateMany({
+      where: {
+        actorType,
+        actorId,
+        revokedAt: null,
+        refreshTokenHash: { not: hashToken(currentToken) },
+        ...(id && { id }),
+      },
+      data: { revokedAt: new Date() },
+    });
+    return count;
   }
 
   async revoke(token: string): Promise<void> {

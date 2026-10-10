@@ -1,11 +1,11 @@
 "use client";
 
 import { formatPhone, OTP_LENGTH, type Locale } from "@talad/shared";
-import { ArrowLeft, CircleAlert, KeyRound, LoaderCircle, Phone, UserRound } from "lucide-react";
+import { ArrowLeft, CircleAlert, KeyRound, LoaderCircle, Phone, ShieldCheck, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
-import { requestOtp, socialSignIn, verifyOtp } from "@/lib/auth-actions";
+import { requestOtp, socialSignIn, verifyOtp, verifyTwoFactor } from "@/lib/auth-actions";
 import type { AuthErrorCode, CustomerProfile } from "@/lib/customer";
 import { interpolate } from "@/lib/format";
 import { OtpInput } from "./otp-input";
@@ -32,7 +32,8 @@ export function AuthForm({
   onSuccess: (customer: CustomerProfile) => void;
 }) {
   const [mode, setMode] = useState<AuthMode>(initialMode);
-  const [step, setStep] = useState<"details" | "code">("details");
+  const [step, setStep] = useState<"details" | "code" | "twoFactor">("details");
+  const [challenge, setChallenge] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [sentTo, setSentTo] = useState("");
@@ -87,7 +88,32 @@ export function AuthForm({
         setCode("");
         return fail(res.error);
       }
-      onSuccess(res.customer);
+      done(res);
+    });
+  }
+
+  /** A session, or the authenticator step for accounts that turned it on. */
+  function done(res: { customer: CustomerProfile } | { twoFactor: { challenge: string } }) {
+    if ("twoFactor" in res && res.twoFactor) {
+      setChallenge(res.twoFactor.challenge);
+      setCode("");
+      setStep("twoFactor");
+      return;
+    }
+    if ("customer" in res && res.customer) onSuccess(res.customer);
+  }
+
+  function verifySecondStep(value = code) {
+    if (value.length !== OTP_LENGTH || pending || !challenge) return;
+    clearError();
+    startTransition(async () => {
+      const res = await verifyTwoFactor(challenge, value);
+      if (!res.ok) {
+        setCode("");
+        if (res.error === "CHALLENGE_EXPIRED") setStep("details");
+        return fail(res.error);
+      }
+      done(res);
     });
   }
 
@@ -96,11 +122,51 @@ export function AuthForm({
     startTransition(async () => {
       const res = await socialSignIn(provider, idToken, fullName);
       if (!res.ok) return fail(res.error);
-      onSuccess(res.customer);
+      done(res);
     });
   }
 
   const isRegister = mode === "register";
+
+  if (step === "twoFactor") {
+    return (
+      <div className="flex flex-col gap-6">
+        <button
+          type="button"
+          onClick={() => {
+            clearError();
+            setStep("details");
+          }}
+          className="flex items-center gap-1.5 self-start text-sm font-medium text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" />
+          {dict.back}
+        </button>
+        <div className="flex flex-col items-center gap-3 text-center">
+          <span className="flex size-14 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+            <ShieldCheck className="size-7" />
+          </span>
+          <h2 className="text-2xl font-bold">{dict.twoFactorTitle}</h2>
+          <p className="text-sm text-muted-foreground">{dict.twoFactorPrompt}</p>
+        </div>
+        <OtpInput
+          value={code}
+          onChange={(v) => {
+            setCode(v);
+            if (error) clearError();
+          }}
+          onComplete={verifySecondStep}
+          disabled={pending}
+          invalid={errorCode === "TWO_FACTOR_INVALID"}
+          label={dict.twoFactorTitle}
+        />
+        <ErrorMessage message={error} />
+        <SubmitButton pending={pending} disabled={code.length !== OTP_LENGTH} onClick={() => verifySecondStep()}>
+          {dict.verify}
+        </SubmitButton>
+      </div>
+    );
+  }
 
   if (step === "code") {
     return (

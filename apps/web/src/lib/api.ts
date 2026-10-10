@@ -41,6 +41,8 @@ export interface ProductCard {
   soldCount: number;
   ratingAvg: number;
   shop: { slug: string; name: string };
+  /** Set while in a running flash sale; prices are already discounted. */
+  flashSale?: { percent: number; endsAt: string } | null;
 }
 
 export interface ProductVariantOption {
@@ -49,6 +51,8 @@ export interface ProductVariantOption {
   label: string;
   attributes: Record<string, string>;
   price: number;
+  /** Regular price while a flash sale discounts `price`. */
+  regularPrice: number | null;
   stock: number;
 }
 
@@ -92,4 +96,19 @@ export function listProducts(query: ProductQuery): Promise<ProductCard[] | null>
       .map(([k, v]) => [k, String(v)]),
   );
   return apiGet<ProductCard[]>(`/products?${params}`);
+}
+
+/** Mirrors `FeedItem` from services/api catalog/products. */
+export interface FeedItem extends Omit<ProductCard, "shop"> {
+  videoUrl: string;
+  shop: { slug: string; name: string; logoUrl: string | null };
+}
+
+export interface FeedPage {
+  items: FeedItem[];
+  nextCursor: string | null;
+}
+
+export function feedPath(cursor?: string): string {
+  return cursor ? `/products/feed?cursor=${encodeURIComponent(cursor)}` : "/products/feed";
 }

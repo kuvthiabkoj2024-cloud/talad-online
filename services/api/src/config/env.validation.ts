@@ -46,6 +46,10 @@ class EnvironmentVariables {
   @IsString()
   CORS_ORIGINS: string = 'http://localhost:3000';
 
+  /** Admin console origin, for links in emails (password reset). */
+  @IsString()
+  ADMIN_APP_URL: string = 'http://localhost:5173';
+
   @IsOptional()
   @IsString()
   MEILI_URL?: string;

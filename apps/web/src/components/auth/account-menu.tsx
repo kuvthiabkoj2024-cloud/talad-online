@@ -5,20 +5,16 @@ import {
   ChevronDown,
   CircleUser,
   ExternalLink,
-  Landmark,
-  LoaderCircle,
   LogOut,
-  MapPin,
-  Package,
   Store,
-  UserRound,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
-import { logout } from "@/lib/auth-actions";
 import { avatarSrc, initials, SELLER_CENTER_URL, type CustomerProfile } from "@/lib/customer";
+import { accountLinks } from "../account/account-links";
+import { LogoutDialog } from "../account/logout-dialog";
 import { AuthForm } from "./auth-form";
 import { Modal } from "./modal";
 import { useSession } from "./session-provider";
@@ -82,12 +78,8 @@ function CustomerDropdown({
   dict: Dicts;
   customer: CustomerProfile;
 }) {
-  const { setCustomer } = useSession();
-  const router = useRouter();
-  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
-  const [pending, startTransition] = useTransition();
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -104,23 +96,8 @@ function CustomerDropdown({
     };
   }, [open]);
 
-  function doLogout() {
-    startTransition(async () => {
-      await logout();
-      setCustomer(null);
-      setConfirmLogout(false);
-      if (pathname.startsWith(`/${locale}/account`)) router.push(`/${locale}`);
-      router.refresh();
-    });
-  }
-
   const firstName = customer.name.split(/\s+/)[0];
-  const items = [
-    { href: `/${locale}/account/profile`, label: dict.account.profile, icon: UserRound },
-    { href: `/${locale}/account/orders`, label: dict.account.orders, icon: Package },
-    { href: `/${locale}/account/addresses`, label: dict.account.addresses, icon: MapPin },
-    { href: `/${locale}/account/bank-accounts`, label: dict.account.bankAccounts, icon: Landmark },
-  ];
+  const items = accountLinks(locale, dict.account);
 
   return (
     <div ref={root} className="relative">
@@ -195,35 +172,7 @@ function CustomerDropdown({
         </div>
       )}
 
-      <Modal open={confirmLogout} onClose={() => setConfirmLogout(false)} closeLabel={dict.auth.close} size="sm">
-        <div className="flex flex-col items-center gap-4 text-center">
-          <span className="flex size-14 items-center justify-center rounded-2xl bg-sale/10 text-sale">
-            <LogOut className="size-7" />
-          </span>
-          <div>
-            <h2 className="text-xl font-bold">{dict.account.logoutTitle}</h2>
-            <p className="mt-1.5 text-sm text-muted-foreground">{dict.account.logoutBody}</p>
-          </div>
-          <div className="mt-2 grid w-full grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setConfirmLogout(false)}
-              className="h-11 rounded-full border border-border font-semibold transition-colors hover:bg-muted"
-            >
-              {dict.account.cancel}
-            </button>
-            <button
-              type="button"
-              disabled={pending}
-              onClick={doLogout}
-              className="flex h-11 items-center justify-center gap-2 rounded-full bg-sale font-semibold text-white transition hover:brightness-110 disabled:opacity-70"
-            >
-              {pending && <LoaderCircle className="size-4 animate-spin" />}
-              {dict.account.logout}
-            </button>
-          </div>
-        </div>
-      </Modal>
+      <LogoutDialog open={confirmLogout} onClose={() => setConfirmLogout(false)} locale={locale} dict={dict} />
     </div>
   );
 }

@@ -10,7 +10,7 @@ const CODE_TTL_MS = 5 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 60 * 1000;
 const MAX_ATTEMPTS = 5;
 
-export type OtpPurpose = 'customer_login' | 'customer_register';
+export type OtpPurpose = 'customer_login' | 'customer_register' | 'customer_reset' | 'customer_2fa';
 
 /** One-time SMS codes, keyed by phone number (the customer may not exist yet). */
 @Injectable()

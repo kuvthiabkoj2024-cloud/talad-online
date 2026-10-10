@@ -1,45 +1,47 @@
 import { createBrowserRouter } from 'react-router'
 import { AppShell } from '@/components/app-shell'
-import { DashboardPage } from '@/pages/dashboard'
+import { RequireAccount, RequireShop } from '@/components/require-shop'
+import { COMING_SOON } from '@/nav'
+import { ComingSoonPage } from '@/pages/coming-soon'
+import { HomePage } from '@/pages/home'
+import { LoginPage } from '@/pages/login'
 import { NotFoundPage } from '@/pages/not-found'
-import { PlaceholderPage } from '@/pages/placeholder'
 
+const page = <M,>(load: () => Promise<M>, pick: (m: M) => React.ComponentType) => () =>
+  load().then((m) => ({ Component: pick(m) }))
+
+// Heavier pages load on first visit, so sign-in and home stay light.
 export const router = createBrowserRouter([
+  { path: '/login', element: <LoginPage /> },
   {
-    element: <AppShell />,
+    element: <RequireAccount />,
     children: [
-      { index: true, element: <DashboardPage /> },
+      { path: 'register', lazy: page(() => import('@/pages/register'), (m) => m.RegisterPage) },
       {
-        path: 'orders',
-        element: <PlaceholderPage title="Orders" scopeRef="§3.6" />,
-      },
-      {
-        path: 'products',
-        element: <PlaceholderPage title="Products" scopeRef="§3.3" />,
-      },
-      {
-        path: 'promotions',
-        element: <PlaceholderPage title="Promotions" scopeRef="§3.4" />,
-      },
-      {
-        path: 'customers',
-        element: <PlaceholderPage title="Customers" scopeRef="§3.5" />,
-      },
-      {
-        path: 'finance',
-        element: <PlaceholderPage title="Finance" scopeRef="§3.7" />,
-      },
-      {
-        path: 'reviews',
-        element: <PlaceholderPage title="Reviews" scopeRef="§3.8" />,
-      },
-      {
-        path: 'profile',
-        element: <PlaceholderPage title="Shop profile" scopeRef="§3.2" />,
-      },
-      {
-        path: 'security',
-        element: <PlaceholderPage title="Security" scopeRef="§3.1" />,
+        element: <RequireShop />,
+        children: [
+          {
+            element: <AppShell />,
+            children: [
+              { index: true, element: <HomePage /> },
+              { path: 'products', lazy: page(() => import('@/pages/products'), (m) => m.ProductsPage) },
+              { path: 'products/new', lazy: page(() => import('@/pages/product-editor'), (m) => m.ProductEditorPage) },
+              { path: 'products/:id', lazy: page(() => import('@/pages/product-editor'), (m) => m.ProductEditorPage) },
+              { path: 'coupons', lazy: page(() => import('@/pages/coupons'), (m) => m.CouponsPage) },
+              { path: 'orders', lazy: page(() => import('@/pages/orders'), (m) => m.OrdersPage) },
+              { path: 'orders/:number', lazy: page(() => import('@/pages/order-detail'), (m) => m.OrderDetailPage) },
+              { path: 'videos', lazy: page(() => import('@/pages/videos'), (m) => m.VideosPage) },
+              { path: 'marketing', lazy: page(() => import('@/pages/marketing'), (m) => m.MarketingPage) },
+              { path: 'customers', lazy: page(() => import('@/pages/customers'), (m) => m.CustomersPage) },
+              { path: 'finance', lazy: page(() => import('@/pages/finance'), (m) => m.FinancePage) },
+              { path: 'stats', lazy: page(() => import('@/pages/stats'), (m) => m.StatsPage) },
+              { path: 'reviews', lazy: page(() => import('@/pages/reviews'), (m) => m.ReviewsPage) },
+              { path: 'profile', lazy: page(() => import('@/pages/shop-profile'), (m) => m.ShopProfilePage) },
+              { path: 'security', lazy: page(() => import('@/pages/security'), (m) => m.SecurityPage) },
+              ...COMING_SOON.map((item) => ({ path: item.to.slice(1), element: <ComingSoonPage item={item} /> })),
+            ],
+          },
+        ],
       },
     ],
   },

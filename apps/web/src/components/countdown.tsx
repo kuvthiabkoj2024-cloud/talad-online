@@ -18,7 +18,8 @@ export function Countdown({ endsAt }: { endsAt: string }) {
   }, [endsAt]);
 
   return (
-    <span className="rounded bg-sale px-2 py-0.5 font-mono font-semibold tabular-nums text-white">
+    // The server render (and the 5-minute cached home page) is earlier than the browser's clock.
+    <span suppressHydrationWarning className="rounded bg-sale px-2 py-0.5 font-mono font-semibold tabular-nums text-white">
       {text}
     </span>
   );

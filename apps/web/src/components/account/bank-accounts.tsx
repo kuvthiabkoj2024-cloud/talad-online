@@ -88,7 +88,7 @@ export function BankAccounts({
             <Info className="size-3.5" />
             {dict.defaultRefundHint}
           </p>
-          <ul className="grid gap-3 sm:grid-cols-2">
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {accounts.map((a) => (
               <li
                 key={a.id}
@@ -100,7 +100,8 @@ export function BankAccounts({
                   <BankBadge code={a.bankCode} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="truncate text-sm font-semibold">{bankName(a.bankCode)}</p>
+                      {/* Full names are long (e.g. "BCEL — Banque pour le Commerce Extérieur Lao"): wrap, don't widen the card. */}
+                      <p className="min-w-0 text-sm font-semibold">{bankName(a.bankCode)}</p>
                       {a.isDefault && (
                         <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground">
                           {dict.defaultBadge}

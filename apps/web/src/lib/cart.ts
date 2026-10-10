@@ -66,6 +66,8 @@ export interface CheckoutQuote {
   issues: { itemId: string; code: "UNAVAILABLE" | "QUANTITY_EXCEEDS_STOCK" | "OWN_PRODUCT" }[];
   /** QR transfer needs every shop in the order to accept transfers. */
   transferAvailable: boolean;
+  /** Methods the platform currently allows (admin settings). */
+  paymentMethods: CheckoutPaymentMethod[];
 }
 
 export interface PlacedOrder {
@@ -90,7 +92,9 @@ export type CartErrorCode =
   | "INVALID_IMAGE"
   | "FILE_TOO_LARGE"
   | "OWN_PRODUCT"
+  | "SHOP_BLOCKED"
   | "DELIVERY_REQUIRED"
+  | "PAYMENT_METHOD_DISABLED"
   | CouponErrorCode
   | "UNAUTHENTICATED"
   | "generic";

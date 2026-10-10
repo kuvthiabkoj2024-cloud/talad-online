@@ -4,19 +4,32 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { normalizePhone } from '@talad/shared';
+import { formatPhone, normalizePhone } from '@talad/shared';
+import argon2 from 'argon2';
 import type { Env } from '../../config/env.validation.js';
 import { Prisma, type Customer, type ShopStatus } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { authError } from './auth-errors.js';
-import type { OtpFlow, RequestOtpDto, SocialSignInDto, VerifyOtpDto } from './dto/customer-auth.dto.js';
+import type {
+  ForgotPasswordDto,
+  OtpFlow,
+  PasswordLoginDto,
+  RequestOtpDto,
+  ResetPasswordDto,
+  SocialSignInDto,
+  TwoFactorVerifyDto,
+  VerifyOtpDto,
+} from './dto/customer-auth.dto.js';
 import { filePrefix, storageFolder } from '../media/storage-keys.js';
 import { OtpService, type OtpPurpose } from './otp.service.js';
 import { SessionService, type ClientInfo } from './session.service.js';
 import { SmsService } from './sms.service.js';
 import { SocialIdentityService, type SocialProvider } from './social-identity.service.js';
+import { CHALLENGE_TTL_MS, readChallenge, signChallenge } from './challenge.js';
+import { verifyTotp } from './totp.js';
 
 export interface CustomerProfile {
   id: string;
@@ -48,6 +61,24 @@ export interface CustomerSignIn {
   expiresAt: Date;
   customer: CustomerProfile;
 }
+
+/** Step one passed; the client must send a code (`POST auth/customer/2fa/verify`) to get a session. */
+export interface TwoFactorChallenge {
+  twoFactor: {
+    method: 'TOTP' | 'SMS';
+    challenge: string;
+    expiresAt: Date;
+    /** Where the SMS went, e.g. "+856 20 ••• 1234". */
+    phoneHint: string | null;
+    /** SMS only, outside production. */
+    devCode?: string;
+  };
+}
+
+export type SignInResult = CustomerSignIn | TwoFactorChallenge;
+
+/** Compared against when the account doesn't exist, so timing doesn't reveal which accounts do. */
+const DUMMY_HASH = argon2.hash('not-a-real-password');
 
 const PURPOSE: Record<OtpFlow, OtpPurpose> = {
   login: 'customer_login',
@@ -91,11 +122,10 @@ export class CustomerAuthService {
     const { code, expiresAt } = await this.otp.create(phone, PURPOSE[dto.flow]);
     await this.sms.send(phone, `Taladonline: your verification code is ${code}. It expires in 5 minutes.`);
 
-    const dev = this.config.get('NODE_ENV', { infer: true }) !== 'production';
-    return { phone, expiresAt, resendAfterSeconds: 60, ...(dev && { devCode: code }) };
+    return { phone, expiresAt, resendAfterSeconds: 60, ...(this.dev() && { devCode: code }) };
   }
 
-  async verifyOtp(dto: VerifyOtpDto, client: ClientInfo): Promise<CustomerSignIn> {
+  async verifyOtp(dto: VerifyOtpDto, client: ClientInfo): Promise<SignInResult> {
     const phone = this.phone(dto.phone);
     const existing = await this.prisma.customer.findUnique({ where: { phone } });
     this.assertFlow(dto.flow, existing, dto.name);
@@ -109,14 +139,87 @@ export class CustomerAuthService {
         })
       : await this.createCustomer({ name: dto.name!.trim(), phone, phoneVerifiedAt: new Date() });
 
+    // The SMS code already proves the phone; an authenticator app is the only extra step here.
+    if (customer.twoFactorMethod === 'TOTP' && customer.totpSecret) {
+      this.assertActive(customer);
+      return this.challenge(customer, 'TOTP');
+    }
     return this.signIn(customer, client);
+  }
+
+  /** Sign in with phone or email + password (§3.1); accounts with 2FA get a challenge instead of a session. */
+  async passwordLogin(dto: PasswordLoginDto, client: ClientInfo): Promise<SignInResult> {
+    const id = dto.identifier.trim();
+    const phone = id.includes('@') ? null : normalizePhone(id);
+    const customer = id.includes('@')
+      ? await this.prisma.customer.findUnique({ where: { email: id.toLowerCase() } })
+      : phone
+        ? await this.prisma.customer.findUnique({ where: { phone } })
+        : null;
+    const valid = customer?.passwordHash
+      ? await argon2.verify(customer.passwordHash, dto.password)
+      : (await argon2.verify(await DUMMY_HASH, dto.password), false);
+    if (!customer || !valid) {
+      throw new UnauthorizedException(authError('INVALID_CREDENTIALS', 'Wrong phone/email or password'));
+    }
+    this.assertActive(customer);
+    if (customer.twoFactorMethod === 'TOTP' && customer.totpSecret) return this.challenge(customer, 'TOTP');
+    if (customer.twoFactorMethod === 'SMS' && customer.phone) return this.challenge(customer, 'SMS');
+    return this.signIn(customer, client);
+  }
+
+  /** Step two: the authenticator or SMS code for a challenge. */
+  async verifyTwoFactor(dto: TwoFactorVerifyDto, client: ClientInfo): Promise<CustomerSignIn> {
+    const { customerId, method } = this.readChallenge(dto.challenge);
+    const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
+    if (!customer) throw this.challengeExpired();
+    if (method === 'TOTP') {
+      if (!customer.totpSecret || !verifyTotp(customer.totpSecret, dto.code)) {
+        throw new BadRequestException(authError('TWO_FACTOR_INVALID', 'Incorrect code'));
+      }
+    } else {
+      if (!customer.phone) throw this.challengeExpired();
+      await this.otp.verify(customer.phone, 'customer_2fa', dto.code);
+    }
+    return this.signIn(customer, client);
+  }
+
+  /** Sends a new SMS code for an SMS challenge. */
+  async resendTwoFactor(challenge: string) {
+    const { customerId, method } = this.readChallenge(challenge);
+    const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
+    if (method !== 'SMS' || !customer?.phone) throw this.challengeExpired();
+    return (await this.challenge(customer, 'SMS', challenge)).twoFactor;
+  }
+
+  /** Sends a reset code to the account's phone. */
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const phone = this.phone(dto.phone);
+    const existing = await this.prisma.customer.findUnique({ where: { phone } });
+    this.assertFlow('login', existing);
+    const { code, expiresAt } = await this.otp.create(phone, 'customer_reset');
+    await this.sms.send(phone, `Taladonline: your password reset code is ${code}. It expires in 5 minutes.`);
+    return { phone, expiresAt, resendAfterSeconds: 60, ...(this.dev() && { devCode: code }) };
+  }
+
+  /** Sets a new password with the SMS code; every device is signed out. */
+  async resetPassword(dto: ResetPasswordDto): Promise<void> {
+    const phone = this.phone(dto.phone);
+    const existing = await this.prisma.customer.findUnique({ where: { phone } });
+    this.assertFlow('login', existing);
+    await this.otp.verify(phone, 'customer_reset', dto.code);
+    await this.prisma.customer.update({
+      where: { id: existing!.id },
+      data: { passwordHash: await argon2.hash(dto.password), phoneVerifiedAt: existing!.phoneVerifiedAt ?? new Date() },
+    });
+    await this.sessions.revokeFor('CUSTOMER', existing!.id, '');
   }
 
   async socialSignIn(
     provider: SocialProvider,
     dto: SocialSignInDto,
     client: ClientInfo,
-  ): Promise<CustomerSignIn> {
+  ): Promise<SignInResult> {
     const identity = await this.social.verify(provider, dto.idToken);
     const idField = provider === 'google' ? 'googleId' : 'appleId';
 
@@ -143,6 +246,10 @@ export class CustomerAuthService {
       });
     }
 
+    if (customer.twoFactorMethod === 'TOTP' && customer.totpSecret) {
+      this.assertActive(customer);
+      return this.challenge(customer, 'TOTP');
+    }
     return this.signIn(customer, client);
   }
 
@@ -156,11 +263,46 @@ export class CustomerAuthService {
   }
 
   private async signIn(customer: Customer, client: ClientInfo): Promise<CustomerSignIn> {
+    this.assertActive(customer);
+    const session = await this.sessions.issue('CUSTOMER', customer.id, client);
+    return { ...session, customer: await this.profile(customer.id) };
+  }
+
+  private assertActive(customer: Customer) {
     if (!customer.isActive) {
       throw new ForbiddenException(authError('ACCOUNT_DISABLED', 'This account has been suspended'));
     }
-    const session = await this.sessions.issue('CUSTOMER', customer.id, client);
-    return { ...session, customer: await this.profile(customer.id) };
+  }
+
+  private dev() {
+    return this.config.get('NODE_ENV', { infer: true }) !== 'production';
+  }
+
+  /** A signed, short-lived ticket for the second step; SMS challenges also send the code. */
+  private async challenge(customer: Customer, method: 'TOTP' | 'SMS', existing?: string): Promise<TwoFactorChallenge> {
+    let devCode: string | undefined;
+    if (method === 'SMS') {
+      const { code } = await this.otp.create(customer.phone!, 'customer_2fa');
+      await this.sms.send(customer.phone!, `Taladonline: your sign-in code is ${code}. It expires in 5 minutes.`);
+      if (this.dev()) devCode = code;
+    }
+    const expiresAt = existing ? new Date(this.readChallenge(existing).exp) : new Date(Date.now() + CHALLENGE_TTL_MS);
+    const phoneHint = method === 'SMS' && customer.phone ? formatPhone(customer.phone).replace(/ \d{3,4} (\d{4})$/, ' ••• $1') : null;
+    return { twoFactor: { method, challenge: existing ?? signChallenge(this.secret(), 'customer', customer.id, method, expiresAt), expiresAt, phoneHint, ...(devCode && { devCode }) } };
+  }
+
+  private readChallenge(challenge: string) {
+    const read = readChallenge(this.secret(), 'customer', challenge);
+    if (!read) throw this.challengeExpired();
+    return { customerId: read.id, exp: read.exp, method: read.method };
+  }
+
+  private secret() {
+    return this.config.get('JWT_ACCESS_SECRET', { infer: true });
+  }
+
+  private challengeExpired() {
+    return new BadRequestException(authError('CHALLENGE_EXPIRED', 'Sign-in expired, start again'));
   }
 
   private async createCustomer(data: Prisma.CustomerCreateInput): Promise<Customer> {

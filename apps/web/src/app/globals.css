@@ -3,6 +3,8 @@
 :root {
   /* Measured by <HeaderHeightVar>; this is the phone header without search until then. */
   --header-h: 4rem;
+  /* Space taken by the phone tab bar (<BottomNav>); 0 where it isn't shown. */
+  --bottom-nav-h: 0px;
   --background: #f3f4f6; /* page */
   --foreground: #1f2937;
   --card: #ffffff;
@@ -30,6 +32,12 @@
   --color-sale: var(--sale);
   /* Latin first, then Lao glyph fallback */
   --font-sans: var(--font-geist), var(--font-lao), sans-serif;
+}
+
+@media (width < 48rem) {
+  :root:has([data-bottom-nav]) {
+    --bottom-nav-h: calc(4rem + env(safe-area-inset-bottom));
+  }
 }
 
 body {

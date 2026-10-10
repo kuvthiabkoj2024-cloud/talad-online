@@ -64,11 +64,10 @@ export function ProductPurchase({
     ? formatMoney(variant.price, locale)
     : formatPriceRange(price, priceMax, locale);
   const unitPrice = variant?.price ?? price;
+  // During a flash sale each option is crossed out against its own regular price.
+  const wasPrice = variant?.regularPrice ?? compareAtPrice;
   // A crossed-out "was" price only makes sense against a single price, not a range.
-  const showCompare =
-    (priceMax === null || variant !== null) &&
-    compareAtPrice !== null &&
-    compareAtPrice > unitPrice;
+  const showCompare = (priceMax === null || variant !== null) && wasPrice !== null && wasPrice > unitPrice;
 
   function selectVariant(id: string) {
     setVariantId(id);
@@ -104,7 +103,7 @@ export function ProductPurchase({
         <p className="text-3xl font-bold text-sale sm:text-4xl">{shownPrice}</p>
         {showCompare && (
           <p className="text-base text-muted-foreground line-through">
-            {formatMoney(compareAtPrice!, locale)}
+            {formatMoney(wasPrice!, locale)}
           </p>
         )}
       </div>

@@ -13,6 +13,22 @@ interface SignInResponse {
   customer: CustomerProfile;
 }
 
+/** Accounts with an authenticator app get this instead of a session (see verifyTwoFactor). */
+export interface TwoFactorChallenge {
+  method: "TOTP" | "SMS";
+  challenge: string;
+}
+
+type SignInOrChallenge = SignInResponse | { twoFactor: TwoFactorChallenge };
+type SignInResult = AuthResult<{ customer: CustomerProfile; twoFactor?: undefined } | { twoFactor: TwoFactorChallenge; customer?: undefined }>;
+
+async function finish(result: AuthResult<{ data: SignInOrChallenge }>): Promise<SignInResult> {
+  if (!result.ok) return result;
+  if ("twoFactor" in result.data) return { ok: true, twoFactor: result.data.twoFactor };
+  await startSession(result.data);
+  return { ok: true, customer: result.data.customer };
+}
+
 const KNOWN_ERRORS = new Set<AuthErrorCode>([
   "INVALID_PHONE",
   "PHONE_REGISTERED",
@@ -23,6 +39,8 @@ const KNOWN_ERRORS = new Set<AuthErrorCode>([
   "PROVIDER_NOT_CONFIGURED",
   "PROVIDER_TOKEN_INVALID",
   "ACCOUNT_DISABLED",
+  "TWO_FACTOR_INVALID",
+  "CHALLENGE_EXPIRED",
 ]);
 
 async function post<T>(path: string, body: unknown, token?: string): Promise<AuthResult<{ data: T }>> {
@@ -79,11 +97,13 @@ export async function verifyOtp(input: {
   phone: string;
   code: string;
   name?: string;
-}): Promise<AuthResult<{ customer: CustomerProfile }>> {
-  const result = await post<SignInResponse>("/auth/customer/otp/verify", input);
-  if (!result.ok) return result;
-  await startSession(result.data);
-  return { ok: true, customer: result.data.customer };
+}): Promise<SignInResult> {
+  return finish(await post<SignInOrChallenge>("/auth/customer/otp/verify", input));
+}
+
+/** Second step for accounts with an authenticator app; on success the session cookie is set. */
+export async function verifyTwoFactor(challenge: string, code: string): Promise<SignInResult> {
+  return finish(await post<SignInOrChallenge>("/auth/customer/2fa/verify", { challenge, code }));
 }
 
 /** Google / Apple: exchange the provider's ID token for a session. */
@@ -91,11 +111,8 @@ export async function socialSignIn(
   provider: "google" | "apple",
   idToken: string,
   name?: string,
-): Promise<AuthResult<{ customer: CustomerProfile }>> {
-  const result = await post<SignInResponse>(`/auth/customer/${provider}`, { idToken, name });
-  if (!result.ok) return result;
-  await startSession(result.data);
-  return { ok: true, customer: result.data.customer };
+): Promise<SignInResult> {
+  return finish(await post<SignInOrChallenge>(`/auth/customer/${provider}`, { idToken, name }));
 }
 
 export async function logout(): Promise<void> {

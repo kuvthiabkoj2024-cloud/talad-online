@@ -65,3 +65,40 @@ export type CheckoutPaymentMethod = (typeof CHECKOUT_PAYMENT_METHODS)[number];
 
 /** Most units of one line a customer can put in the cart. */
 export const MAX_CART_QUANTITY = 99;
+
+/** Seller Center order tabs (§3.6) and the statuses each shows. */
+export const SHOP_ORDER_TABS = {
+  'to-pay': ['PENDING'],
+  'to-ship': ['CONFIRMED', 'PACKED'],
+  shipping: ['SHIPPED', 'DELIVERED'],
+  returns: ['RETURN_REQUESTED'],
+  completed: ['COMPLETED'],
+  cancelled: ['CANCELLED'],
+} as const satisfies Record<string, readonly OrderStatus[]>;
+export type ShopOrderTab = keyof typeof SHOP_ORDER_TABS;
+
+export function isShopOrderTab(value: unknown): value is ShopOrderTab {
+  return typeof value === 'string' && Object.hasOwn(SHOP_ORDER_TABS, value);
+}
+
+/**
+ * What a shop can do to an order, from which statuses, and where it leads. `null` keeps
+ * the status (rejecting a return escalates it to Taladonline instead).
+ */
+export const SHOP_ORDER_ACTIONS = {
+  confirm: { from: ['PENDING'], to: 'CONFIRMED' },
+  'reject-payment': { from: ['PENDING'], to: 'CANCELLED' },
+  pack: { from: ['CONFIRMED'], to: 'PACKED' },
+  ship: { from: ['PACKED'], to: 'SHIPPED' },
+  deliver: { from: ['SHIPPED'], to: 'DELIVERED' },
+  cancel: { from: ['PENDING', 'CONFIRMED', 'PACKED'], to: 'CANCELLED' },
+  'approve-return': { from: ['RETURN_REQUESTED'], to: 'CANCELLED' },
+  'reject-return': { from: ['RETURN_REQUESTED'], to: null },
+} as const satisfies Record<string, { from: readonly OrderStatus[]; to: OrderStatus | null }>;
+export type ShopOrderAction = keyof typeof SHOP_ORDER_ACTIONS;
+export const SHOP_ORDER_ACTION_NAMES = Object.keys(SHOP_ORDER_ACTIONS) as ShopOrderAction[];
+
+/** Actions available for an order in `status`. */
+export function shopOrderActions(status: OrderStatus): ShopOrderAction[] {
+  return SHOP_ORDER_ACTION_NAMES.filter((a) => (SHOP_ORDER_ACTIONS[a].from as readonly OrderStatus[]).includes(status));
+}

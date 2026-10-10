@@ -4,10 +4,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 
 /**
- * Pages where the customer is finishing a task, so the header drops its search box
- * and the footer is hidden. Paths are matched after the locale (/lo/cart → /cart).
+ * Pages where the customer is finishing a task, reading notifications or watching the
+ * feed, so the header drops its search box and the footer is hidden. Paths are matched
+ * after the locale (/lo/cart → /cart).
  */
-const FOCUS_ROUTES = [/^\/cart\/?$/, /^\/account\/orders\/?$/];
+const FOCUS_ROUTES = [/^\/cart\/?$/, /^\/account\/orders\/?$/, /^\/notifications\/?$/, /^\/feed\/?$/];
 
 export function useFocusRoute(): boolean {
   const path = usePathname().replace(/^\/[^/]+/, "");

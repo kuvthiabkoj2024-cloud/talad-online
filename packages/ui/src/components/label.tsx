@@ -4,8 +4,13 @@ import { Label as LabelPrimitive } from "radix-ui"
 
 function Label({
   className,
+  required,
+  children,
   ...props
-}: React.ComponentProps<typeof LabelPrimitive.Root>) {
+}: React.ComponentProps<typeof LabelPrimitive.Root> & {
+  /** Marks a field the form can't be sent without: a red asterisk after the text. */
+  required?: boolean
+}) {
   return (
     <LabelPrimitive.Root
       data-slot="label"
@@ -14,8 +19,20 @@ function Label({
         className
       )}
       {...props}
-    />
+    >
+      {children}
+      {required && <RequiredMark />}
+    </LabelPrimitive.Root>
   )
 }
 
-export { Label }
+/** The red asterisk, for headings that aren't a `<Label>` (e.g. a fieldset legend). */
+function RequiredMark() {
+  return (
+    <span aria-hidden className="-ms-1.5 text-destructive">
+      *
+    </span>
+  )
+}
+
+export { Label, RequiredMark }

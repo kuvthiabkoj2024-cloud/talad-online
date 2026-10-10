@@ -9,7 +9,15 @@
     "cart": "Cart",
     "account": "Sign in",
     "language": "Language",
-    "notifications": "Notifications"
+    "notifications": "Notifications",
+    "notificationsUnread": "Notifications, {n} unread"
+  },
+  "nav": {
+    "label": "Main menu",
+    "home": "Home",
+    "feed": "Feed",
+    "cart": "Cart",
+    "profile": "Profile"
   },
   "home": {
     "flashSale": "Flash sale",
@@ -134,8 +142,13 @@
       "PROVIDER_TOKEN_INVALID": "Sign-in failed. Please try again.",
       "ACCOUNT_DISABLED": "This account has been suspended. Contact support.",
       "generic": "Something went wrong. Please try again.",
-      "nameRequired": "Please enter your full name"
-    }
+      "nameRequired": "Please enter your full name",
+      "TWO_FACTOR_INVALID": "Incorrect code. Try again.",
+      "CHALLENGE_EXPIRED": "This sign-in took too long. Please start again."
+    },
+    "back": "Back",
+    "twoFactorTitle": "Two-step verification",
+    "twoFactorPrompt": "Enter the 6-digit code from your authenticator app."
   },
   "account": {
     "myAccount": "My account",
@@ -313,7 +326,11 @@
       "APPROVED": "Open",
       "REJECTED": "Rejected",
       "SUSPENDED": "Suspended"
-    }
+    },
+    "viewAllOrders": "View all",
+    "backToAccount": "Back to Profile",
+    "openShop": "Open your shop",
+    "openShopDescription": "Sell on Taladonline with this account — free to join."
   },
   "cart": {
     "title": "Cart",
@@ -425,7 +442,9 @@
     "COUPON_EXPIRED": "This coupon has expired or hasn't started yet.",
     "COUPON_USED_UP": "This coupon has run out.",
     "COUPON_ALREADY_USED": "You've already used this coupon.",
-    "COUPON_MIN_ORDER": "Your order doesn't reach this coupon's minimum spend."
+    "COUPON_MIN_ORDER": "Your order doesn't reach this coupon's minimum spend.",
+    "SHOP_BLOCKED": "This shop isn't accepting orders from your account.",
+    "PAYMENT_METHOD_DISABLED": "This payment method isn't available right now. Please choose another."
   },
   "shop": {
     "verified": "Verified",
@@ -456,5 +475,57 @@
   },
   "common": {
     "loading": "Loading…"
+  },
+  "feed": {
+    "title": "Feed",
+    "empty": "No videos yet",
+    "emptyBody": "When shops add product videos, they'll show up here.",
+    "backHome": "Back to home",
+    "viewProduct": "View product",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "play": "Play",
+    "pause": "Pause",
+    "loadError": "Couldn't load more videos"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "description": "Order updates, promotions and news from Taladonline.",
+    "markAllRead": "Mark all as read",
+    "all": "All",
+    "orders": "Orders",
+    "promotions": "Promotions",
+    "updates": "Updates",
+    "empty": "No notifications yet",
+    "emptyBody": "Updates about your orders and new promotions will show up here.",
+    "emptyTab": "Nothing here yet",
+    "emptyTabBody": "Notifications of this kind will show up here.",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "earlier": "Earlier",
+    "justNow": "Just now",
+    "unread": "Unread"
+  },
+  "catalog": {
+    "allCategories": "All categories",
+    "home": "Home",
+    "empty": "No products in this category yet.",
+    "popular": "Popular",
+    "new": "Newest",
+    "sortBy": "Sort by",
+    "productCount": "{n} products"
+  },
+  "pages": {
+    "updated": "Last updated {date}",
+    "missing": "This page isn’t available yet."
+  },
+  "pwa": {
+    "title": "Get the Taladonline app",
+    "body": "Install it on your phone for faster shopping and order updates — no app store needed.",
+    "install": "Install",
+    "later": "Not now",
+    "iosTitle": "Add Taladonline to your Home Screen",
+    "iosStep1": "Tap {icon} Share in Safari",
+    "iosStep2": "Choose {icon} Add to Home Screen"
   }
 }

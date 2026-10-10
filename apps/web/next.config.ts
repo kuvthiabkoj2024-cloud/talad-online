@@ -15,6 +15,19 @@ const nextConfig: NextConfig = {
     // Catalog photos rarely change; cache optimized variants for a day.
     minimumCacheTTL: 86400,
   },
+  // The service worker must never be served from a stale HTTP cache, or updates stall.
+  async headers() {
+    return [
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self'" },
+        ],
+      },
+    ];
+  },
   experimental: {
     serverActions: {
       // Bank QR uploads go through a Server Action: 2 MB image + multipart overhead.

@@ -20,6 +20,15 @@ export async function generateMetadata(): Promise<Metadata> {
     alternates: {
       languages: Object.fromEntries(LOCALES.map((l) => [l, `/${l}`])),
     },
+    // Installed-app look on iOS (Android/desktop read app/manifest.ts).
+    appleWebApp: { capable: true, title: "Taladonline", statusBarStyle: "default" },
+    icons: {
+      icon: [
+        { url: "/icons/icon.svg", type: "image/svg+xml" },
+        { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      ],
+      apple: "/icons/apple-touch-icon.png",
+    },
   };
 }
 

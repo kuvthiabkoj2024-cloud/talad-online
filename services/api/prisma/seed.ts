@@ -10,8 +10,12 @@ import argon2 from 'argon2';
 import QRCode from 'qrcode';
 import { PrismaClient } from '../src/generated/prisma/client.js';
 import { normalizePhone } from '@talad/shared';
+import { DEMO_PAGES } from './demo-content.js';
 import { DEMO_PRODUCT_IMAGES } from './demo-images.js';
+import { DEMO_PRODUCT_VIDEOS } from './demo-videos.js';
+import { seedDemoNotifications } from './demo-notifications.js';
 import { seedDemoOrders } from './demo-orders.js';
+import { seedDemoShopExtras } from './demo-shop-extras.js';
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }),
@@ -32,6 +36,18 @@ async function main() {
       passwordHash: await argon2.hash(password),
     },
   });
+
+  // Scoped staff for trying out roles (§2.1): same password as the super admin.
+  for (const [role, staffEmail, name] of [
+    ['SUPPORT', 'support@talad.local', 'Support Staff'],
+    ['FINANCE', 'finance@talad.local', 'Finance Staff'],
+  ] as const) {
+    await prisma.adminUser.upsert({
+      where: { email: staffEmail },
+      update: {},
+      create: { email: staffEmail, name, role, passwordHash: await argon2.hash(password) },
+    });
+  }
 
   const units = [
     ['pcs', t('ອັນ', 'Piece')],
@@ -67,13 +83,11 @@ async function main() {
     create: { code: 'manual', name: 'Shop delivery (manual)', mode: 'manual' },
   });
 
-  for (const slug of ['about', 'terms', 'privacy', 'faq']) {
-    const page = { title: slug, body: '' };
-    await prisma.cmsPage.upsert({
-      where: { slug },
-      update: {},
-      create: { slug, content: { lo: page, en: page } },
-    });
+  for (const [slug, content] of Object.entries(DEMO_PAGES)) {
+    const existing = await prisma.cmsPage.findUnique({ where: { slug } });
+    // Fill pages that are still the empty stubs of older seeds; never overwrite edits.
+    const blank = !existing || !(existing.content as { lo?: { body?: string } }).lo?.body;
+    if (blank) await prisma.cmsPage.upsert({ where: { slug }, update: { content }, create: { slug, content } });
   }
 
   const settings: Record<string, unknown> = {
@@ -97,7 +111,7 @@ async function main() {
 
   await seedDemoCatalog();
 
-  // Demo shopper with an order in every status — sign in with 020 9999 0000.
+  // Demo shopper with an order in every status and a notification inbox — sign in with 020 9999 0000.
   const demoCustomer = await prisma.customer.upsert({
     where: { phone: '+8562099990000' },
     update: {},
@@ -109,7 +123,7 @@ async function main() {
     data: { province: 'VT', label: 'HOME' },
   });
   const orderTargets = [demoCustomer];
-  // Optionally give your own account the same history: SEED_ORDERS_FOR_PHONE="020 5555 1234"
+  // Optionally give your own account the same history and inbox: SEED_ORDERS_FOR_PHONE="020 5555 1234"
   if (process.env.SEED_ORDERS_FOR_PHONE) {
     const phone = normalizePhone(process.env.SEED_ORDERS_FOR_PHONE);
     const own = phone && (await prisma.customer.findUnique({ where: { phone } }));
@@ -119,7 +133,12 @@ async function main() {
   for (const customer of orderTargets) {
     const created = await seedDemoOrders(prisma, customer.id);
     if (created) console.log(`Added ${created} demo orders for ${customer.phone}`);
+    const notified = await seedDemoNotifications(prisma, customer.id);
+    if (notified) console.log(`Added ${notified} demo notifications for ${customer.phone}`);
   }
+
+  const demoShop = await prisma.shop.findUniqueOrThrow({ where: { slug: 'talad-demo' } });
+  await seedDemoShopExtras(prisma, demoShop.id, orderTargets.map((c) => c.id));
 
   console.log(`Seeded. Admin login: ${email}`);
 }
@@ -203,9 +222,10 @@ async function seedDemoCatalog() {
     const description =
       `${name}. Demo listing from Taladonline Demo Shop — replace with real product ` +
       `details (materials, size, origin, care instructions) when onboarding shops.`;
+    const videoKey = DEMO_PRODUCT_VIDEOS[slug]?.url;
     const product = await prisma.product.upsert({
       where: { shopId_slug: { shopId: shop.id, slug } },
-      update: { description },
+      update: { description, videoKey },
       create: {
         shopId: shop.id,
         categoryId: categories[category],
@@ -214,6 +234,7 @@ async function seedDemoCatalog() {
         sku: `DEMO-${String(i + 1).padStart(3, '0')}`,
         name,
         description,
+        videoKey,
         price,
         compareAtPrice,
         stock: 100,

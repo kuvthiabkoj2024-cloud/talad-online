@@ -90,7 +90,10 @@ export function CheckoutForm({
   const [couponMessage, setCouponMessage] = useState<string | null>(() =>
     initialQuote.couponError ? cartErrors[initialQuote.couponError] : null,
   );
-  const [payment, setPayment] = useState<CheckoutPaymentMethod>(quote.transferAvailable ? "BANK_TRANSFER" : "COD");
+  const methods = CHECKOUT_PAYMENT_METHODS.filter((m) => quote.paymentMethods.includes(m));
+  const [payment, setPayment] = useState<CheckoutPaymentMethod>(() =>
+    quote.transferAvailable && methods.includes("BANK_TRANSFER") ? "BANK_TRANSFER" : (methods.find((m) => m !== "BANK_TRANSFER") ?? methods[0] ?? "COD"),
+  );
   // Per shop: the uploaded slip's storage key (sent with the order) and its UI state.
   const [slipKeys, setSlipKeys] = useState<Record<string, string>>({});
   const [slips, setSlips] = useState<Record<string, SlipState>>({});
@@ -438,7 +441,7 @@ export function CheckoutForm({
             </CardTitle>
             {/* Phones: two tiles side by side with icon + title; the hint shows from sm up. */}
             <div role="radiogroup" aria-label={dict.paymentMethod} className="mt-3 grid grid-cols-2 gap-2">
-              {CHECKOUT_PAYMENT_METHODS.map((method) => {
+              {methods.map((method) => {
                 const Icon = PAYMENT_ICONS[method];
                 const active = payment === method;
                 const disabled = method === "BANK_TRANSFER" && !quote.transferAvailable;

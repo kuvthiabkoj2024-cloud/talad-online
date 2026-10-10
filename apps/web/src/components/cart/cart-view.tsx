@@ -196,8 +196,8 @@ export function CartView({ locale, dict, shops }: { locale: Locale; dict: Dict; 
         </aside>
       </div>
 
-      {/* Phones: summary pinned to the bottom of the screen */}
-      <div data-bottom-bar className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t border-border bg-card px-4 py-3 shadow-[0_-4px_12px_rgb(0_0_0/0.06)] lg:hidden">
+      {/* Phones: summary pinned to the bottom of the screen, above the tab bar */}
+      <div data-bottom-bar className="fixed inset-x-0 bottom-(--bottom-nav-h) z-30 flex items-center gap-3 border-t border-border bg-card px-4 py-3 shadow-[0_-4px_12px_rgb(0_0_0/0.06)] lg:hidden">
         <div className="min-w-0 flex-1">
           <p className="text-xs text-muted-foreground">{dict.subtotal}</p>
           <p className="truncate text-lg font-bold text-primary">{formatMoney(subtotal, locale)}</p>

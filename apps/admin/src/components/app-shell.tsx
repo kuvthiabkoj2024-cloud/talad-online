@@ -1,34 +1,23 @@
-import { NavLink, Outlet } from 'react-router'
-import { cn } from '@talad/ui/lib/utils'
-import { NAV } from '@/nav'
+import { SidebarInset, SidebarProvider } from '@talad/ui/components/sidebar'
+import { TooltipProvider } from '@talad/ui/components/tooltip'
+import { Outlet } from 'react-router'
+import { AppSidebar } from './app-sidebar'
 
+/** The sidebar remembers expanded/collapsed in its `sidebar_state` cookie. */
+function sidebarDefaultOpen(): boolean {
+  return !document.cookie.split('; ').includes('sidebar_state=false')
+}
+
+/** Collapsible sidebar + content; on phones the sidebar is an off-canvas sheet. */
 export function AppShell() {
   return (
-    <div className="flex min-h-svh">
-      <aside className="hidden w-60 shrink-0 border-r bg-sidebar p-4 md:block">
-        <div className="mb-6 px-2 text-lg font-semibold">Taladonline Admin</div>
-        <nav className="flex flex-col gap-1">
-          {NAV.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-sidebar-accent',
-                  isActive && 'bg-sidebar-accent font-medium',
-                )
-              }
-            >
-              <Icon className="size-4" />
-              {label}
-            </NavLink>
-          ))}
-        </nav>
-      </aside>
-      <main className="min-w-0 flex-1 p-6">
-        <Outlet />
-      </main>
-    </div>
+    <TooltipProvider delayDuration={0}>
+      <SidebarProvider defaultOpen={sidebarDefaultOpen()}>
+        <AppSidebar />
+        <SidebarInset className="min-w-0 bg-muted/40">
+          <Outlet />
+        </SidebarInset>
+      </SidebarProvider>
+    </TooltipProvider>
   )
 }

@@ -1,6 +1,7 @@
 import { PAYMENT_METHODS, type Locale } from "@talad/shared";
 import Link from "next/link";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
+import { OPEN_SHOP_URL } from "@/lib/customer";
 
 const PAYMENT_LABELS: Record<(typeof PAYMENT_METHODS)[number], string> = {
   COD: "COD",
@@ -44,7 +45,7 @@ export function SiteFooter({
           <p className="mb-3 font-semibold">{dict.help}</p>
           <ul className="space-y-2">
             <li>
-              <a href={process.env.NEXT_PUBLIC_SHOP_URL ?? "#"} className="hover:underline">
+              <a href={OPEN_SHOP_URL} className="hover:underline">
                 {dict.sell}
               </a>
             </li>

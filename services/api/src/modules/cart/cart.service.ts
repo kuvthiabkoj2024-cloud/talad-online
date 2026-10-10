@@ -3,6 +3,7 @@ import { MAX_CART_QUANTITY } from '@talad/shared';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { MediaService } from '../media/media.service.js';
+import { flashPrice, FlashSalePricingService, type FlashDiscount } from '../promotions/flash-sale-pricing.service.js';
 
 const MAX_LINES = 100;
 
@@ -51,7 +52,7 @@ export interface CartLine {
   compareAtPrice: number | null;
   quantity: number;
   stock: number;
-  /** False when the product was unpublished, the shop suspended, it sold out — or it is the buyer's own. */
+  /** False when the product was unpublished, the shop suspended, it sold out, the shop blocked this buyer — or it is the buyer's own. */
   available: boolean;
   /** The buyer owns this product's shop (shops can't buy from themselves). */
   ownShop: boolean;
@@ -73,6 +74,7 @@ export class CartService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly media: MediaService,
+    private readonly flash: FlashSalePricingService,
   ) {}
 
   /** Cart lines for the customer (optionally only `ids`), newest first. */
@@ -82,7 +84,16 @@ export class CartService {
       include: lineInclude,
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map((r) => this.toLine(r, customerId));
+    // Running flash sales set the price; shops can block abusive buyers (§3.5).
+    const [discounts, blocks] = await Promise.all([
+      this.flash.discounts(rows.map((r) => r.productId)),
+      this.prisma.shopCustomerNote.findMany({
+        where: { customerId, blacklisted: true, shopId: { in: [...new Set(rows.map((r) => r.product.shop.id))] } },
+        select: { shopId: true },
+      }),
+    ]);
+    const blocked = new Set(blocks.map((b) => b.shopId));
+    return rows.map((r) => this.toLine(r, customerId, discounts.get(r.productId), blocked.has(r.product.shop.id)));
   }
 
   async view(customerId: string) {
@@ -98,12 +109,19 @@ export class CartService {
   async add(customerId: string, productId: string, variantId: string | undefined, quantity: number) {
     const product = await this.prisma.product.findFirst({
       where: { id: productId, status: 'PUBLISHED', shop: { status: 'APPROVED' } },
-      select: { stock: true, shop: { select: { ownerId: true } }, variants: { select: { id: true, stock: true } } },
+      select: { stock: true, shop: { select: { id: true, ownerId: true } }, variants: { select: { id: true, stock: true } } },
     });
     if (!product) throw new NotFoundException({ code: 'PRODUCT_UNAVAILABLE', message: 'Product not available' });
     // Shop owners shop as customers too, but never from their own shop (fake sales/ratings).
     if (product.shop.ownerId === customerId) {
       throw new ForbiddenException({ code: 'OWN_PRODUCT', message: "You can't buy from your own shop" });
+    }
+    const note = await this.prisma.shopCustomerNote.findUnique({
+      where: { shopId_customerId: { shopId: product.shop.id, customerId } },
+      select: { blacklisted: true },
+    });
+    if (note?.blacklisted) {
+      throw new ForbiddenException({ code: 'SHOP_BLOCKED', message: 'This shop is not accepting orders from your account' });
     }
 
     let stock = product.stock;
@@ -153,9 +171,10 @@ export class CartService {
     return this.prisma.cartItem.create({ data: { customerId, productId, variantId: variantId ?? null, quantity } });
   }
 
-  private toLine(r: CartRow, customerId: string): CartLine {
+  private toLine(r: CartRow, customerId: string, flash?: FlashDiscount, blocked = false): CartLine {
     const { product, variant } = r;
-    const unitPrice = (variant?.price ?? product.price).toNumber();
+    const regular = (variant?.price ?? product.price).toNumber();
+    const unitPrice = flash ? flashPrice(regular, flash.percent) : regular;
     const stock = variant ? variant.stock : product.stock;
     const attributes = variant?.attributes as Record<string, string> | undefined;
     const needsVariant = product._count.variants > 0 && !variant;
@@ -170,11 +189,16 @@ export class CartService {
       sku: variant?.sku ?? product.sku,
       imageUrl: product.images[0] ? this.media.publicUrl(product.images[0].key) : null,
       unitPrice,
-      compareAtPrice: product.compareAtPrice?.toNumber() ?? null,
+      compareAtPrice: flash ? Math.max(product.compareAtPrice?.toNumber() ?? 0, regular) : (product.compareAtPrice?.toNumber() ?? null),
       quantity: r.quantity,
       stock,
       available:
-        product.status === 'PUBLISHED' && product.shop.status === 'APPROVED' && stock > 0 && !needsVariant && !ownShop,
+        product.status === 'PUBLISHED' &&
+        product.shop.status === 'APPROVED' &&
+        stock > 0 &&
+        !needsVariant &&
+        !ownShop &&
+        !blocked,
       ownShop,
       lineTotal: unitPrice * r.quantity,
       shop: { id: product.shop.id, slug: product.shop.slug, name: product.shop.name },

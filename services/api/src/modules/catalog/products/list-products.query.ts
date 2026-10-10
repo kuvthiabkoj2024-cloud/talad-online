@@ -9,7 +9,7 @@ export class ListProductsQuery {
   @IsIn(PRODUCT_SORTS)
   sort: ProductSort = 'popular';
 
-  /** Category slug. */
+  /** Category slug; a top-level category includes its subcategories. */
   @IsOptional()
   @IsString()
   category?: string;

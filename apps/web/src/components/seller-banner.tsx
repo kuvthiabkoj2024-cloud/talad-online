@@ -1,5 +1,6 @@
 import { ChevronRight, Store } from "lucide-react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
+import { OPEN_SHOP_URL } from "@/lib/customer";
 
 const dots =
   "pointer-events-none absolute opacity-40 [background-image:radial-gradient(var(--primary)_1px,transparent_1px)] [background-size:8px_8px]";
@@ -25,7 +26,7 @@ export function SellerBanner({ dict }: { dict: Dictionary["home"] }) {
         <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">{dict.sellerSubtitle}</p>
       </div>
       <a
-        href={process.env.NEXT_PUBLIC_SHOP_URL ?? "#"}
+        href={OPEN_SHOP_URL}
         className="relative flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full bg-primary py-2.5 pl-4 pr-3 text-xs font-semibold text-primary-foreground shadow-md shadow-primary/25 transition hover:brightness-110 sm:gap-1 sm:px-5 sm:py-3 sm:text-sm"
       >
         {/* "Join" on phones, "Join Now" from sm up */}

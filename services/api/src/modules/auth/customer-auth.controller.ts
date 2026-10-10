@@ -5,7 +5,16 @@ import type { Request } from 'express';
 import type { Customer } from '../../generated/prisma/client.js';
 import { CustomerAuthGuard, CurrentCustomer, SessionToken } from './customer-auth.guard.js';
 import { CustomerAuthService } from './customer-auth.service.js';
-import { RequestOtpDto, SocialSignInDto, VerifyOtpDto } from './dto/customer-auth.dto.js';
+import {
+  ForgotPasswordDto,
+  PasswordLoginDto,
+  RequestOtpDto,
+  ResetPasswordDto,
+  SocialSignInDto,
+  TwoFactorChallengeDto,
+  TwoFactorVerifyDto,
+  VerifyOtpDto,
+} from './dto/customer-auth.dto.js';
 import type { ClientInfo } from './session.service.js';
 
 const clientInfo = (req: Request): ClientInfo => ({
@@ -32,6 +41,43 @@ export class CustomerAuthController {
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   verifyOtp(@Body() dto: VerifyOtpDto, @Req() req: Request) {
     return this.auth.verifyOtp(dto, clientInfo(req));
+  }
+
+  /** Phone or email + password; returns a session, or a `twoFactor` challenge. */
+  @Post('password/login')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  passwordLogin(@Body() dto: PasswordLoginDto, @Req() req: Request) {
+    return this.auth.passwordLogin(dto, clientInfo(req));
+  }
+
+  @Post('password/forgot')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.auth.forgotPassword(dto);
+  }
+
+  @Post('password/reset')
+  @HttpCode(204)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    await this.auth.resetPassword(dto);
+  }
+
+  /** Second step of sign-in for accounts with 2FA. */
+  @Post('2fa/verify')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  verifyTwoFactor(@Body() dto: TwoFactorVerifyDto, @Req() req: Request) {
+    return this.auth.verifyTwoFactor(dto, clientInfo(req));
+  }
+
+  @Post('2fa/resend')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  resendTwoFactor(@Body() dto: TwoFactorChallengeDto) {
+    return this.auth.resendTwoFactor(dto.challenge);
   }
 
   @Post('google')

@@ -1,15 +1,30 @@
 import type { MetadataRoute } from "next";
 
-/** PWA manifest so the storefront is installable before native apps ship. */
+/** PWA manifest so the storefront installs to the home screen (served at /manifest.webmanifest). */
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    id: "/",
     name: "Taladonline",
     short_name: "Taladonline",
-    description: "Multi-vendor marketplace for local shops in Laos",
-    start_url: "/",
+    description: "Shop local products from verified shops across Laos — ຕະຫຼາດອອນລາຍຂອງລາວ",
+    // Locale-less paths redirect to the visitor's language (proxy.ts).
+    start_url: "/?source=pwa",
+    scope: "/",
     display: "standalone",
-    background_color: "#ffffff",
+    orientation: "portrait",
+    background_color: "#f3f4f6",
     theme_color: "#2e7d32",
-    icons: [{ src: "/favicon.ico", sizes: "any", type: "image/x-icon" }],
+    lang: "lo",
+    categories: ["shopping", "lifestyle"],
+    icons: [
+      { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/icons/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+    ],
+    shortcuts: [
+      { name: "Feed", url: "/feed", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
+      { name: "Cart", url: "/cart", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
+      { name: "My orders", url: "/account/orders", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
+    ],
   };
 }

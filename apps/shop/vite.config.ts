@@ -12,6 +12,19 @@ export default defineConfig({
     },
     dedupe: ['react', 'react-dom'],
   },
+  build: {
+    rolldownOptions: {
+      output: {
+        // Third-party code changes rarely; keep it in its own cacheable chunk.
+        codeSplitting: {
+          groups: [
+            { name: 'react', test: /node_modules[\\/](react|react-dom|react-router|scheduler)[\\/]/ },
+            { name: 'vendor', test: /node_modules[\\/]/ },
+          ],
+        },
+      },
+    },
+  },
   server: { port: 5174, strictPort: true },
   preview: { port: 5174 },
 })

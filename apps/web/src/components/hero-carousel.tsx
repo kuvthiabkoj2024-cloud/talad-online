@@ -1,6 +1,7 @@
 "use client";
 
 import { CreditCard, ShoppingBag, Truck, type LucideIcon } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 interface Slide {
@@ -8,7 +9,15 @@ interface Slide {
   subtitle: string;
 }
 
-// Built-in promo slides until admin-managed banners (Banner model, §2.8) are exposed by the API.
+/** An admin-managed banner (§2.8), already localized; `href` is a full storefront path. */
+export interface BannerSlide {
+  id: string;
+  title: string;
+  imageUrl: string;
+  href: string | null;
+}
+
+// Built-in promo slides, shown when no admin banner is running.
 const DECOR: { icon: LucideIcon; className: string }[] = [
   { icon: Truck, className: "from-[#43a047] via-[#2e7d32] to-[#1b5e20]" },
   { icon: ShoppingBag, className: "from-[#388e3c] via-[#2e7d32] to-[#14471a]" },
@@ -19,19 +28,22 @@ const INTERVAL_MS = 5000;
 
 export function HeroCarousel({
   slides,
+  banners = [],
   slideLabel,
 }: {
   slides: Slide[];
+  banners?: BannerSlide[];
   slideLabel: string;
 }) {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
+  const count = banners.length || slides.length;
 
   useEffect(() => {
-    if (paused) return;
-    const id = setInterval(() => setIndex((i) => (i + 1) % slides.length), INTERVAL_MS);
+    if (paused || count < 2) return;
+    const id = setInterval(() => setIndex((i) => (i + 1) % count), INTERVAL_MS);
     return () => clearInterval(id);
-  }, [paused, slides.length]);
+  }, [paused, count]);
 
   return (
     <section
@@ -40,7 +52,31 @@ export function HeroCarousel({
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      {slides.map((slide, i) => {
+      {banners.map((b, i) => {
+        const image = (
+          // eslint-disable-next-line @next/next/no-img-element -- admin-uploaded banner from the media CDN
+          <img src={b.imageUrl} alt={b.title} className="size-full object-cover" />
+        );
+        return (
+          <div
+            key={b.id}
+            aria-roledescription="slide"
+            aria-label={`${slideLabel} ${i + 1} / ${count}`}
+            aria-hidden={i !== index}
+            className={`absolute inset-0 bg-muted transition-opacity duration-700 ${i === index ? "opacity-100" : "pointer-events-none opacity-0"}`}
+          >
+            {b.href ? (
+              <Link href={b.href} tabIndex={i === index ? 0 : -1} className="block size-full">
+                {image}
+              </Link>
+            ) : (
+              image
+            )}
+          </div>
+        );
+      })}
+
+      {banners.length === 0 && slides.map((slide, i) => {
         const { icon: Icon, className } = DECOR[i % DECOR.length];
         return (
           <div
@@ -67,10 +103,10 @@ export function HeroCarousel({
         );
       })}
 
-      <div className="absolute inset-x-0 bottom-4 z-10 flex justify-center gap-2">
-        {slides.map((slide, i) => (
+      <div className={`absolute inset-x-0 bottom-4 z-10 flex justify-center gap-2 ${count < 2 ? "hidden" : ""}`}>
+        {Array.from({ length: count }, (_, i) => (
           <button
-            key={slide.title}
+            key={i}
             type="button"
             aria-label={`${slideLabel} ${i + 1}`}
             aria-current={i === index}

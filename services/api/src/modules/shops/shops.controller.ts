@@ -2,8 +2,9 @@ import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
-import type { Customer } from '../../generated/prisma/client.js';
+import type { Customer, Shop } from '../../generated/prisma/client.js';
 import { CurrentCustomer, CustomerAuthGuard } from '../auth/customer-auth.guard.js';
+import { CurrentShop, ShopOwnerGuard } from '../auth/shop-owner.guard.js';
 import { SHOP_PRODUCT_SORTS, type ShopProductSort } from '../catalog/products/products.service.js';
 import { ShopsService } from './shops.service.js';
 
@@ -61,5 +62,19 @@ export class MyShopController {
   @Get()
   mine(@CurrentCustomer() customer: Customer) {
     return this.shops.ownedBy(customer.id);
+  }
+}
+
+/** Seller Center home: order and product counts and setup reminders. */
+@ApiTags('seller')
+@ApiBearerAuth()
+@UseGuards(ShopOwnerGuard)
+@Controller('me/shop/summary')
+export class ShopSummaryController {
+  constructor(private readonly shops: ShopsService) {}
+
+  @Get()
+  summary(@CurrentShop() shop: Shop) {
+    return this.shops.summary(shop);
   }
 }

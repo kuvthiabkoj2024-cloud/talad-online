@@ -223,6 +223,7 @@ model Shop {
   products      Product[]
   orders        ShopOrder[]
   coupons       Coupon[]
+  flashSales    FlashSale[]
   payouts       Payout[]
   customerNotes ShopCustomerNote[]
 }
@@ -268,7 +269,8 @@ model Payout {
   reference        String?
   createdAt        DateTime     @default(now())
 
-  shop Shop @relation(fields: [shopId], references: [id])
+  shop   Shop        @relation(fields: [shopId], references: [id])
+  orders ShopOrder[]
 
   @@index([shopId, periodStart])
 }
@@ -414,6 +416,7 @@ model Product {
   cartItems  CartItem[]
   orderItems OrderItem[]
   wishlistBy WishlistItem[]
+  flashSales FlashSaleItem[]
 
   @@unique([shopId, sku])
   @@unique([shopId, slug])
@@ -507,12 +510,15 @@ model ShopOrder {
   autoConfirmAt      DateTime?
   extensionsUsed     Int         @default(0)
   cancelReason       String?
+  /// The payout that settled this order with the shop (§2.3); null until paid out.
+  payoutId           String?
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
   order            Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
   shop             Shop                 @relation(fields: [shopId], references: [id])
   deliveryProvider DeliveryProvider?    @relation(fields: [deliveryProviderId], references: [id])
+  payout           Payout?              @relation(fields: [payoutId], references: [id], onDelete: SetNull)
   items            OrderItem[]
   history          OrderStatusHistory[]
   disputes         Dispute[]
@@ -520,6 +526,7 @@ model ShopOrder {
 
   @@index([shopId, status])
   @@index([orderId])
+  @@index([payoutId])
 }
 
 model OrderItem {
@@ -653,6 +660,38 @@ model Coupon {
   redemptions CouponRedemption[]
 
   @@unique([shopId, code])
+}
+
+/// A shop's scheduled flash sale (§3.4): a percentage off chosen products for a window.
+model FlashSale {
+  id        String   @id @default(uuid(7))
+  shopId    String
+  name      String
+  startsAt  DateTime
+  endsAt    DateTime
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop  Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  items FlashSaleItem[]
+
+  @@index([shopId, startsAt])
+  @@index([startsAt, endsAt])
+}
+
+/// Applies to the product and all its variants.
+model FlashSaleItem {
+  id              String @id @default(uuid(7))
+  flashSaleId     String
+  productId       String
+  discountPercent Int
+
+  flashSale FlashSale @relation(fields: [flashSaleId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([flashSaleId, productId])
+  @@index([productId])
 }
 
 model CouponRedemption {

@@ -18,3 +18,9 @@ export function detectImage(buffer: Buffer): { type: string; ext: string } | nul
   const match = SIGNATURES.find((s) => s.test(buffer));
   return match ? { type: match.type, ext: match.ext } : null;
 }
+
+/** Images, plus PDF for scanned documents (KYC). */
+export function detectDocument(buffer: Buffer): { type: string; ext: string } | null {
+  if (buffer.toString('ascii', 0, 5) === '%PDF-') return { type: 'application/pdf', ext: 'pdf' };
+  return detectImage(buffer);
+}

@@ -11,6 +11,7 @@ import { randomInt } from 'node:crypto';
 import type { Env } from '../../config/env.validation.js';
 import { Prisma, type OrderStatus } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { CmsService } from '../cms/cms.service.js';
 import { CartService, groupByShop, type CartLine } from '../cart/cart.service.js';
 import {
   allocateDiscount,
@@ -76,6 +77,7 @@ export class CheckoutService {
     private readonly prisma: PrismaService,
     private readonly cart: CartService,
     private readonly config: ConfigService<Env, true>,
+    private readonly cms: CmsService,
   ) {}
 
   /**
@@ -129,12 +131,18 @@ export class CheckoutService {
         couponError,
         // QR transfer needs every shop in the order to accept transfers.
         transferAvailable: shops.every((s) => s.transfer !== null),
+        /** Payment methods the platform currently accepts. */
+        paymentMethods: (await this.cms.publicSettings()).paymentMethods,
       },
     };
   }
 
   async place(customerId: string, input: PlaceOrderInput) {
     const { quote, couponRule } = await this.price(customerId, input);
+    // Admins choose which methods checkout offers (§2.8).
+    if (!quote.paymentMethods.includes(input.paymentMethod)) {
+      throw new BadRequestException({ code: 'PAYMENT_METHOD_DISABLED', message: 'This payment method is not available' });
+    }
     if (quote.delivery.options.length > 0 && quote.delivery.selectedId !== input.deliveryProviderId) {
       throw new BadRequestException({ code: 'DELIVERY_REQUIRED', message: 'Choose a delivery service' });
     }
@@ -238,6 +246,8 @@ export class CheckoutService {
                 order: { connect: { id: order.id } },
                 shop: { connect: { id: group.shop.id } },
                 status,
+                // Unpaid orders are cancelled when the shop's payment window ends (OrderDeadlinesService).
+                paymentDueAt: status === 'PENDING' ? new Date(now.getTime() + groupLines[0].internal.paymentWindowHrs * 3_600_000) : null,
                 subtotal: group.subtotal,
                 discountTotal: group.discount,
                 // A shop's own coupon comes out of its revenue; platform coupons don't.

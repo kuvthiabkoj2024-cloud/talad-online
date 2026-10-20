@@ -33,6 +33,26 @@ import type { ShopFlashSale, ShopProductList } from '@/lib/types'
 type ErrorKey = keyof Dict['marketing']['errors']
 const salePrice = (price: number, percent: number) => Math.round((price * (100 - percent)) / 100)
 
+type Preset = keyof Dict['marketing']['presets']
+/** End-of-month sales run from this day to the month's last day. */
+const MONTH_END_FROM = 25
+
+/** Start and end for a quick-date chip; times end at 23:59 so a sale covers the whole last day. */
+function presetRange(preset: Preset, now = new Date()): { start: Date; end: Date } {
+  const start = new Date(now)
+  start.setSeconds(0, 0)
+  const end = new Date(start)
+  if (preset === 'endOfMonth') {
+    const from = new Date(now.getFullYear(), now.getMonth(), MONTH_END_FROM)
+    end.setMonth(now.getMonth() + 1, 0) // last day of this month
+    end.setHours(23, 59, 0, 0)
+    return { start: from > now ? from : start, end }
+  }
+  end.setDate(end.getDate() + { today: 0, threeDays: 2, week: 6 }[preset])
+  end.setHours(23, 59, 0, 0)
+  return { start, end }
+}
+
 /** Flash sales (§3.4): scheduled percentage discounts on chosen products. */
 export function MarketingPage() {
   const { t } = useI18n()
@@ -153,6 +173,7 @@ function SaleForm({ sale, onDone }: { sale: ShopFlashSale | null; onDone: () => 
   const [items, setItems] = useState<ItemRow[]>(
     () => sale?.items.map((i) => ({ productId: i.productId, name: i.name, imageUrl: i.imageUrl, price: i.price, percent: String(i.discountPercent) })) ?? [],
   )
+  const [allPercent, setAllPercent] = useState('')
   const [search, setSearch] = useState('')
   const [debounced, setDebounced] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -164,7 +185,7 @@ function SaleForm({ sale, onDone }: { sale: ShopFlashSale | null; onDone: () => 
   }, [search])
   const candidates = useQuery({
     queryKey: [...queryKeys.products, { picker: debounced }],
-    queryFn: () => api<ShopProductList>(`/me/shop/products?status=PUBLISHED&pageSize=8${debounced ? `&q=${encodeURIComponent(debounced)}` : ''}`),
+    queryFn: () => api<ShopProductList>(`/me/shop/products?status=PUBLISHED&pageSize=20${debounced ? `&q=${encodeURIComponent(debounced)}` : ''}`),
   })
 
   const save = useMutation({
@@ -230,9 +251,52 @@ function SaleForm({ sale, onDone }: { sale: ShopFlashSale | null; onDone: () => 
           <Input id="saleEnd" type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
         </div>
       </div>
+      <div className="-mt-1 flex flex-col gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-xs text-muted-foreground">{t.marketing.quickDates}</span>
+          {(Object.keys(t.marketing.presets) as Preset[]).map((p) => (
+            <Button
+              key={p}
+              type="button"
+              size="sm"
+              variant="outline"
+              className={cn('h-7 rounded-full px-3 text-xs', p === 'endOfMonth' && 'border-red-300 text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950')}
+              onClick={() => {
+                const { start, end } = presetRange(p)
+                setStartsAt(toLocalInput(start))
+                setEndsAt(toLocalInput(end))
+                if (p === 'endOfMonth' && !name.trim()) setName(t.marketing.presets.endOfMonth)
+              }}
+            >
+              {p === 'endOfMonth' && <CalendarRange className="size-3.5" />}
+              {t.marketing.presets[p]}
+            </Button>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {fill(t.marketing.endOfMonthHint, { from: formatDate(presetRange('endOfMonth').start.toISOString(), locale) })}
+        </p>
+      </div>
 
       <div className="flex flex-col gap-2">
         <Label required>{t.marketing.products}</Label>
+        {items.length > 1 && (
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">{t.marketing.setAll}</span>
+            <Input
+              aria-label={t.marketing.setAll}
+              inputMode="numeric"
+              value={allPercent}
+              placeholder="10"
+              onChange={(e) => setAllPercent(e.target.value.replace(/\D/g, '').slice(0, 2))}
+              className="h-8 w-14 text-right"
+            />
+            <span className="text-muted-foreground">%</span>
+            <Button type="button" size="sm" variant="secondary" disabled={!allPercent} onClick={() => setItems((l) => l.map((x) => ({ ...x, percent: allPercent })))}>
+              {t.marketing.apply}
+            </Button>
+          </div>
+        )}
         {items.length > 0 && (
           <ul className="flex flex-col divide-y rounded-lg border">
             {items.map((i) => {
@@ -269,9 +333,28 @@ function SaleForm({ sale, onDone }: { sale: ShopFlashSale | null; onDone: () => 
 
         {items.length < FLASH_SALE_RULES.maxItems && (
           <div className="flex flex-col gap-2 rounded-lg border border-dashed p-2">
-            <div className="relative">
-              <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input value={search} placeholder={t.marketing.searchProducts} className="pl-9" onChange={(e) => setSearch(e.target.value)} />
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input value={search} placeholder={t.marketing.searchProducts} className="pl-9" onChange={(e) => setSearch(e.target.value)} />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!candidates.data?.items.some((p) => !chosen.has(p.id))}
+                onClick={() =>
+                  setItems((l) => [
+                    ...l,
+                    ...(candidates.data?.items ?? [])
+                      .filter((p) => !chosen.has(p.id))
+                      .slice(0, FLASH_SALE_RULES.maxItems - l.length)
+                      .map((p) => ({ productId: p.id, name: p.name, imageUrl: p.imageUrl, price: p.price, percent: allPercent || '10' })),
+                  ])
+                }
+              >
+                <Plus />
+                {t.marketing.addAllShown}
+              </Button>
             </div>
             <ul className="flex max-h-56 flex-col overflow-y-auto">
               {candidates.data?.items
@@ -280,7 +363,7 @@ function SaleForm({ sale, onDone }: { sale: ShopFlashSale | null; onDone: () => 
                   <li key={p.id}>
                     <button
                       type="button"
-                      onClick={() => setItems((l) => [...l, { productId: p.id, name: p.name, imageUrl: p.imageUrl, price: p.price, percent: '10' }])}
+                      onClick={() => setItems((l) => [...l, { productId: p.id, name: p.name, imageUrl: p.imageUrl, price: p.price, percent: allPercent || '10' }])}
                       className="flex w-full items-center gap-3 rounded-md p-1.5 text-left text-sm hover:bg-muted"
                     >
                       <Thumb src={p.imageUrl} />

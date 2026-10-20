@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { MediaService } from '../media/media.service.js';
 import { StorageService } from '../media/storage.service.js';
+import { RealtimeService } from '../realtime/realtime.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 
 export type ShopDecision = 'approve' | 'reject' | 'suspend' | 'reinstate';
@@ -49,6 +50,7 @@ export class AdminShopsService {
     private readonly storage: StorageService,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   async list(filter: { status?: ShopStatus; q?: string; page: number; pageSize: number }) {
@@ -191,7 +193,11 @@ export class AdminShopsService {
       if (shop.ownerId) {
         const values = { shop: shop.name, reason: reason ?? '' };
         const text = OWNER_TEXT[decision];
-        await this.notifications.send(tx, shop.ownerId, 'SYSTEM', { lo: fill(text.lo, values), en: fill(text.en, values) });
+        const message = { lo: fill(text.lo, values), en: fill(text.en, values) };
+        await this.notifications.send(tx, shop.ownerId, 'SYSTEM', message);
+        // The Seller Center too, live: it reloads the shop (e.g. unlocks once approved).
+        await this.notifications.toShop(tx, id, 'SHOP_STATUS', message, { link: '/' });
+        await this.realtime.emit(tx, `shop:${id}`, { kind: 'shop.status', status: rule.to });
       }
       await this.audit.log(
         { adminId: admin.id, action: `shop.${decision}`, entityType: 'Shop', entityId: id, changes: { from: shop.status, to: rule.to, reason }, ip },

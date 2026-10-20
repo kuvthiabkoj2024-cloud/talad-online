@@ -66,22 +66,96 @@ export function FilterTabs<K extends string>({
   )
 }
 
-export function Pager({ page, totalPages, onPage }: { page: number; totalPages: number; onPage: (page: number) => void }) {
+/** Pages to show as buttons: the first, the last, and the ones around `page` (… between gaps). */
+function pageList(page: number, total: number): (number | '…')[] {
+  const keep = new Set([1, total, page - 1, page, page + 1].filter((p) => p >= 1 && p <= total))
+  const out: (number | '…')[] = []
+  for (const p of [...keep].sort((a, b) => a - b)) {
+    const last = out.at(-1)
+    if (typeof last === 'number' && p - last > 1) out.push('…')
+    out.push(p)
+  }
+  return out
+}
+
+/**
+ * Previous / numbered pages / next. With `total` and `pageSize` it also says which items are
+ * shown ("1–20 of 57"), and with `onPageSize` lets the seller choose how many per page — then
+ * it stays visible even when everything fits on one page.
+ */
+export function Pager({
+  page,
+  totalPages,
+  onPage,
+  total,
+  pageSize,
+  pageSizes = [10, 20, 50],
+  onPageSize,
+}: {
+  page: number
+  totalPages: number
+  onPage: (page: number) => void
+  total?: number
+  pageSize?: number
+  pageSizes?: number[]
+  onPageSize?: (size: number) => void
+}) {
   const { t } = useI18n()
-  if (totalPages <= 1) return null
+  const detailed = total !== undefined && pageSize !== undefined
+  if (totalPages <= 1 && !(detailed && onPageSize && total > 0)) return null
+  const from = detailed ? (page - 1) * pageSize + 1 : 0
+  const to = detailed ? Math.min(total, page * pageSize) : 0
   return (
-    <div className="flex items-center justify-between text-sm text-muted-foreground">
-      <span>{fill(t.common.pageOf, { page, total: totalPages })}</span>
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>
-          <ChevronLeft />
-          {t.common.prev}
-        </Button>
-        <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => onPage(page + 1)}>
-          {t.common.next}
-          <ChevronRight />
-        </Button>
+    <nav aria-label={fill(t.common.pageOf, { page, total: totalPages })} className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-3">
+        <span>{detailed ? fill(t.common.showing, { from, to, total }) : fill(t.common.pageOf, { page, total: totalPages })}</span>
+        {onPageSize && pageSize !== undefined && (
+          <label className="flex items-center gap-1.5">
+            <span>{t.common.perPage}</span>
+            <select
+              value={pageSize}
+              onChange={(e) => onPageSize(Number(e.target.value))}
+              className="h-8 rounded-md border bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {pageSizes.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
-    </div>
+      {totalPages > 1 && (
+        <div className="flex items-center gap-1">
+          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label={t.common.prev}>
+            <ChevronLeft />
+            <span className="max-sm:hidden">{t.common.prev}</span>
+          </Button>
+          {pageList(page, totalPages).map((p, i) =>
+            p === '…' ? (
+              <span key={`gap-${i}`} className="px-1">
+                …
+              </span>
+            ) : (
+              <Button
+                key={p}
+                variant={p === page ? 'default' : 'ghost'}
+                size="sm"
+                className="min-w-8 tabular-nums"
+                aria-current={p === page ? 'page' : undefined}
+                onClick={() => p !== page && onPage(p)}
+              >
+                {p}
+              </Button>
+            ),
+          )}
+          <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => onPage(page + 1)} aria-label={t.common.next}>
+            <span className="max-sm:hidden">{t.common.next}</span>
+            <ChevronRight />
+          </Button>
+        </div>
+      )}
+    </nav>
   )
 }

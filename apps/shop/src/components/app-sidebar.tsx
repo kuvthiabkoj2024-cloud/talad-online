@@ -5,6 +5,7 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
@@ -13,7 +14,7 @@ import {
 import { Store } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router'
 import { useAuth } from '@/auth/context'
-import { useMyShop } from '@/hooks/queries'
+import { useMyShop, useShopBadges, useUnreadMessages } from '@/hooks/queries'
 import { useI18n } from '@/i18n/context'
 import { NAV_GROUPS } from '@/nav'
 
@@ -25,6 +26,9 @@ export function AppSidebar() {
   const { t } = useI18n()
   const { account } = useAuth()
   const { data: shop } = useMyShop()
+  const { data: unread = 0 } = useUnreadMessages()
+  const { data: badges } = useShopBadges()
+  const badge: Record<string, number | undefined> = { '/orders': badges?.orders, '/messages': unread, '/videos': badges?.videos }
   const { pathname } = useLocation()
   const { isMobile, setOpenMobile } = useSidebar()
   const isActive = (to: string) => (to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(`${to}/`))
@@ -36,12 +40,12 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild tooltip={shop?.name ?? t.app.name}>
               <NavLink to="/">
-                <span className="flex aspect-square size-8 items-center justify-center overflow-hidden rounded-lg bg-primary text-primary-foreground">
+                <span className="flex aspect-square size-8 items-center justify-center overflow-hidden rounded-lg bg-white text-sidebar ring-1 ring-white/30">
                   {shop?.logoUrl ? <img src={shop.logoUrl} alt="" className="size-full object-cover" /> : <Store className="size-4" />}
                 </span>
                 <span className="grid flex-1 text-left leading-tight">
                   <span className="truncate font-semibold">{shop?.name ?? account?.shop?.name}</span>
-                  <span className="truncate text-xs text-muted-foreground">
+                  <span className="truncate text-xs text-sidebar-foreground/70">
                     {t.app.brand} {t.app.name}
                   </span>
                 </span>
@@ -58,12 +62,23 @@ export function AppSidebar() {
             <SidebarMenu>
               {group.items.map(({ to, label, icon: Icon }) => (
                 <SidebarMenuItem key={to}>
-                  <SidebarMenuButton asChild isActive={isActive(to)} tooltip={t.nav[label]}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive(to)}
+                    tooltip={t.nav[label]}
+                    // The current page stands out in white on the green sidebar.
+                    className="data-active:bg-white data-active:font-semibold data-active:text-sidebar data-active:shadow-sm data-active:hover:bg-white data-active:hover:text-sidebar"
+                  >
                     <NavLink to={to} onClick={() => isMobile && setOpenMobile(false)}>
                       <Icon />
                       <span>{t.nav[label]}</span>
                     </NavLink>
                   </SidebarMenuButton>
+                  {(badge[to] ?? 0) > 0 && (
+                    <SidebarMenuBadge className="rounded-full bg-white text-sidebar peer-hover/menu-button:text-sidebar peer-data-active/menu-button:bg-sidebar peer-data-active/menu-button:text-white">
+                      {badge[to]! > 99 ? '99+' : badge[to]}
+                    </SidebarMenuBadge>
+                  )}
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>

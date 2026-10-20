@@ -8,6 +8,7 @@
  *   s-<shopId>/profile/       payment-qr-<uuid>.<ext> (logo, cover)
  *   s-<shopId>/products/      image-<uuid>.<ext>, video-<uuid>.<ext>
  *   p-<zero uuid>/media/      image-<uuid>.<ext> (platform banners, category icons; public)
+ *   m-<conversationId>/photos/ photo-<uuid>.<ext> (customer ↔ shop chat photos; private)
  */
 export const storageFolder = {
   customerProfile: (customerId: string) => `c-${customerId}/profile/`,
@@ -17,6 +18,8 @@ export const storageFolder = {
   shopProducts: (shopId: string) => `s-${shopId}/products/`,
   /** Platform-owned public media uploaded in the admin console. */
   platformMedia: () => 'p-00000000-0000-0000-0000-000000000000/media/',
+  /** Photos in one customer ↔ shop conversation (served only to its two sides). */
+  conversation: (conversationId: string) => `m-${conversationId}/photos/`,
 };
 
 /**

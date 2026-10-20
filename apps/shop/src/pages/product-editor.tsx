@@ -3,16 +3,17 @@ import { Button } from '@talad/ui/components/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@talad/ui/components/card'
 import { Input } from '@talad/ui/components/input'
 import { Label, RequiredMark } from '@talad/ui/components/label'
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@talad/ui/components/select'
 import { Switch } from '@talad/ui/components/switch'
 import { Textarea } from '@talad/ui/components/textarea'
 import { cn } from '@talad/ui/lib/utils'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, ImagePlus, Info, LoaderCircle, Plus, Trash2, TriangleAlert, Video, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ImagePlus, Info, LoaderCircle, Shuffle, Trash2, TriangleAlert, Video, X } from 'lucide-react'
 import { useId, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 import { PageBody, TopBar } from '@/components/page-header'
+import { ProductOptionsEditor } from '@/components/product-options'
+import { SearchSelect } from '@/components/search-select'
 import { ErrorState, LoadingState } from '@/components/states'
 import { ProductStatusBadge } from '@/components/status-badge'
 import { queryKeys, useCategories, useUnits } from '@/hooks/queries'
@@ -20,6 +21,7 @@ import type { Dict } from '@/i18n/en'
 import { useI18n } from '@/i18n/context'
 import { ApiError, api, send, upload } from '@/lib/api'
 import { fill, localized } from '@/lib/format'
+import { autoSku, blankCell, combinations, comboKey, randomSku, type OptionGroup, type VariantCell } from '@/lib/product-options'
 import type { MediaFile, ShopProductDetail } from '@/lib/types'
 
 type ErrorKey = keyof Dict['editor']['errors']
@@ -30,15 +32,6 @@ interface Media {
   key?: string
   url: string
   progress?: number
-}
-
-interface OptionRow {
-  uid: string
-  id?: string
-  value: string
-  sku: string
-  price: string
-  stock: string
 }
 
 interface FormState {
@@ -52,8 +45,10 @@ interface FormState {
   stock: string
   lowStockThreshold: string
   hasOptions: boolean
-  variantOption: string
-  variants: OptionRow[]
+  /** Up to two options (e.g. colour and size), values in order. */
+  options: OptionGroup[]
+  /** Price/stock/SKU per combination, by `comboKey` of its values. */
+  cells: Record<string, VariantCell>
 }
 
 const uid = () => crypto.randomUUID()
@@ -72,18 +67,21 @@ function fromProduct(p?: ShopProductDetail): FormState {
     stock: p ? String(p.stock) : '0',
     lowStockThreshold: p ? String(p.lowStockThreshold) : '5',
     hasOptions: (p?.variants.length ?? 0) > 0,
-    variantOption: p?.variantOption ?? '',
-    variants:
-      p?.variants.map((v) => ({
-        uid: v.id,
-        id: v.id,
-        value: v.value,
-        sku: v.sku,
-        price: v.price != null ? String(v.price) : '',
-        stock: String(v.stock),
-      })) ?? [],
+    options: (p?.options ?? []).map((o) => ({ uid: uid(), name: o.name, values: [...o.values] })),
+    cells: Object.fromEntries(
+      (p?.variants ?? []).map((v) => [
+        comboKey((p?.options ?? []).map((o) => v.attributes[o.name] ?? '')),
+        { id: v.id, sku: v.sku, autoSku: false, price: v.price != null ? String(v.price) : '', stock: String(v.stock) },
+      ]),
+    ),
   }
 }
+
+/** Colour and size, ready for values: what most sellers need. */
+const startOptions = (t: Dict): OptionGroup[] => [
+  { uid: uid(), name: t.editor.colour, values: [] },
+  { uid: uid(), name: t.editor.size, values: [] },
+]
 
 const toMedia = (f: MediaFile): Media => ({ uid: f.key, key: f.key, url: f.url })
 
@@ -142,9 +140,13 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
     setForm((f) => ({ ...f, [key]: value }))
     clearErrors(key, 'variants')
   }
-  const setRow = (rowUid: string, patch: Partial<OptionRow>) => {
-    setForm((f) => ({ ...f, variants: f.variants.map((r) => (r.uid === rowUid ? { ...r, ...patch } : r)) }))
-    clearErrors(...Object.keys(patch).map((k) => `${k}-${rowUid}`), 'variants')
+  // Options with no values yet are left out of the combinations (and of the saved product).
+  const filled = form.options.filter((o) => o.values.length)
+  const combos = combinations(form.options)
+  const cellFor = (values: string[]): VariantCell => form.cells[comboKey(values)] ?? blankCell()
+  const skuFor = (values: string[]) => {
+    const c = cellFor(values)
+    return (c.autoSku ? autoSku(form.sku, values) : c.sku).trim()
   }
   const uploading = images.some((i) => !i.key) || (video !== null && !video.key)
 
@@ -209,16 +211,20 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
     if (!PRODUCT_RULES.skuPattern.test(form.sku.trim())) e.sku = 'sku'
     if (!isWhole(form.lowStockThreshold)) e.lowStockThreshold = 'stock'
     if (form.hasOptions) {
-      if (!form.variantOption.trim()) e.variantOption = 'optionName'
-      for (const r of form.variants) {
-        if (!r.value.trim()) e[`value-${r.uid}`] = 'optionValue'
-        if (!PRODUCT_RULES.skuPattern.test(r.sku.trim())) e[`sku-${r.uid}`] = 'sku'
-        if (r.price.trim() && !(num(r.price) >= 0)) e[`price-${r.uid}`] = 'price'
-        if (!isWhole(r.stock)) e[`stock-${r.uid}`] = 'stock'
+      const names = form.options.map((o) => o.name.trim().toLowerCase())
+      if (names.some((n) => !n)) e.options = 'optionName'
+      else if (form.options.some((o) => !o.values.length)) e.options = 'optionValues'
+      else if (new Set(names).size !== names.length) e.options = 'optionsDuplicate'
+      else if (combos.length > PRODUCT_RULES.maxVariants) e.options = 'tooManyVariants'
+      for (const values of combos) {
+        const k = comboKey(values)
+        const c = cellFor(values)
+        if (!PRODUCT_RULES.skuPattern.test(skuFor(values))) e[`sku-${k}`] = 'sku'
+        if (c.price.trim() && !(num(c.price) >= 0)) e[`price-${k}`] = 'price'
+        if (!isWhole(c.stock)) e[`stock-${k}`] = 'stock'
       }
-      const values = form.variants.map((r) => r.value.trim().toLowerCase())
-      const skus = [form.sku, ...form.variants.map((r) => r.sku)].map((s) => s.trim().toLowerCase())
-      if (new Set(values).size !== values.length || new Set(skus).size !== skus.length) e.variants = 'optionsDuplicate'
+      const skus = [form.sku, ...combos.map(skuFor)].map((x) => x.trim().toLowerCase())
+      if (!e.options && new Set(skus).size !== skus.length) e.options = 'optionsDuplicate'
     } else if (!isWhole(form.stock)) {
       e.stock = 'stock'
     }
@@ -229,7 +235,7 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
 
   const save = useMutation({
     mutationFn: (intent: ProductSaveIntent) => {
-      const options = form.hasOptions && form.variants.length > 0
+      const options = form.hasOptions && combos.length > 0
       const body = {
         intent,
         name: form.name.trim(),
@@ -243,15 +249,18 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
         lowStockThreshold: Number(form.lowStockThreshold),
         imageKeys: images.map((i) => i.key!),
         videoKey: video?.key ?? null,
-        variantOption: options ? form.variantOption.trim() : undefined,
+        options: options ? filled.map((o) => ({ name: o.name.trim(), values: o.values })) : undefined,
         variants: options
-          ? form.variants.map((r) => ({
-              id: r.id,
-              value: r.value.trim(),
-              sku: r.sku.trim(),
-              price: r.price.trim() ? num(r.price) : null,
-              stock: Number(r.stock),
-            }))
+          ? combos.map((values) => {
+              const c = cellFor(values)
+              return {
+                id: c.id,
+                attributes: Object.fromEntries(filled.map((o, i) => [o.name.trim(), values[i]])),
+                sku: skuFor(values),
+                price: c.price.trim() ? num(c.price) : null,
+                stock: Number(c.stock),
+              }
+            })
           : [],
       }
       return product
@@ -275,6 +284,20 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
     else toast.error(t.common.saveError)
   }
 
+  // Categories with sub-categories become groups (the parent first); the rest stay together.
+  const categoryGroups = (() => {
+    const item = (c: { id: string; name: Record<string, string> | object; slug?: string }, indent = false) => ({
+      value: c.id,
+      label: localized(c.name as never, locale),
+      keywords: [...Object.values(c.name as Record<string, string>), ...(c.slug ? [c.slug] : [])],
+      indent,
+    })
+    const all = categories.data ?? []
+    return [
+      { items: all.filter((c) => !c.children.length).map((c) => item(c)) },
+      ...all.filter((c) => c.children.length).map((c) => ({ label: localized(c.name, locale), items: [item(c), ...c.children.map((child) => item(child, true))] })),
+    ].filter((g) => g.items.length)
+  })()
   const err = (key: string) => errors[key] && <p className="text-sm text-destructive">{t.editor.errors[errors[key]!]}</p>
   const field = (key: string) => (errors[key] ? { 'aria-invalid': true as const } : {})
   const live = product?.status === 'PUBLISHED'
@@ -282,7 +305,7 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
   return (
     <>
       <TopBar title={title} backTo="/products" />
-      <PageBody className="max-w-4xl pb-28">
+      <PageBody className="max-w-none pb-28">
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="hidden text-2xl font-semibold tracking-tight md:block">{title}</h2>
           {product && <ProductStatusBadge status={product.status} />}
@@ -294,15 +317,17 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
         {product?.status === 'PENDING' && <Notice>{t.editor.pendingNote}</Notice>}
         {!product && <Notice>{t.editor.moderationNote}</Notice>}
 
+        {/* Full width, two cards per row on wide screens; options take the whole row. */}
         <form
           id={formId}
-          className="flex flex-col gap-5"
+          className="grid items-start gap-5 xl:grid-cols-2"
           onSubmit={(e) => {
             e.preventDefault()
             submit('publish')
           }}
         >
-          <Card>
+          {/* Photos and video: same-size square tiles, same card height, drop files on either. */}
+          <Card className="xl:self-stretch">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 {t.editor.photos}
@@ -310,46 +335,67 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
               </CardTitle>
               <CardDescription>{fill(t.editor.photosHint, { max: MEDIA_LIMITS.maxImagesPerProduct })}</CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-3">
-              <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
-                {images.map((img, i) => (
-                  <div key={img.uid} className="group relative aspect-square overflow-hidden rounded-xl border bg-muted">
-                    <img src={img.url} alt="" className="size-full object-cover" />
-                    {i === 0 && (
-                      <span className="absolute top-1.5 left-1.5 rounded-md bg-primary px-1.5 py-0.5 text-[11px] font-semibold text-primary-foreground">
-                        {t.editor.cover}
-                      </span>
-                    )}
-                    {img.progress !== undefined && <Progress value={img.progress} />}
-                    <div className="absolute inset-x-1.5 bottom-1.5 flex justify-between opacity-100 transition-opacity md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">
-                      <span className="flex gap-1">
-                        <IconButton label={t.editor.moveLeft} disabled={i === 0} onClick={() => setImages((l) => swap(l, i, i - 1))}>
-                          <ChevronLeft />
+            <CardContent className="flex flex-1 flex-col gap-3">
+              <DropZone label={t.editor.dropNow} hint={t.editor.dropPhotos} onFiles={(files) => void addImages(files)}>
+                <div className="flex flex-wrap gap-3">
+                  {images.map((img, i) => (
+                    <div
+                      key={img.uid}
+                      draggable={!!img.key}
+                      onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = 'move'
+                        e.dataTransfer.setData(PHOTO_DRAG, String(i))
+                      }}
+                      onDragOver={(e) => {
+                        if (e.dataTransfer.types.includes(PHOTO_DRAG)) e.preventDefault()
+                      }}
+                      onDrop={(e) => {
+                        const from = Number(e.dataTransfer.getData(PHOTO_DRAG))
+                        if (!e.dataTransfer.types.includes(PHOTO_DRAG) || Number.isNaN(from)) return
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setImages((l) => move(l, from, i))
+                      }}
+                      className={cn(TILE, 'group relative cursor-grab overflow-hidden rounded-xl border bg-muted active:cursor-grabbing')}
+                    >
+                      <img src={img.url} alt="" draggable={false} className="size-full object-cover" />
+                      {i === 0 && (
+                        <span className="absolute top-1.5 left-1.5 rounded-md bg-primary px-1.5 py-0.5 text-[11px] font-semibold text-primary-foreground">
+                          {t.editor.cover}
+                        </span>
+                      )}
+                      {img.progress !== undefined && <Progress value={img.progress} />}
+                      <div className="absolute inset-x-1.5 bottom-1.5 flex justify-between opacity-100 transition-opacity md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">
+                        <span className="flex gap-1">
+                          <IconButton label={t.editor.moveLeft} disabled={i === 0} onClick={() => setImages((l) => swap(l, i, i - 1))}>
+                            <ChevronLeft />
+                          </IconButton>
+                          <IconButton label={t.editor.moveRight} disabled={i === images.length - 1} onClick={() => setImages((l) => swap(l, i, i + 1))}>
+                            <ChevronRight />
+                          </IconButton>
+                        </span>
+                        <IconButton label={t.editor.remove} onClick={() => setImages((l) => l.filter((x) => x.uid !== img.uid))}>
+                          <X />
                         </IconButton>
-                        <IconButton label={t.editor.moveRight} disabled={i === images.length - 1} onClick={() => setImages((l) => swap(l, i, i + 1))}>
-                          <ChevronRight />
-                        </IconButton>
-                      </span>
-                      <IconButton label={t.editor.remove} onClick={() => setImages((l) => l.filter((x) => x.uid !== img.uid))}>
-                        <X />
-                      </IconButton>
+                      </div>
                     </div>
-                  </div>
-                ))}
-                {images.length < MEDIA_LIMITS.maxImagesPerProduct && (
-                  <button
-                    type="button"
-                    onClick={() => imageInput.current?.click()}
-                    className={cn(
-                      'flex aspect-square flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary',
-                      errors.images && 'border-destructive text-destructive',
-                    )}
-                  >
-                    <ImagePlus className="size-6" />
-                    {t.editor.addPhotos}
-                  </button>
-                )}
-              </div>
+                  ))}
+                  {images.length < MEDIA_LIMITS.maxImagesPerProduct && (
+                    <button
+                      type="button"
+                      onClick={() => imageInput.current?.click()}
+                      className={cn(
+                        TILE,
+                        'flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary',
+                        errors.images && 'border-destructive text-destructive',
+                      )}
+                    >
+                      <ImagePlus className="size-6" />
+                      {t.editor.addPhotos}
+                    </button>
+                  )}
+                </div>
+              </DropZone>
               <input
                 ref={imageInput}
                 type="file"
@@ -365,7 +411,7 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="xl:self-stretch">
             <CardHeader>
               <CardTitle>{t.editor.video}</CardTitle>
               <CardDescription>
@@ -375,36 +421,43 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
                 })}
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              {video ? (
+            <CardContent className="flex flex-1 flex-col gap-3">
+              <DropZone label={t.editor.dropNow} hint={t.editor.dropVideo} onFiles={(files) => void addVideo(files[0])}>
                 <div className="flex flex-wrap items-end gap-3">
-                  <div className="relative aspect-[9/16] w-36 overflow-hidden rounded-xl border bg-black">
-                    <video src={video.url} controls playsInline className="size-full object-contain" />
-                    {video.progress !== undefined && (
-                      // At 100% the browser is done; the API is still copying it to storage.
-                      <Progress value={video.progress} label={video.progress >= 1 ? t.editor.processing : t.editor.uploading} />
-                    )}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button type="button" variant="outline" size="sm" onClick={() => videoInput.current?.click()}>
-                      {t.editor.replaceVideo}
-                    </Button>
-                    <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => setVideo(null)}>
-                      <Trash2 />
-                      {t.editor.remove}
-                    </Button>
-                  </div>
+                  {video ? (
+                    <>
+                      <div className={cn(TILE, 'group relative overflow-hidden rounded-xl border bg-black')}>
+                        <video src={video.url} controls playsInline muted preload="metadata" className="size-full object-cover" />
+                        {video.progress !== undefined && (
+                          // At 100% the browser is done; the API is still copying it to storage.
+                          <Progress value={video.progress} label={video.progress >= 1 ? t.editor.processing : t.editor.uploading} />
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button type="button" variant="outline" size="sm" disabled={video.progress !== undefined} onClick={() => videoInput.current?.click()}>
+                          {t.editor.replaceVideo}
+                        </Button>
+                        <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => setVideo(null)}>
+                          <Trash2 />
+                          {t.editor.remove}
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => videoInput.current?.click()}
+                      className={cn(
+                        TILE,
+                        'flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary',
+                      )}
+                    >
+                      <Video className="size-6" />
+                      {t.editor.addVideo}
+                    </button>
+                  )}
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => videoInput.current?.click()}
-                  className="flex aspect-[9/16] w-36 flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary"
-                >
-                  <Video className="size-6" />
-                  {t.editor.addVideo}
-                </button>
-              )}
+              </DropZone>
               <input
                 ref={videoInput}
                 type="file"
@@ -418,7 +471,7 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="xl:self-stretch">
             <CardHeader>
               <CardTitle>{t.editor.basics}</CardTitle>
             </CardHeader>
@@ -444,51 +497,44 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
                 />
               </Field>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label={t.editor.category} required error={err('categoryId')}>
-                  <Select value={form.categoryId} onValueChange={(v) => set('categoryId', v)}>
-                    <SelectTrigger className="w-full" {...field('categoryId')}>
-                      <SelectValue placeholder={t.editor.chooseCategory} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.data?.map((c) =>
-                        c.children.length ? (
-                          <SelectGroup key={c.id}>
-                            <SelectLabel>{localized(c.name, locale)}</SelectLabel>
-                            <SelectItem value={c.id}>{localized(c.name, locale)}</SelectItem>
-                            {c.children.map((child) => (
-                              <SelectItem key={child.id} value={child.id} className="pl-6">
-                                {localized(child.name, locale)}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        ) : (
-                          <SelectItem key={c.id} value={c.id}>
-                            {localized(c.name, locale)}
-                          </SelectItem>
-                        ),
-                      )}
-                    </SelectContent>
-                  </Select>
+                <Field label={t.editor.category} htmlFor="category" required error={err('categoryId')}>
+                  <SearchSelect
+                    id="category"
+                    value={form.categoryId}
+                    onChange={(v) => set('categoryId', v)}
+                    invalid={!!errors.categoryId}
+                    placeholder={t.editor.chooseCategory}
+                    searchPlaceholder={t.editor.searchCategory}
+                    empty={t.editor.noMatches}
+                    groups={categoryGroups}
+                  />
                 </Field>
-                <Field label={t.editor.unit} required error={err('unitId')}>
-                  <Select value={form.unitId} onValueChange={(v) => set('unitId', v)}>
-                    <SelectTrigger className="w-full" {...field('unitId')}>
-                      <SelectValue placeholder={t.editor.chooseUnit} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {units.data?.map((u) => (
-                        <SelectItem key={u.id} value={u.id}>
-                          {localized(u.name, locale)} ({u.code})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <Field label={t.editor.unit} htmlFor="unit" required error={err('unitId')}>
+                  <SearchSelect
+                    id="unit"
+                    value={form.unitId}
+                    onChange={(v) => set('unitId', v)}
+                    invalid={!!errors.unitId}
+                    placeholder={t.editor.chooseUnit}
+                    searchPlaceholder={t.editor.searchUnit}
+                    empty={t.editor.noMatches}
+                    groups={[
+                      {
+                        items: (units.data ?? []).map((u) => ({
+                          value: u.id,
+                          label: localized(u.name, locale),
+                          hint: u.code,
+                          keywords: [u.code, ...Object.values(u.name)],
+                        })),
+                      },
+                    ]}
+                  />
                 </Field>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="xl:self-stretch">
             <CardHeader>
               <CardTitle>{t.editor.pricing}</CardTitle>
             </CardHeader>
@@ -506,7 +552,19 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
                 />
               </Field>
               <Field label={t.editor.sku} htmlFor="sku" required hint={t.editor.skuHint} error={err('sku')}>
-                <Input id="sku" value={form.sku} className="font-mono" onChange={(e) => set('sku', e.target.value)} {...field('sku')} />
+                {/* Type your own code, or tap to make one (8 letters and numbers). */}
+                <div className="relative">
+                  <Input id="sku" value={form.sku} className="pr-10 font-mono" onChange={(e) => set('sku', e.target.value)} {...field('sku')} />
+                  <button
+                    type="button"
+                    onClick={() => set('sku', randomSku())}
+                    aria-label={t.editor.randomSku}
+                    title={t.editor.randomSku}
+                    className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-md text-muted-foreground transition-colors hover:text-primary focus-visible:text-primary focus-visible:outline-none"
+                  >
+                    <Shuffle className="size-4" />
+                  </button>
+                </div>
               </Field>
               <div className="grid grid-cols-2 gap-4">
                 <Field label={t.editor.stock} htmlFor="stock" required={!form.hasOptions} error={err('stock')}>
@@ -534,7 +592,7 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="xl:col-span-2">
             <CardHeader className="flex flex-row items-center justify-between gap-3">
               <div className="space-y-1">
                 <CardTitle>{t.editor.optionsTitle}</CardTitle>
@@ -543,102 +601,32 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
               <Switch
                 checked={form.hasOptions}
                 aria-label={t.editor.optionsToggle}
-                onCheckedChange={(on) =>
-                  setForm((f) => ({
-                    ...f,
-                    hasOptions: on,
-                    variants: on && f.variants.length === 0 ? [newRow(f), newRow(f, 1)] : f.variants,
-                  }))
-                }
+                onCheckedChange={(on) => {
+                  setForm((f) => ({ ...f, hasOptions: on, options: on && f.options.length === 0 ? startOptions(t) : f.options }))
+                  clearErrors('options')
+                }}
               />
             </CardHeader>
             {form.hasOptions && (
-              <CardContent className="flex flex-col gap-4">
-                <Field label={t.editor.optionName} required htmlFor="optionName" error={err('variantOption')}>
-                  <Input
-                    id="optionName"
-                    className="sm:max-w-xs"
-                    maxLength={30}
-                    placeholder={t.editor.optionNamePlaceholder}
-                    value={form.variantOption}
-                    onChange={(e) => set('variantOption', e.target.value)}
-                    {...field('variantOption')}
-                  />
-                </Field>
-                <div className="flex flex-col gap-3">
-                  <div className="hidden grid-cols-[1fr_1fr_1fr_6rem_2.25rem] gap-2 text-xs font-medium text-muted-foreground sm:grid">
-                    <span>{t.editor.optionValue}</span>
-                    <span>{t.editor.sku}</span>
-                    <span>
-                      {t.editor.optionPrice} · {t.editor.optionPriceHint}
-                    </span>
-                    <span>{t.editor.stock}</span>
-                  </div>
-                  {form.variants.map((r) => (
-                    <div
-                      key={r.uid}
-                      className="grid grid-cols-2 gap-2 rounded-lg border p-3 sm:grid-cols-[1fr_1fr_1fr_6rem_2.25rem] sm:items-start sm:border-0 sm:p-0"
-                    >
-                      <Input
-                        aria-label={t.editor.optionValue}
-                        placeholder={t.editor.optionValue}
-                        value={r.value}
-                        maxLength={50}
-                        onChange={(e) => setRow(r.uid, { value: e.target.value })}
-                        {...field(`value-${r.uid}`)}
-                      />
-                      <Input
-                        aria-label={t.editor.sku}
-                        placeholder={t.editor.sku}
-                        className="font-mono"
-                        value={r.sku}
-                        onChange={(e) => setRow(r.uid, { sku: e.target.value })}
-                        {...field(`sku-${r.uid}`)}
-                      />
-                      <Input
-                        aria-label={t.editor.optionPrice}
-                        inputMode="decimal"
-                        placeholder={form.price || t.editor.optionPriceHint}
-                        value={r.price}
-                        onChange={(e) => setRow(r.uid, { price: e.target.value })}
-                        {...field(`price-${r.uid}`)}
-                      />
-                      <Input
-                        aria-label={t.editor.stock}
-                        inputMode="numeric"
-                        placeholder={t.editor.stock}
-                        value={r.stock}
-                        onChange={(e) => setRow(r.uid, { stock: e.target.value })}
-                        {...field(`stock-${r.uid}`)}
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        aria-label={t.editor.removeOption}
-                        className="col-span-2 justify-self-end text-muted-foreground hover:text-destructive sm:col-span-1"
-                        onClick={() => setForm((f) => ({ ...f, variants: f.variants.filter((x) => x.uid !== r.uid) }))}
-                      >
-                        <Trash2 />
-                      </Button>
-                    </div>
-                  ))}
-                  {err('variants')}
-                  {Object.keys(errors).some((k) => /^(value|sku|price|stock)-/.test(k)) && (
-                    <p className="text-sm text-destructive">{t.common.saveError}</p>
-                  )}
-                  {form.variants.length < PRODUCT_RULES.maxVariants && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="self-start"
-                      onClick={() => setForm((f) => ({ ...f, variants: [...f.variants, newRow(f, f.variants.length)] }))}
-                    >
-                      <Plus />
-                      {t.editor.addOption}
-                    </Button>
-                  )}
-                </div>
+              <CardContent>
+                <ProductOptionsEditor
+                  options={form.options}
+                  onOptions={(options) => {
+                    setForm((f) => ({ ...f, options }))
+                    clearErrors('options')
+                  }}
+                  cells={form.cells}
+                  onCells={(cells) => {
+                    setForm((f) => ({ ...f, cells }))
+                    setErrors((e) => Object.fromEntries(Object.entries(e).filter(([k]) => !/^(sku|price|stock)-/.test(k))))
+                  }}
+                  baseSku={form.sku}
+                  basePrice={form.price}
+                  errors={{
+                    ...Object.fromEntries(Object.entries(errors).map(([k, v]) => [k, v && t.editor.errors[v]])),
+                  }}
+                />
+                {Object.keys(errors).some((k) => /^(sku|price|stock)-/.test(k)) && <p className="mt-3 text-sm text-destructive">{t.common.saveError}</p>}
               </CardContent>
             )}
           </Card>
@@ -647,7 +635,7 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
 
       {/* Actions stay in reach while scrolling a long form. */}
       <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 px-4 py-3 backdrop-blur md:sticky md:px-6">
-        <div className="mx-auto flex max-w-4xl justify-end gap-2">
+        <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" className="flex-1 md:flex-none" disabled={save.isPending} onClick={() => submit('draft')}>
             {save.isPending && save.variables === 'draft' && <LoaderCircle className="animate-spin" />}
             {t.editor.saveDraft}
@@ -662,9 +650,57 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
   )
 }
 
-/** A blank option row; its SKU is suggested from the product SKU. */
-function newRow(f: FormState, index = 0): OptionRow {
-  return { uid: uid(), value: '', sku: f.sku ? `${f.sku}-${index + 1}` : '', price: '', stock: '0' }
+/** Photo and video tiles share one size. */
+const TILE = 'size-28 shrink-0 sm:size-32'
+/** Drag data type for reordering photos (files from the computer carry "Files" instead). */
+const PHOTO_DRAG = 'application/x-talad-photo'
+
+/** Moves the item at `from` to `to` (drag to reorder). */
+function move<T>(list: T[], from: number, to: number): T[] {
+  if (from === to || from < 0 || from >= list.length) return list
+  const next = [...list]
+  const [item] = next.splice(from, 1)
+  next.splice(to, 0, item)
+  return next
+}
+
+/**
+ * Drop files from the computer onto this area (the card highlights while dragging over it).
+ * Dragging a photo to reorder it isn't a file drop, so it's left to the tiles.
+ */
+function DropZone({ label, hint, onFiles, children }: { label: string; hint: string; onFiles: (files: FileList) => void; children: React.ReactNode }) {
+  const [over, setOver] = useState(false)
+  const hasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes('Files')
+  return (
+    <div
+      onDragEnter={(e) => {
+        if (hasFiles(e)) setOver(true)
+      }}
+      onDragOver={(e) => {
+        if (!hasFiles(e)) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'copy'
+        setOver(true)
+      }}
+      onDragLeave={(e) => {
+        // Only when the pointer leaves the zone, not when it moves onto a child.
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false)
+      }}
+      onDrop={(e) => {
+        if (!hasFiles(e)) return
+        e.preventDefault()
+        setOver(false)
+        if (e.dataTransfer.files.length) onFiles(e.dataTransfer.files)
+      }}
+      className={cn('relative flex flex-1 flex-col gap-3 rounded-2xl p-1 transition-colors', over && 'bg-brand-soft outline-2 outline-primary outline-dashed')}
+    >
+      {children}
+      <p className="text-xs text-muted-foreground">{hint}</p>
+      {over && (
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl bg-brand-soft/80 text-sm font-semibold text-primary">{label}</span>
+      )}
+    </div>
+  )
 }
 
 function swap<T>(list: T[], a: number, b: number): T[] {
@@ -677,7 +713,8 @@ function videoDuration(url: string): Promise<number> {
   return new Promise((resolve) => {
     const v = document.createElement('video')
     v.preload = 'metadata'
-    v.onloadedmetadata = () => resolve(v.duration)
+    // Some files (e.g. WebM recorded in a browser) report Infinity until played: let the upload decide.
+    v.onloadedmetadata = () => resolve(Number.isFinite(v.duration) ? v.duration : 0)
     // Unreadable here (e.g. some MOV codecs): let the upload decide.
     v.onerror = () => resolve(0)
     v.src = url

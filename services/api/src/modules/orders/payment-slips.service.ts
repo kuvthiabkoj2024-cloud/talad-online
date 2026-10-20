@@ -6,6 +6,7 @@ import { PrismaService } from '../../prisma/prisma.service.js';
 import { detectImage } from '../media/image-type.js';
 import { filePrefix, storageFolder } from '../media/storage-keys.js';
 import { StorageService } from '../media/storage.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 
 /** Storage prefix for a customer's uploaded transfer slips. */
 export const slipPrefix = (customerId: string) => filePrefix(storageFolder.customerPayments(customerId), 'slip');
@@ -40,6 +41,7 @@ export class PaymentSlipsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** Checkout: slip uploaded before the order exists. Returns the key to send with the order. */
@@ -81,6 +83,16 @@ export class PaymentSlipsService {
       data: { slipKey, slipUploadedAt: new Date() },
     });
     if (payment.slipKey) await this.storage.remove(payment.slipKey);
+    await this.notifications.toShop(
+      this.prisma,
+      o.shopId,
+      'ORDER',
+      {
+        lo: { title: `ມີສະລິບການໂອນ ${o.number}`, body: 'ລູກຄ້າສົ່ງສະລິບແລ້ວ — ກວດ ແລະ ຢືນຢັນການຈ່າຍເງິນ.' },
+        en: { title: `Payment slip for ${o.number}`, body: 'The customer sent the transfer slip — check it and confirm the payment.' },
+      },
+      { link: `/orders/${o.number}` },
+    );
     return { ok: true };
   }
 

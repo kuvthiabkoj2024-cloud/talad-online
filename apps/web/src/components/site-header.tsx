@@ -1,5 +1,5 @@
 import type { Locale } from "@talad/shared";
-import { ScanBarcode, Search, Store } from "lucide-react";
+import { MessageCircleMore, ScanLine, Search, Store } from "lucide-react";
 import Link from "next/link";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import { AccountMenu } from "./auth/account-menu";
@@ -40,7 +40,7 @@ export function SiteHeader({
         title={dict.scan}
         className="rounded-full p-2 text-muted-foreground hover:text-foreground"
       >
-        <ScanBarcode className="size-5" />
+        <ScanLine className="size-5" />
       </Link>
       <button
         type="submit"
@@ -72,6 +72,9 @@ export function SiteHeader({
 
           {/* Phones: cart and account live in the bottom tab bar (bottom-nav.tsx). */}
           <nav className="ml-auto flex items-center gap-1 md:gap-2">
+            <Link href={`/${locale}/chat`} aria-label={dict.chat} title={dict.chat} className={`${iconButton} hidden md:block`}>
+              <MessageCircleMore className="size-6" />
+            </Link>
             <CartButton href={`/${locale}/cart`} label={dict.cart} className={`${iconButton} hidden md:block`} />
             <LanguageSwitcher locale={locale} label={dict.language} />
             <NotificationBell

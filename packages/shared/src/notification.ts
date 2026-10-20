@@ -4,6 +4,35 @@ import type { Locale } from './locale.js';
 export const NOTIFICATION_TYPES = ['ORDER', 'PROMOTION', 'PRICE_DROP', 'SYSTEM'] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
+/** What a Seller Center notification is about. */
+export const SHOP_NOTIFICATION_TYPES = ['ORDER', 'ACTIVITY', 'SHOP_STATUS', 'SYSTEM'] as const;
+export type ShopNotificationType = (typeof SHOP_NOTIFICATION_TYPES)[number];
+
+/** What an admin notification is about. */
+export const ADMIN_NOTIFICATION_TYPES = ['SHOP_APPLICATION', 'SYSTEM'] as const;
+export type AdminNotificationType = (typeof ADMIN_NOTIFICATION_TYPES)[number];
+
+/**
+ * A live event pushed to a signed-in app (the API's `me/events`, `me/shop/events` and
+ * `admin/events` streams). `notification` is also saved in that app's notification list.
+ */
+export type RealtimeEvent =
+  | {
+      kind: 'notification';
+      id: string;
+      type: string;
+      title: string;
+      body: string;
+      /** Texts per language; `title` / `body` are the English fallback. */
+      i18n?: Partial<Record<Locale, { title: string; body: string }>>;
+      /** Where it leads, in that app (e.g. `/orders/TL…` in the Seller Center). */
+      link?: string;
+    }
+  /** A chat message arrived: the chat refreshes, and a toast shows when it isn't open. */
+  | { kind: 'message'; conversationId: string; from: string; preview: string }
+  /** The shop's status changed (approved, rejected…): the Seller Center reloads it. */
+  | { kind: 'shop.status'; status: string };
+
 /** Notification page tabs and the types each one shows. */
 export const NOTIFICATION_TABS = {
   orders: ['ORDER'],

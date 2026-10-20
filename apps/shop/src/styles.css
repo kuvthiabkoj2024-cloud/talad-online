@@ -8,6 +8,13 @@
   --sidebar-primary: oklch(0.52 0.13 145);
   --sidebar-primary-foreground: oklch(0.99 0 0);
   --brand-soft: oklch(0.96 0.03 145);
+  /* Sidebar on the brand green (a shade deeper, so white text reads well), the active item white. */
+  --sidebar: oklch(0.46 0.12 145);
+  --sidebar-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(1 0 0 / 12%);
+  --sidebar-accent-foreground: oklch(0.99 0 0);
+  --sidebar-border: oklch(1 0 0 / 14%);
+  --sidebar-ring: oklch(1 0 0 / 50%);
   /* Chart series colour; validated per mode (dataviz lightness band + contrast on the card surface). */
   --chart-series: oklch(0.52 0.13 145);
   --font-sans: 'Geist Variable', 'Noto Sans Lao', sans-serif;
@@ -20,10 +27,29 @@
   --sidebar-primary: oklch(0.68 0.15 145);
   --sidebar-primary-foreground: oklch(0.18 0.02 145);
   --brand-soft: oklch(0.3 0.05 145);
+  --sidebar: oklch(0.3 0.07 145);
+  --sidebar-foreground: oklch(0.97 0.01 145);
+  --sidebar-accent: oklch(1 0 0 / 10%);
+  --sidebar-accent-foreground: oklch(0.99 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(1 0 0 / 40%);
   --chart-series: oklch(0.62 0.15 145);
 }
 
 @theme inline {
   --color-brand-soft: var(--brand-soft);
   --color-chart-series: var(--chart-series);
+}
+
+/* Phones: form text at 14px like the rest of the UI (the shared inputs default to 16px there).
+   index.html sets maximum-scale=1 so iOS doesn't zoom in when one is focused. */
+@media (max-width: 767px) {
+  [data-slot='input'],
+  [data-slot='textarea'],
+  [data-slot='select-trigger'],
+  [data-slot='input-group-control'],
+  select,
+  textarea {
+    font-size: 0.875rem;
+  }
 }

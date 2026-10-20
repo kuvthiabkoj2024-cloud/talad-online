@@ -80,6 +80,50 @@ export interface ShopProductRow {
   updatedAt: string
 }
 
+/** Mirrors `ShopVideoView` / `ShopVideoList` (API `me/shop/videos`). */
+export interface ShopVideo {
+  productId: string
+  name: string
+  slug: string
+  status: ProductStatus
+  videoUrl: string
+  imageUrl: string | null
+  price: number
+  views: number
+  likes: number
+  comments: number
+  shares: number
+}
+
+export interface ShopVideoList {
+  items: ShopVideo[]
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+  totals: { views: number; likes: number; comments: number; shares: number }
+}
+
+export interface VideoComment {
+  id: string
+  parentId: string | null
+  /** Null once deleted (kept while it still has replies). */
+  body: string | null
+  createdAt: string
+  replyCount: number
+  author: { id: string; name: string; avatarUrl: string | null; isShop: boolean }
+}
+
+export interface VideoCommentPage {
+  items: VideoComment[]
+  nextCursor: string | null
+}
+
+export interface VideoLikePage {
+  items: { customer: { id: string; name: string; avatarUrl: string | null }; createdAt: string }[]
+  nextCursor: string | null
+}
+
 export interface ShopProductList {
   items: ShopProductRow[]
   page: number
@@ -111,8 +155,11 @@ export interface ShopProductDetail {
   lowStockThreshold: number
   images: MediaFile[]
   video: MediaFile | null
+  /** What the variants differ by (e.g. Colour, Size), values in order. */
+  options: { name: string; values: string[] }[]
+  /** Option names joined ("Colour / Size"). */
   variantOption: string | null
-  variants: { id: string; value: string; sku: string; price: number | null; stock: number }[]
+  variants: { id: string; attributes: Record<string, string>; value: string; sku: string; price: number | null; stock: number }[]
 }
 
 export type CouponState = 'ACTIVE' | 'SCHEDULED' | 'EXPIRED' | 'USED_UP' | 'INACTIVE'
@@ -132,6 +179,8 @@ export interface ShopCoupon {
   endsAt: string
   isActive: boolean
   state: CouponState
+  /** Set on codes generated together (one per customer). */
+  batchId: string | null
   createdAt: string
 }
 
@@ -278,8 +327,11 @@ export interface ShopFinance {
 export interface ShopStats {
   days: 7 | 30 | 90
   series: { date: string; orders: number; revenue: number }[]
+  /** The period before, day by day (same length), for the comparison line. */
+  previousSeries: { date: string; orders: number; revenue: number }[]
   totals: { orders: number; revenue: number; customers: number; averageOrder: number; units: number }
-  previous: { orders: number; revenue: number }
+  previous: { orders: number; revenue: number; customers: number; averageOrder: number; units: number }
+  payments: { method: string; orders: number; revenue: number }[]
   topProducts: { productId: string; name: string; imageUrl: string | null; units: number; revenue: number }[]
   statusCounts: Record<string, number>
   productViews: number
@@ -338,4 +390,102 @@ export interface AccountSession {
   revokedAt: string | null
   active: boolean
   current: boolean
+}
+
+/** Private customer ↔ shop chat (API `me/shop/conversations`). */
+export interface ConversationSummary {
+  id: string
+  customer: { name: string }
+  lastMessage: { text: string; photo: boolean; product: boolean; order: boolean; mine: boolean; bot: boolean; createdAt: string } | null
+  lastMessageAt: string
+  unread: number
+}
+
+export interface ChatProductRef {
+  id: string
+  name: string
+  slug: string
+  shopSlug: string
+  price: number
+  imageUrl: string | null
+}
+
+export interface ChatMessage {
+  id: string
+  /** Sent by the shop (or its chat bot). */
+  mine: boolean
+  /** The shop's chat bot replied automatically. */
+  bot: boolean
+  text: string
+  hasPhoto: boolean
+  product: ChatProductRef | null
+  /** Products the bot showed under its reply. */
+  products: ChatProductRef[]
+  /** An order card (buy by chat). */
+  order: ChatOrderSummary | null
+  createdAt: string
+}
+
+export interface ChatThread {
+  id: string
+  customer: { name: string }
+  hasMore: boolean
+  /** When the customer last opened the chat: the shop's messages up to then are read. */
+  otherReadAt: string | null
+  messages: ChatMessage[]
+}
+
+/** Seller Center → Chat Bot (API `me/shop/chatbot`). */
+export interface ShopFaq {
+  id: string
+  question: string
+  answer: string
+  updatedAt: string
+}
+
+export interface ChatbotOverview {
+  engine: 'ai' | 'basic'
+  knows: { products: number; hours: boolean; address: boolean; transfer: boolean; description: boolean }
+  faqs: ShopFaq[]
+}
+
+export type BotTopic =
+  | 'faq' | 'greeting' | 'thanks' | 'order' | 'hours' | 'location' | 'payment' | 'delivery' | 'discount'
+  | 'color' | 'size' | 'price' | 'stock' | 'cheaper' | 'search' | 'buy' | 'unknown' | 'photo' | 'ai'
+
+export interface BotPreview {
+  text: string
+  products: ChatProductRef[]
+  topic: BotTopic
+  handoff: boolean
+  engine: 'ai' | 'basic'
+  /** An order card for the shown product would go with the reply. */
+  order: boolean
+}
+
+/** Buy by chat: an order card in a chat, as both sides see it. */
+export interface ChatOrderSummary {
+  id: string
+  status: 'DRAFT' | 'PLACED' | 'CANCELLED'
+  orderNumber: string | null
+  createdBy: 'CUSTOMER' | 'SHOP' | 'BOT' | 'ASSISTANT'
+  items: { name: string; variantLabel: string | null; quantity: number; imageUrl: string | null }[]
+  total: number
+}
+
+/** A Seller Center / admin notification (API `me/shop/notifications`). */
+export interface InboxNotification {
+  id: string
+  type: string
+  title: string
+  body: string
+  data: { link?: string; imageUrl?: string; i18n?: Partial<Record<'lo' | 'en', { title: string; body: string }>> }
+  readAt: string | null
+  createdAt: string
+}
+
+export interface InboxPage {
+  items: InboxNotification[]
+  unread: number
+  nextCursor: string | null
 }

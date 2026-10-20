@@ -11,6 +11,7 @@ import { ShopsModule } from './modules/shops/shops.module.js';
 import { CustomersModule } from './modules/customers/customers.module.js';
 import { CatalogModule } from './modules/catalog/catalog.module.js';
 import { CartModule } from './modules/cart/cart.module.js';
+import { MessagesModule } from './modules/messages/messages.module.js';
 import { OrdersModule } from './modules/orders/orders.module.js';
 import { PaymentsModule } from './modules/payments/payments.module.js';
 import { DeliveryModule } from './modules/delivery/delivery.module.js';
@@ -18,6 +19,7 @@ import { PromotionsModule } from './modules/promotions/promotions.module.js';
 import { LoyaltyModule } from './modules/loyalty/loyalty.module.js';
 import { MediaModule } from './modules/media/media.module.js';
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
+import { RealtimeModule } from './modules/realtime/realtime.module.js';
 import { ReviewsModule } from './modules/reviews/reviews.module.js';
 import { ReportsModule } from './modules/reports/reports.module.js';
 import { CmsModule } from './modules/cms/cms.module.js';
@@ -41,12 +43,14 @@ import { AuditModule } from './modules/audit/audit.module.js';
     CatalogModule,
     CartModule,
     OrdersModule,
+    MessagesModule,
     PaymentsModule,
     DeliveryModule,
     PromotionsModule,
     LoyaltyModule,
     MediaModule,
     NotificationsModule,
+    RealtimeModule,
     ReviewsModule,
     ReportsModule,
     CmsModule,

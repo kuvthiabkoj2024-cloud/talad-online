@@ -25,6 +25,7 @@ import { formatDate, type OrderDetail, type PaymentStatus } from "@/lib/orders";
 import { requireCustomer } from "@/lib/require-customer";
 import { apiGetAsCustomer } from "@/lib/session";
 import { getDictionary, getLocale } from "@/app/[lang]/dictionaries";
+import { RefreshOnLive } from "@/components/realtime/refresh-on-live";
 
 type Props = PageProps<"/[lang]/account/orders/[number]">;
 
@@ -64,6 +65,8 @@ export default async function OrderDetailPage({ params }: Props) {
 
   return (
     <>
+      {/* The shop packs or ships it: the status updates here live. */}
+      <RefreshOnLive />
       <Link
         href={`/${locale}/account/orders`}
         className="flex items-center gap-1.5 self-start text-sm font-medium text-muted-foreground hover:text-foreground"
@@ -145,7 +148,7 @@ export default async function OrderDetailPage({ params }: Props) {
                 <span className="truncate">{order.shop.name}</span>
               </Link>
               <Link
-                href={`/${locale}/chat?shop=${order.shop.slug}`}
+                href={`/${locale}/messages/new?shop=${order.shop.slug}&order=${encodeURIComponent(order.number)}`}
                 className="flex shrink-0 items-center gap-1 rounded-full border border-primary/40 px-3 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary-soft"
               >
                 <MessageCircleMore className="size-3.5" />

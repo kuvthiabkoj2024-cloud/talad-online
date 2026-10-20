@@ -96,6 +96,34 @@ export class CartService {
     return rows.map((r) => this.toLine(r, customerId, discounts.get(r.productId), blocked.has(r.product.shop.id)));
   }
 
+  /**
+   * Lines for items that aren't in the cart — an order card in a chat — priced and checked
+   * exactly like cart lines. Ids are `chat-0`, `chat-1`… (the items' positions).
+   */
+  async virtualLines(customerId: string, items: VirtualItem[]): Promise<CartLine[]> {
+    const products = new Map(
+      (await this.prisma.product.findMany({ where: { id: { in: items.map((i) => i.productId) } }, select: lineInclude.product.select })).map((p) => [p.id, p]),
+    );
+    const variantIds = items.flatMap((i) => (i.variantId ? [i.variantId] : []));
+    const variants = new Map(
+      (await this.prisma.productVariant.findMany({ where: { id: { in: variantIds } }, select: { ...lineInclude.variant.select, productId: true } })).map((v) => [v.id, v]),
+    );
+    const shopIds = [...new Set([...products.values()].map((p) => p.shop.id))];
+    const [discounts, blocks] = await Promise.all([
+      this.flash.discounts([...products.keys()]),
+      this.prisma.shopCustomerNote.findMany({ where: { customerId, blacklisted: true, shopId: { in: shopIds } }, select: { shopId: true } }),
+    ]);
+    const blocked = new Set(blocks.map((b) => b.shopId));
+    return items.flatMap((item, i) => {
+      const product = products.get(item.productId);
+      if (!product) return [];
+      const v = item.variantId ? variants.get(item.variantId) : undefined;
+      const variant = v && v.productId === product.id ? { id: v.id, sku: v.sku, attributes: v.attributes, price: v.price, stock: v.stock } : null;
+      const row = { id: `chat-${i}`, customerId, productId: product.id, variantId: variant?.id ?? null, quantity: item.quantity, product, variant } as unknown as CartRow;
+      return [this.toLine(row, customerId, discounts.get(product.id), blocked.has(product.shop.id))];
+    });
+  }
+
   async view(customerId: string) {
     const lines = await this.lines(customerId);
     return { shops: groupByShop(lines), count: lines.reduce((n, l) => n + l.quantity, 0) };
@@ -208,6 +236,13 @@ export class CartService {
       },
     };
   }
+}
+
+/** An item outside the cart (an order card in a chat). */
+export interface VirtualItem {
+  productId: string;
+  variantId: string | null;
+  quantity: number;
 }
 
 /** Groups lines by shop (in first-seen order) and totals the available ones. */

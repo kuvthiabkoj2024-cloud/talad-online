@@ -63,6 +63,8 @@ export interface ProductDetail extends Omit<ProductCard, "imageUrl" | "shop"> {
   stock: number;
   imageUrls: string[];
   ratingCount: number;
+  /** What the variants differ by (e.g. Colour, then Size), values in the shop's order. */
+  options: { name: string; values: string[] }[];
   variants: ProductVariantOption[];
   unit: { code: string; name: LocalizedText };
   category: {
@@ -102,6 +104,35 @@ export function listProducts(query: ProductQuery): Promise<ProductCard[] | null>
 export interface FeedItem extends Omit<ProductCard, "shop"> {
   videoUrl: string;
   shop: { slug: string; name: string; logoUrl: string | null };
+  /** Units available (all options together). */
+  stock: number;
+  hasVariants: boolean;
+  stats: VideoStats;
+}
+
+/** Mirrors `VideoStats` from services/api catalog/videos. Favorites = customers who saved the product. */
+export interface VideoStats {
+  views: number;
+  favorites: number;
+  comments: number;
+  shares: number;
+}
+
+/** Mirrors `VideoCommentView` from services/api catalog/videos. */
+export interface VideoComment {
+  id: string;
+  parentId: string | null;
+  /** Null once deleted (kept while it still has replies). */
+  body: string | null;
+  createdAt: string;
+  replyCount: number;
+  /** `isShop`: the shop answering (its name and logo). */
+  author: { id: string; name: string; avatarUrl: string | null; isShop: boolean };
+}
+
+export interface VideoCommentPage {
+  items: VideoComment[];
+  nextCursor: string | null;
 }
 
 export interface FeedPage {

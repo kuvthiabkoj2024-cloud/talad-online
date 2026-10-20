@@ -12,6 +12,8 @@ import { discardTempFile } from '../../media/temp-file-storage.js';
 import { detectVideo } from '../../media/video-type.js';
 import { priceRange } from './products.service.js';
 import type { ListShopProductsQuery, ShopProductDto } from './shop-product.dto.js';
+import { ImageIndexService } from '../image-search/image-index.service.js';
+import { productOptions, variantLabel, type ProductOption } from './product-options.js';
 
 export interface ShopProductRow {
   id: string;
@@ -59,9 +61,13 @@ export interface ShopProductDetail {
   lowStockThreshold: number;
   images: { key: string; url: string }[];
   video: { key: string; url: string } | null;
+  /** What the variants differ by, in the seller's order (e.g. Colour, then Size). */
+  options: ProductOption[];
+  /** The option names joined ("Colour / Size"), or null without variants. */
   variantOption: string | null;
-  variants: { id: string; value: string; sku: string; price: number | null; stock: number }[];
+  variants: { id: string; attributes: Record<string, string>; value: string; sku: string; price: number | null; stock: number }[];
 }
+
 
 
 /** The Seller Center's view of a shop's own products: every status, plus editing (§3.3). */
@@ -71,6 +77,7 @@ export class ShopProductsService {
     private readonly prisma: PrismaService,
     private readonly media: MediaService,
     private readonly storage: StorageService,
+    private readonly imageIndex: ImageIndexService,
   ) {}
 
   async list(shopId: string, query: ListShopProductsQuery): Promise<ShopProductList> {
@@ -164,9 +171,10 @@ export class ShopProductsService {
     });
     if (!p) throw new NotFoundException('Product not found');
 
-    const attrs = p.variants.map((v) => v.attributes as Record<string, string>);
-    // Variants made here vary by one option; older ones may have several — shown joined.
-    const option = attrs.length ? Object.keys(attrs[0]).join(' / ') : null;
+    const options = productOptions(p.options, p.variants);
+    // Variants listed in option order (Red S, Red M, … Blue S…), not by SKU.
+    const rank = (a: Record<string, string>) => options.map((o) => String(o.values.indexOf(a[o.name])).padStart(3, '0')).join('.');
+    const variants = [...p.variants].sort((a, b) => rank(a.attributes as Record<string, string>).localeCompare(rank(b.attributes as Record<string, string>)));
     return {
       id: p.id,
       slug: p.slug,
@@ -183,10 +191,12 @@ export class ShopProductsService {
       lowStockThreshold: p.lowStockThreshold,
       images: p.images.map((i) => ({ key: i.key, url: this.media.publicUrl(i.key) })),
       video: p.videoKey ? { key: p.videoKey, url: this.media.publicUrl(p.videoKey) } : null,
-      variantOption: option,
-      variants: p.variants.map((v, i) => ({
+      options,
+      variantOption: options.length ? options.map((o) => o.name).join(' / ') : null,
+      variants: variants.map((v) => ({
         id: v.id,
-        value: Object.values(attrs[i]).join(' / '),
+        attributes: v.attributes as Record<string, string>,
+        value: variantLabel(options, v.attributes as Record<string, string>),
         sku: v.sku,
         price: v.price?.toNumber() ?? null,
         stock: v.stock,
@@ -209,6 +219,7 @@ export class ShopProductsService {
           variants: { create: dto.variants.map((v) => this.variantData(dto, v)) },
         },
       });
+      this.imageIndex.requestSweep();
       return this.get(shop.id, product.id);
     } catch (e) {
       throw this.conflict(e);
@@ -236,6 +247,8 @@ export class ShopProductsService {
     }
 
     const status = await this.statusFor(dto.intent, current.status);
+    // Photos are re-created in the new order; unchanged ones keep their photo-search embedding.
+    const indexed = new Map(current.images.map((i) => [i.key, { embedding: i.embedding, embeddingModel: i.embeddingModel, embeddedAt: i.embeddedAt }]));
     try {
       await this.prisma.$transaction([
         this.prisma.productVariant.deleteMany({ where: { id: { in: removed.map((v) => v.id) } } }),
@@ -247,7 +260,7 @@ export class ShopProductsService {
             status,
             ...(status !== current.status && status !== 'REJECTED' && { rejectionReason: null }),
             ...(status === 'PUBLISHED' && !current.publishedAt && { publishedAt: new Date() }),
-            images: { create: dto.imageKeys.map((key, sortOrder) => ({ key, sortOrder })) },
+            images: { create: dto.imageKeys.map((key, sortOrder) => ({ key, sortOrder, ...indexed.get(key) })) },
           },
         }),
         ...dto.variants.map((v) =>
@@ -328,11 +341,15 @@ export class ShopProductsService {
       stock: dto.variants.length ? 0 : dto.stock,
       lowStockThreshold: dto.lowStockThreshold,
       videoKey: dto.videoKey ?? null,
+      // Saved so names and values keep the seller's order (jsonb doesn't).
+      options: dto.variants.length && dto.options?.length ? (dto.options.map((o) => ({ name: o.name, values: o.values })) as unknown as object) : Prisma.DbNull,
     };
   }
 
+  /** One value per option, keyed by the option names (trimmed). */
   private variantData(dto: ShopProductDto, v: ShopProductDto['variants'][number]) {
-    return { sku: v.sku, attributes: { [dto.variantOption!]: v.value }, price: v.price ?? null, stock: v.stock };
+    const attributes = Object.fromEntries((dto.options ?? []).map((o) => [o.name, String(v.attributes[o.name] ?? '').trim()]));
+    return { sku: v.sku, attributes, price: v.price ?? null, stock: v.stock };
   }
 
   /** References, prices and media must make sense before anything is written. */
@@ -347,13 +364,26 @@ export class ShopProductsService {
     if (dto.compareAtPrice != null && dto.compareAtPrice <= dto.price) {
       throw new BadRequestException({ code: 'INVALID_COMPARE_PRICE', message: 'Compare-at price must be higher' });
     }
-    if (dto.variants.length && !dto.variantOption) {
-      throw new BadRequestException({ code: 'VARIANT_OPTION_REQUIRED', message: 'Name the option, e.g. Size' });
+    if (dto.variants.length) {
+      const options = dto.options ?? [];
+      if (!options.length) throw new BadRequestException({ code: 'VARIANT_OPTION_REQUIRED', message: 'Name the option, e.g. Size' });
+      const names = options.map((o) => o.name.toLowerCase());
+      const values = options.every((o) => new Set(o.values.map((v) => v.toLowerCase())).size === o.values.length);
+      if (new Set(names).size !== names.length || !values) {
+        throw new BadRequestException({ code: 'DUPLICATE_VARIANT', message: 'Option names and values must be unique' });
+      }
+      // Every variant has exactly one known value per option, and no two variants are the same.
+      const combos = dto.variants.map((v) => {
+        const keys = Object.keys(v.attributes ?? {});
+        const fits = keys.length === options.length && options.every((o) => o.values.includes(String(v.attributes[o.name] ?? '').trim()));
+        if (!fits) throw new BadRequestException({ code: 'INVALID_VARIANT', message: 'Each option needs one of its values' });
+        return options.map((o) => String(v.attributes[o.name]).trim().toLowerCase()).join('\u0000');
+      });
+      if (new Set(combos).size !== combos.length) throw new BadRequestException({ code: 'DUPLICATE_VARIANT', message: 'Each combination only once' });
     }
     const skus = [dto.sku, ...dto.variants.map((v) => v.sku)].map((s) => s.toLowerCase());
-    const values = dto.variants.map((v) => v.value.toLowerCase());
-    if (new Set(skus).size !== skus.length || new Set(values).size !== values.length) {
-      throw new BadRequestException({ code: 'DUPLICATE_VARIANT', message: 'Options and SKUs must be unique' });
+    if (new Set(skus).size !== skus.length) {
+      throw new BadRequestException({ code: 'DUPLICATE_VARIANT', message: 'SKUs must be unique' });
     }
     if (dto.intent === 'publish' && dto.imageKeys.length === 0) {
       throw new BadRequestException({ code: 'IMAGE_REQUIRED', message: 'Add at least one photo to publish' });

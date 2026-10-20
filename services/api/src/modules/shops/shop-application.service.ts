@@ -5,6 +5,7 @@ import { Prisma, type Customer, type ShopStatus } from '../../generated/prisma/c
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { detectDocument } from '../media/image-type.js';
 import { filePrefix, storageFolder } from '../media/storage-keys.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { StorageService } from '../media/storage.service.js';
 import type { ShopApplicationDto } from './shop-application.dto.js';
 
@@ -39,7 +40,20 @@ export class ShopApplicationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  /** Every admin is told there's a shop to review (live, with a sound, in the admin dashboard). */
+  private async tellAdmins(shop: { id: string; name: string }, resubmitted: boolean) {
+    await this.notifications.toAdmins(
+      this.prisma,
+      'SHOP_APPLICATION',
+      resubmitted
+        ? { lo: { title: 'ຮ້ານແກ້ໄຂໃບສະໝັກແລ້ວ', body: `${shop.name} ສົ່ງໃບສະໝັກໃໝ່ ລໍຖ້າການກວດສອບ.` }, en: { title: 'Shop application updated', body: `${shop.name} resubmitted its application for review.` } }
+        : { lo: { title: 'ມີຮ້ານໃໝ່ສະໝັກ', body: `${shop.name} ລໍຖ້າການກວດສອບ.` }, en: { title: 'New shop application', body: `${shop.name} is waiting for review.` } },
+      { link: `/shops/${shop.id}` },
+    );
+  }
 
   async get(customerId: string): Promise<ShopApplication> {
     const shop = await this.prisma.shop.findUnique({
@@ -100,18 +114,21 @@ export class ShopApplicationService {
       throw new ConflictException({ code: 'ALREADY_HAS_SHOP', message: 'This account already has a shop' });
     }
     const fields = await this.validate(customer.id, dto, null, []);
+    let created: { id: string; name: string };
     try {
-      await this.prisma.shop.create({
+      created = await this.prisma.shop.create({
         data: {
           ...fields,
           ownerId: customer.id,
           status: 'PENDING',
           kycDocuments: { create: dto.documents.map((d) => ({ type: d.type, fileKey: d.key })) },
         },
+        select: { id: true, name: true },
       });
     } catch (e) {
       throw this.conflict(e);
     }
+    await this.tellAdmins(created, false);
     return this.get(customer.id);
   }
 
@@ -153,6 +170,7 @@ export class ShopApplicationService {
       throw this.conflict(e);
     }
     await Promise.all(dropped.map((d) => this.storage.remove(d.fileKey)));
+    await this.tellAdmins({ id: shop.id, name: fields.name ?? shop.name }, true);
     return this.get(customer.id);
   }
 

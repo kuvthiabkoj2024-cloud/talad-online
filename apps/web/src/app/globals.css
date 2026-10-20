@@ -52,6 +52,16 @@ body {
   }
 }
 
+/* Photo search: the line sweeping over the photo while matching */
+@keyframes scan-line {
+  from {
+    top: 10%;
+  }
+  to {
+    top: 90%;
+  }
+}
+
 @keyframes sheet-in {
   from {
     transform: translateY(100%);

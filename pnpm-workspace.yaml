@@ -11,7 +11,11 @@ allowBuilds:
   '@tailwindcss/oxide': true
   argon2: true
   esbuild: true
+  # Image search (CLIP via @huggingface/transformers): native ONNX runtime
+  onnxruntime-node: true
   prisma: true
+  # Only prints a version notice
+  protobufjs: false
   sharp: true
   unrs-resolver: true
 

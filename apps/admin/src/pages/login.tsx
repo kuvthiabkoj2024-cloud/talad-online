@@ -27,8 +27,9 @@ export function LoginPage() {
   const { admin, signIn } = useAuth()
   const navigate = useNavigate()
   const from = (useLocation().state as { from?: string } | null)?.from ?? '/'
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  // Local development: the seeded admin is filled in (see .env.example). Production builds drop this.
+  const [email, setEmail] = useState(() => (import.meta.env.DEV ? (import.meta.env.VITE_DEV_ADMIN_EMAIL ?? '') : ''))
+  const [password, setPassword] = useState(() => (import.meta.env.DEV ? (import.meta.env.VITE_DEV_ADMIN_PASSWORD ?? '') : ''))
   const [challenge, setChallenge] = useState<string | null>(null)
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)

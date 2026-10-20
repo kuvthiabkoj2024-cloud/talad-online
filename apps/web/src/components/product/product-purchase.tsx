@@ -28,6 +28,7 @@ export function ProductPurchase({
   priceMax,
   compareAtPrice,
   stock,
+  options,
   variants,
 }: {
   productId: string;
@@ -42,6 +43,8 @@ export function ProductPurchase({
   priceMax: number | null;
   compareAtPrice: number | null;
   stock: number;
+  /** What the variants differ by; each gets its own row of choices (Colour, Size…). */
+  options: { name: string; values: string[] }[];
   variants: ProductVariantOption[];
 }) {
   const router = useRouter();
@@ -51,9 +54,15 @@ export function ProductPurchase({
   const [busy, setBusy] = useState<"cart" | "buy" | null>(null);
   const [feedback, setFeedback] = useState<{ ok: boolean; message: string } | null>(null);
   const [variantId, setVariantId] = useState(variants.length === 1 ? variants[0].id : null);
+  /** Chosen value per option (e.g. { Colour: "Red", Size: "M" }). */
+  const [picks, setPicks] = useState<Record<string, string>>(() => (variants.length === 1 ? variants[0].attributes : {}));
   const [quantity, setQuantity] = useState(1);
 
-  const variant = variants.find((v) => v.id === variantId) ?? null;
+  // With options, the variant is the one matching every pick; otherwise the chip chosen.
+  const byOptions = options.length > 0;
+  const variant = byOptions
+    ? (variants.find((v) => options.every((o) => v.attributes[o.name] === picks[o.name])) ?? null)
+    : (variants.find((v) => v.id === variantId) ?? null);
   const available = variant ? variant.stock : stock;
   const needsOption = variants.length > 0 && !variant;
   // Shop owners can buy from other shops, but not from their own.
@@ -73,6 +82,17 @@ export function ProductPurchase({
     setVariantId(id);
     setQuantity(1);
   }
+
+  function pick(name: string, value: string) {
+    setPicks((p) => (p[name] === value ? p : { ...p, [name]: value }));
+    setQuantity(1);
+  }
+
+  /** Something in stock has this value, given the other options already picked. */
+  const inStock = (name: string, value: string) =>
+    variants.some(
+      (v) => v.stock > 0 && v.attributes[name] === value && options.every((o) => o.name === name || !picks[o.name] || v.attributes[o.name] === picks[o.name]),
+    );
 
   /** "cart": add and stay; "buy": add and go straight to checkout with just this line. */
   function add(mode: "cart" | "buy") {
@@ -108,7 +128,34 @@ export function ProductPurchase({
         )}
       </div>
 
-      {variants.length > 0 && (
+      {byOptions &&
+        options.map((o) => (
+          <Row key={o.name} label={picks[o.name] ? `${o.name}: ${picks[o.name]}` : o.name}>
+            <div role="radiogroup" aria-label={o.name} className="flex flex-wrap gap-2">
+              {o.values.map((value) => {
+                const selected = picks[o.name] === value;
+                const possible = inStock(o.name, value);
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    disabled={!possible && !selected}
+                    onClick={() => pick(o.name, value)}
+                    className={`min-w-11 rounded-lg border px-4 py-2.5 text-sm transition-colors disabled:cursor-not-allowed disabled:border-dashed disabled:text-muted-foreground/60 disabled:line-through ${
+                      selected ? "border-primary bg-primary-soft font-medium text-primary" : "border-border hover:border-primary/60"
+                    }`}
+                  >
+                    {value}
+                  </button>
+                );
+              })}
+            </div>
+          </Row>
+        ))}
+
+      {!byOptions && variants.length > 0 && (
         <Row label={dict.option}>
           <div role="radiogroup" aria-label={dict.option} className="flex flex-wrap gap-2">
             {variants.map((v) => {

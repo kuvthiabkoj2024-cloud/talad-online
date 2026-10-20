@@ -33,6 +33,9 @@ export const PRODUCT_RULES = {
   descriptionMax: 5000,
   skuPattern: /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/,
   maxVariants: 50,
+  /** Options a product's variants differ by (e.g. colour and size). */
+  maxOptions: 2,
+  maxOptionValues: 30,
   maxPrice: 1_000_000_000,
   maxStock: 1_000_000,
 } as const;
@@ -41,6 +44,12 @@ export const PRODUCT_RULES = {
 export const COUPON_RULES = {
   codePattern: /^[A-Z0-9]{3,20}$/,
   maxPercent: 90,
+  /** Codes generated at once (one per customer, e.g. printed vouchers). */
+  batchMax: 500,
+  /** Optional letters in front of generated codes, e.g. "SALE" → SALE7K2P9Q. */
+  prefixPattern: /^[A-Z0-9]{0,8}$/,
+  /** Random characters after the prefix. */
+  randomLength: 8,
 } as const;
 
 /** What a seller asks for when saving: keep as draft, or put it on sale (moderation may hold it as PENDING). */

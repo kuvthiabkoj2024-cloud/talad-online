@@ -1,6 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import {
   IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -45,6 +46,23 @@ class EnvironmentVariables {
   /** Comma-separated list of allowed browser origins. */
   @IsString()
   CORS_ORIGINS: string = 'http://localhost:3000';
+
+  /** Photo search: the local CLIP model indexes product photos and matches scans ("false" turns it off). */
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  IMAGE_SEARCH_ENABLED: 'true' | 'false' = 'true';
+
+  /** Where the downloaded image model is cached (~90 MB, once). */
+  @IsString()
+  MODEL_CACHE_DIR: string = '.cache/models';
+
+  /** Optional: Claude describes scanned photos so keyword matches add to the visual ones. */
+  @IsOptional()
+  @IsString()
+  ANTHROPIC_API_KEY?: string;
+
+  @IsString()
+  ANTHROPIC_MODEL: string = 'claude-sonnet-5-5';
 
   /** Admin console origin, for links in emails (password reset). */
   @IsString()

@@ -39,8 +39,12 @@ export interface ShopFinance {
 export interface ShopStats {
   days: StatsRange;
   series: { date: string; orders: number; revenue: number }[];
+  /** The period before, day by day (same length, oldest first), for the comparison line. */
+  previousSeries: { date: string; orders: number; revenue: number }[];
   totals: { orders: number; revenue: number; customers: number; averageOrder: number; units: number };
-  previous: { orders: number; revenue: number };
+  previous: { orders: number; revenue: number; customers: number; averageOrder: number; units: number };
+  /** Orders and revenue by how customers paid. */
+  payments: { method: string; orders: number; revenue: number }[];
   topProducts: { productId: string; name: string; imageUrl: string | null; units: number; revenue: number }[];
   statusCounts: Record<string, number>;
   productViews: number;
@@ -152,21 +156,25 @@ export class ShopReportsService {
     const prevFrom = new Date(from.getTime() - days * DAY);
     const counted = Prisma.sql`so."shopId" = ${shopId} AND so.status <> 'CANCELLED'`;
 
-    const [daily, prev, customers, top, units, statuses, views] = await Promise.all([
+    const [daily, prevDaily, customers, prevCustomers, top, units, prevUnits, statuses, views, payments] = await Promise.all([
       this.prisma.$queryRaw<{ day: Date; orders: number; revenue: Prisma.Decimal | null }[]>`
         SELECT ${LOCAL_DAY} AS day, COUNT(*)::int AS orders, SUM(so.total) AS revenue
         FROM "ShopOrder" so
         WHERE ${counted} AND so."createdAt" >= ${from} AND so."createdAt" < ${new Date(end)}
         GROUP BY 1`,
-      this.prisma.shopOrder.aggregate({
-        where: { shopId, status: { not: 'CANCELLED' }, createdAt: { gte: prevFrom, lt: from } },
-        _count: { _all: true },
-        _sum: { total: true },
-      }),
+      this.prisma.$queryRaw<{ day: Date; orders: number; revenue: Prisma.Decimal | null }[]>`
+        SELECT ${LOCAL_DAY} AS day, COUNT(*)::int AS orders, SUM(so.total) AS revenue
+        FROM "ShopOrder" so
+        WHERE ${counted} AND so."createdAt" >= ${prevFrom} AND so."createdAt" < ${from}
+        GROUP BY 1`,
       this.prisma.$queryRaw<{ n: number }[]>`
         SELECT COUNT(DISTINCT o."customerId")::int AS n
         FROM "ShopOrder" so JOIN "Order" o ON o.id = so."orderId"
         WHERE ${counted} AND so."createdAt" >= ${from} AND so."createdAt" < ${new Date(end)}`,
+      this.prisma.$queryRaw<{ n: number }[]>`
+        SELECT COUNT(DISTINCT o."customerId")::int AS n
+        FROM "ShopOrder" so JOIN "Order" o ON o.id = so."orderId"
+        WHERE ${counted} AND so."createdAt" >= ${prevFrom} AND so."createdAt" < ${from}`,
       this.prisma.$queryRaw<{ productId: string; units: number; revenue: Prisma.Decimal }[]>`
         SELECT oi."productId", SUM(oi.quantity)::int AS units, SUM(oi."lineTotal") AS revenue
         FROM "OrderItem" oi JOIN "ShopOrder" so ON so.id = oi."shopOrderId"
@@ -178,16 +186,35 @@ export class ShopReportsService {
         SELECT SUM(oi.quantity)::int AS n
         FROM "OrderItem" oi JOIN "ShopOrder" so ON so.id = oi."shopOrderId"
         WHERE ${counted} AND so."createdAt" >= ${from} AND so."createdAt" < ${new Date(end)}`,
+      this.prisma.$queryRaw<{ n: number | null }[]>`
+        SELECT SUM(oi.quantity)::int AS n
+        FROM "OrderItem" oi JOIN "ShopOrder" so ON so.id = oi."shopOrderId"
+        WHERE ${counted} AND so."createdAt" >= ${prevFrom} AND so."createdAt" < ${from}`,
       this.prisma.shopOrder.groupBy({ by: ['status'], where: { shopId, createdAt: { gte: from } }, _count: { _all: true } }),
       this.prisma.product.aggregate({ where: { shopId }, _sum: { viewCount: true } }),
+      this.prisma.$queryRaw<{ method: string; orders: number; revenue: Prisma.Decimal | null }[]>`
+        -- The shop order's own payment, or (older checkouts) the order-level one, as paymentOf().
+        SELECT COALESCE(sp.method, op.method)::text AS method, COUNT(*)::int AS orders, SUM(so.total) AS revenue
+        FROM "ShopOrder" so
+        LEFT JOIN LATERAL (SELECT method FROM "Payment" WHERE "shopOrderId" = so.id ORDER BY "createdAt" DESC LIMIT 1) sp ON true
+        LEFT JOIN LATERAL (SELECT method FROM "Payment" WHERE "orderId" = so."orderId" AND "shopOrderId" IS NULL ORDER BY "createdAt" DESC LIMIT 1) op ON true
+        WHERE ${counted} AND so."createdAt" >= ${from} AND so."createdAt" < ${new Date(end)} AND COALESCE(sp.method, op.method) IS NOT NULL
+        GROUP BY 1
+        ORDER BY revenue DESC`,
     ]);
 
-    const byDay = new Map(daily.map((d) => [new Date(d.day).toISOString().slice(0, 10), d]));
-    const series = Array.from({ length: days }, (_, i) => {
-      const date = toDay(new Date(from.getTime() + i * DAY));
-      const d = byDay.get(date);
-      return { date, orders: d?.orders ?? 0, revenue: num(d?.revenue) };
-    });
+    const days_ = (rows: typeof daily, start: Date) => {
+      const byDay = new Map(rows.map((d) => [new Date(d.day).toISOString().slice(0, 10), d]));
+      return Array.from({ length: days }, (_, i) => {
+        const date = toDay(new Date(start.getTime() + i * DAY));
+        const d = byDay.get(date);
+        return { date, orders: d?.orders ?? 0, revenue: num(d?.revenue) };
+      });
+    };
+    const series = days_(daily, from);
+    const previousSeries = days_(prevDaily, prevFrom);
+    const prevOrders = previousSeries.reduce((s, d) => s + d.orders, 0);
+    const prevRevenue = previousSeries.reduce((s, d) => s + d.revenue, 0);
     const products = await this.prisma.product.findMany({
       where: { id: { in: top.map((t) => t.productId) } },
       select: { id: true, name: true, images: { orderBy: { sortOrder: 'asc' }, take: 1, select: { key: true } } },
@@ -199,6 +226,7 @@ export class ShopReportsService {
     return {
       days,
       series,
+      previousSeries,
       totals: {
         orders,
         revenue,
@@ -206,7 +234,14 @@ export class ShopReportsService {
         averageOrder: orders ? Math.round(revenue / orders) : 0,
         units: units[0]?.n ?? 0,
       },
-      previous: { orders: prev._count._all, revenue: num(prev._sum.total) },
+      previous: {
+        orders: prevOrders,
+        revenue: prevRevenue,
+        customers: prevCustomers[0]?.n ?? 0,
+        averageOrder: prevOrders ? Math.round(prevRevenue / prevOrders) : 0,
+        units: prevUnits[0]?.n ?? 0,
+      },
+      payments: payments.map((p) => ({ method: p.method, orders: p.orders, revenue: num(p.revenue) })),
       topProducts: top.map((t) => {
         const p = productById.get(t.productId);
         return {

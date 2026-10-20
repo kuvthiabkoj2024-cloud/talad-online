@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Noto_Sans_Lao } from "next/font/google";
 import { LOCALES } from "@talad/shared";
 import { SessionProvider } from "@/components/auth/session-provider";
+import { LiveUpdates } from "@/components/realtime/live-updates";
 import { getDictionary, getLocale } from "./dictionaries";
 import "../globals.css";
 
@@ -38,6 +39,7 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children }: LayoutProps<"/[lang]">) {
   const locale = await getLocale();
+  const { live } = await getDictionary();
 
   return (
     <html
@@ -47,7 +49,11 @@ export default async function RootLayout({ children }: LayoutProps<"/[lang]">) {
       {/* Phones: reserve space so a fixed bottom bar (cart, checkout) never covers the footer. */}
       <body className="flex min-h-full flex-col max-lg:has-[[data-bottom-bar]]:pb-24">
         {/* Header/footer come from the (store) and checkout layouts. */}
-        <SessionProvider>{children}</SessionProvider>
+        <SessionProvider>
+          {children}
+          {/* Signed-in customers: order updates and shop replies arrive live, with a chime. */}
+          <LiveUpdates locale={locale} dict={live} />
+        </SessionProvider>
       </body>
     </html>
   );

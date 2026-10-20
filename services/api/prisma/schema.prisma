@@ -128,6 +128,7 @@ model AdminUser {
   updatedAt       DateTime        @updatedAt
 
   auditLogs AuditLog[]
+  notifications   Notification[]
 }
 
 /// Login sessions for every actor type — also powers device history (§3.1).
@@ -226,6 +227,11 @@ model Shop {
   flashSales    FlashSale[]
   payouts       Payout[]
   customerNotes ShopCustomerNote[]
+  /// Private conversations with customers (Seller Center → Messages).
+  conversations ShopConversation[]
+  /// Questions and answers the shop's chat bot replies with (Seller Center → Chat Bot).
+  faqs          ShopFaq[]
+  chatOrders    ChatOrder[]
 }
 
 model ShopKycDocument {
@@ -298,17 +304,23 @@ model Customer {
   updatedAt       DateTime        @updatedAt
 
   /// The shop this account owns, if any — owners still shop as customers.
-  shop          Shop?                 @relation("ShopOwner")
-  addresses     Address[]
-  bankAccounts  CustomerBankAccount[]
-  cartItems     CartItem[]
-  orders        Order[]
-  wishlist      WishlistItem[]
-  reviews       Review[]
-  points        PointTransaction[]
-  redemptions   CouponRedemption[]
-  shopNotes     ShopCustomerNote[]
-  notifications Notification[]
+  shop              Shop?                 @relation("ShopOwner")
+  addresses         Address[]
+  bankAccounts      CustomerBankAccount[]
+  cartItems         CartItem[]
+  orders            Order[]
+  wishlist          WishlistItem[]
+  reviews           Review[]
+  points            PointTransaction[]
+  redemptions       CouponRedemption[]
+  shopNotes         ShopCustomerNote[]
+  notifications     Notification[]
+  /// Market Chat (the shopping assistant) history — private to this account.
+  assistantMessages AssistantMessage[]
+  /// Private conversations with shops.
+  shopConversations ShopConversation[]
+  chatOrders        ChatOrder[]
+  videoComments     VideoComment[]
 }
 
 model Address {
@@ -395,6 +407,9 @@ model Product {
   compareAtPrice    Decimal?      @db.Decimal(14, 2)
   stock             Int           @default(0)
   lowStockThreshold Int           @default(5)
+  /// The options variants differ by, in the seller's order: [{ name: "Colour", values: ["Red", "Blue"] }, …].
+  /// Kept here because variant `attributes` (jsonb) don't keep key or value order.
+  options           Json?
   status            ProductStatus @default(DRAFT)
   rejectionReason   String?
   /// The single short product video (§2.5); transcoded asset key.
@@ -402,21 +417,26 @@ model Product {
   isPinned          Boolean       @default(false)
   soldCount         Int           @default(0)
   viewCount         Int           @default(0)
+  /// Feed video engagement (§2.5). Favorites are `wishlistBy` (§4.7); counters are denormalized for the feed.
+  videoViewCount    Int           @default(0)
+  videoShareCount   Int           @default(0)
+  videoCommentCount Int           @default(0)
   ratingAvg         Decimal       @default(0) @db.Decimal(3, 2)
   ratingCount       Int           @default(0)
   publishedAt       DateTime?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
-  shop       Shop             @relation(fields: [shopId], references: [id])
-  category   Category         @relation(fields: [categoryId], references: [id])
-  unit       Unit             @relation(fields: [unitId], references: [id])
-  images     ProductImage[]
-  variants   ProductVariant[]
-  cartItems  CartItem[]
-  orderItems OrderItem[]
-  wishlistBy WishlistItem[]
-  flashSales FlashSaleItem[]
+  shop          Shop             @relation(fields: [shopId], references: [id])
+  category      Category         @relation(fields: [categoryId], references: [id])
+  unit          Unit             @relation(fields: [unitId], references: [id])
+  images        ProductImage[]
+  variants      ProductVariant[]
+  cartItems     CartItem[]
+  orderItems    OrderItem[]
+  wishlistBy    WishlistItem[]
+  flashSales    FlashSaleItem[]
+  videoComments VideoComment[]
 
   @@unique([shopId, sku])
   @@unique([shopId, slug])
@@ -426,14 +446,20 @@ model Product {
 }
 
 model ProductImage {
-  id        String @id @default(uuid(7))
-  productId String
-  key       String
-  sortOrder Int    @default(0)
+  id             String    @id @default(uuid(7))
+  productId      String
+  key            String
+  sortOrder      Int       @default(0)
+  /// L2-normalized CLIP image embedding for photo search (modules/catalog/image-search).
+  embedding      Float[]   @default([])
+  /// Model id that produced `embedding`; null = not indexed yet, "failed:<model>" = couldn't read the image.
+  embeddingModel String?
+  embeddedAt     DateTime?
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId])
+  @@index([embeddingModel])
 }
 
 model ProductVariant {
@@ -654,12 +680,15 @@ model Coupon {
   startsAt       DateTime
   endsAt         DateTime
   isActive       Boolean      @default(true)
+  /// Codes generated together (one per customer, e.g. for printed vouchers) share a batch.
+  batchId        String?
   createdAt      DateTime     @default(now())
 
   shop        Shop?              @relation(fields: [shopId], references: [id], onDelete: Cascade)
   redemptions CouponRedemption[]
 
   @@unique([shopId, code])
+  @@index([batchId])
 }
 
 /// A shop's scheduled flash sale (§3.4): a percentage off chosen products for a window.
@@ -756,10 +785,35 @@ model WishlistItem {
   @@id([customerId, productId])
 }
 
+/// Comment on a product's feed video. Replies are one level deep: `parentId` always points at a top-level comment.
+model VideoComment {
+  id         String    @id @default(uuid(7))
+  productId  String
+  customerId String
+  parentId   String?
+  body       String
+  replyCount Int       @default(0)
+  /// Written by the shop from Seller Center (shown with the shop's name and logo); `customerId` is its owner.
+  byShop     Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  /// Soft delete keeps reply threads intact; the body is hidden.
+  deletedAt  DateTime?
+
+  product  Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customer Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  parent   VideoComment?  @relation("VideoCommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  VideoComment[] @relation("VideoCommentReplies")
+
+  @@index([productId, parentId, createdAt])
+  @@index([parentId, createdAt])
+}
+
+/// In-app notification for one recipient: a customer account, a shop (Seller Center) or an admin.
 model Notification {
   id         String    @id @default(uuid(7))
   customerId String?
   shopId     String?
+  adminId    String?
   type       String
   title      String
   body       String
@@ -767,10 +821,12 @@ model Notification {
   readAt     DateTime?
   createdAt  DateTime  @default(now())
 
-  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customer Customer?  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  admin    AdminUser? @relation(fields: [adminId], references: [id], onDelete: Cascade)
 
   @@index([customerId, readAt])
   @@index([shopId, readAt])
+  @@index([adminId, readAt])
 }
 
 // ─── CMS & settings (§2.8, §2.11) ───────────────────────────────────────────
@@ -801,4 +857,120 @@ model Setting {
   key       String   @id
   value     Json
   updatedAt DateTime @updatedAt
+}
+
+/// Market Chat history for a signed-in customer (guests keep theirs on the device only).
+model AssistantMessage {
+  id          String   @id @default(uuid(7))
+  customerId  String
+  role        String // "user" | "assistant"
+  text        String
+  /// Small preview of a photo the customer sent (data URL, ≤ ~60 KB).
+  imageThumb  String?
+  /// Product cards shown under an assistant reply (snapshot: id, name, price, image…).
+  products    Json?
+  lang        String?
+  /// An order card sent in the chat (buy by chat).
+  chatOrderId String?
+  createdAt   DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, createdAt])
+}
+
+/// One private conversation between a customer and a shop.
+model ShopConversation {
+  id             String   @id @default(uuid(7))
+  shopId         String
+  customerId     String
+  lastMessageAt  DateTime @default(now())
+  /// Messages the customer / the shop hasn't read yet.
+  customerUnread Int      @default(0)
+  shopUnread     Int      @default(0)
+  /// When each side last opened the chat: the other side's messages up to then show as read.
+  customerReadAt DateTime?
+  shopReadAt     DateTime?
+  createdAt      DateTime @default(now())
+
+  shop     Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customer Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  messages ShopMessage[]
+
+  @@unique([shopId, customerId])
+  @@index([customerId, lastMessageAt])
+  @@index([shopId, lastMessageAt])
+}
+
+model ShopMessage {
+  id             String   @id @default(uuid(7))
+  conversationId String
+  /// "CUSTOMER" | "SHOP" | "BOT" (the shop's auto-reply)
+  sender         String
+  text           String   @default("")
+  /// Private photo (storage key); served only to the conversation's two sides.
+  imageKey       String?
+  /// A product the message is about (shared from the product page).
+  productId      String?
+  /// Products the bot shows under its reply.
+  productIds     String[] @default([])
+  /// An order card sent in the chat (buy by chat).
+  chatOrderId    String?
+  createdAt      DateTime @default(now())
+
+  conversation ShopConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+/// A question and answer the shop's chat bot uses when a customer asks something similar.
+model ShopFaq {
+  id        String   @id @default(uuid(7))
+  shopId    String
+  question  String
+  answer    String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, sortOrder])
+}
+
+/// An order card in a chat (buy by chat): the customer completes options, address, courier
+/// and payment in the chat, then places it through normal checkout. One shop per card.
+model ChatOrder {
+  id                 String    @id @default(uuid(7))
+  customerId         String
+  shopId             String
+  /// "SHOP_CHAT" (private chat with the shop) | "MARKET_CHAT"
+  source             String
+  conversationId     String?
+  /// Who started it: "CUSTOMER" | "SHOP" | "BOT" | "ASSISTANT"
+  createdBy          String
+  /// [{ productId, variantId, quantity }]
+  items              Json
+  addressId          String?
+  deliveryProviderId String?
+  /// "COD" | "BANK_TRANSFER"
+  paymentMethod      String?
+  slipKey            String?
+  /// null: the best running shop coupon is applied; "": the customer removed it.
+  couponCode         String?
+  /// "DRAFT" | "PLACED" | "CANCELLED"
+  status             String    @default("DRAFT")
+  /// The shop order number once placed.
+  orderNumber        String?
+  /// What both sides see on the card in the chat (items, total), kept up to date.
+  summary            Json?
+  placedAt           DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  shop     Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, status])
+  @@index([shopId, status])
 }

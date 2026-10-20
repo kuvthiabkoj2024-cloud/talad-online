@@ -62,7 +62,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...init,
     headers: {
-      ...(init.body !== undefined && { 'Content-Type': 'application/json' }),
+      ...(init.body !== undefined && !(init.body instanceof FormData) && { 'Content-Type': 'application/json' }),
       ...authHeaders(),
       ...init.headers,
     },

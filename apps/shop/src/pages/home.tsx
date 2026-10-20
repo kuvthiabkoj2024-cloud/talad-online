@@ -1,27 +1,29 @@
 import { Button } from '@talad/ui/components/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@talad/ui/components/card'
+import { Card, CardContent } from '@talad/ui/components/card'
 import { Skeleton } from '@talad/ui/components/skeleton'
 import { cn } from '@talad/ui/lib/utils'
 import {
-  ChevronRight,
   Clock3,
   ExternalLink,
   Landmark,
+  LayoutDashboard,
   MapPinned,
-  PackagePlus,
   Store,
-  TicketPercent,
   TriangleAlert,
   type LucideIcon,
 } from 'lucide-react'
+import { useSyncExternalStore } from 'react'
 import { Link } from 'react-router'
 import { useAuth } from '@/auth/context'
 import { PageBody, TopBar } from '@/components/page-header'
-import { useMyShop, useShopSummary } from '@/hooks/queries'
+import { useMyShop, useShopBadges, useShopSummary, useUnreadMessages } from '@/hooks/queries'
 import { useI18n } from '@/i18n/context'
-import { formatNumber, storefrontUrl } from '@/lib/format'
+import { storefrontUrl } from '@/lib/format'
 import type { MyShop, ShopStatus } from '@/lib/types'
-import { TOOLS } from '@/nav'
+import { NAV_GROUPS, type NavItem } from '@/nav'
+import { StatsPage } from '@/pages/stats'
+
+const DASHBOARD_TILE: NavItem = { to: '/stats', label: 'home', icon: LayoutDashboard }
 
 const STATUS_DOT: Record<ShopStatus, string> = {
   APPROVED: 'bg-emerald-400',
@@ -30,25 +32,37 @@ const STATUS_DOT: Record<ShopStatus, string> = {
   SUSPENDED: 'bg-red-400',
 }
 
+/** Phones (below `md`), read on the first render so the wrong page never flashes. */
+const PHONE = '(max-width: 767px)'
+const subscribe = (onChange: () => void) => {
+  const mql = window.matchMedia(PHONE)
+  mql.addEventListener('change', onChange)
+  return () => mql.removeEventListener('change', onChange)
+}
+const isPhone = () => window.matchMedia(PHONE).matches
+
+/** The home route: the statistics on desktop, the app-like hub (tool grid) on phones. */
+export function HomeRoute() {
+  return useSyncExternalStore(subscribe, isPhone) ? <HomePage /> : <StatsPage asHome />
+}
+
 /**
  * Seller Center home (like a native seller app on phones): shop card, things to fix,
- * quick actions, order and product counts, and the tool grid.
+ * and the sidebar's menu as a tool grid.
  */
 export function HomePage() {
   const { t, locale } = useI18n()
   const { account } = useAuth()
   const shop = useMyShop()
   const summary = useShopSummary()
+  const { data: unread = 0 } = useUnreadMessages()
+  const { data: badges } = useShopBadges()
+  /** New things per tile: orders and video activity (unread notifications), unread chats. */
+  const badge: Record<string, number | undefined> = { '/orders': badges?.orders, '/messages': unread, '/videos': badges?.videos }
   const s = summary.data
   // The public shop page exists only once Taladonline approves the shop.
   const storeLink =
     account?.shop?.status === 'APPROVED' ? storefrontUrl.shop(locale, account.shop.slug) : undefined
-
-  const quick: { to: string; external?: boolean; label: string; icon: LucideIcon }[] = [
-    { to: '/products/new', label: t.home.addProduct, icon: PackagePlus },
-    ...(storeLink ? [{ to: storeLink, external: true, label: t.home.viewShop, icon: Store }] : []),
-    { to: '/coupons', label: t.nav.coupons, icon: TicketPercent },
-  ]
 
   return (
     <>
@@ -68,69 +82,31 @@ export function HomePage() {
 
         <Alerts shop={shop.data} setup={s?.setup} />
 
-        <Card className="py-2">
-          <CardContent className={cn('grid px-2', quick.length === 3 ? 'grid-cols-3' : 'grid-cols-2')}>
-            {quick.map(({ to, external, label, icon: Icon }) => {
-              const body = (
-                <>
-                  <Icon className="size-7 text-primary" strokeWidth={1.75} />
-                  <span className="text-sm">{label}</span>
-                </>
-              )
-              const cls = 'flex flex-col items-center gap-2 rounded-xl px-2 py-4 text-center transition-colors hover:bg-muted'
-              return external ? (
-                <a key={label} href={to} target="_blank" rel="noreferrer" className={cls}>
-                  {body}
-                </a>
-              ) : (
-                <Link key={label} to={to} className={cls}>
-                  {body}
+        {/* Phones: the sidebar's menu, in its order, 4 per row (desktop has the sidebar). */}
+        <ul className="grid grid-cols-4 gap-x-2 gap-y-3 md:hidden">
+          {NAV_GROUPS.flatMap((g) => g.items).map((item) => {
+            // This screen is home on phones; its tile opens the statistics (what desktop shows as home).
+            const { to, label, icon: Icon } = item.to === '/' ? DASHBOARD_TILE : item
+            return (
+              <li key={to}>
+                <Link
+                  to={to}
+                  className="relative flex h-full flex-col items-center gap-1.5 rounded-2xl border border-primary/30 bg-card px-1 py-3 text-center transition-colors active:bg-brand-soft"
+                >
+                  <span className="relative flex size-10 items-center justify-center rounded-xl bg-brand-soft text-primary">
+                    <Icon className="size-5" />
+                    {(badge[to] ?? 0) > 0 && (
+                      <span className="absolute -top-1.5 -right-2 min-w-5 rounded-full bg-destructive px-1 text-center text-[10px] leading-5 font-bold text-white ring-2 ring-card">
+                        {badge[to]! > 99 ? '99+' : badge[to]}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-[11px] leading-tight">{t.nav[label]}</span>
                 </Link>
-              )
-            })}
-          </CardContent>
-        </Card>
-
-        <div className="grid gap-3 md:gap-5 lg:grid-cols-2">
-          <CountsCard
-            title={t.home.orders}
-            to="/orders"
-            loading={summary.isPending}
-            items={[
-              { label: t.home.toShip, value: s?.orders.toShip, tone: 'text-orange-600 dark:text-orange-400', to: '/orders?tab=to-ship' },
-              { label: t.home.cancelled, value: s?.orders.cancelled, tone: 'text-red-600 dark:text-red-400', to: '/orders?tab=cancelled' },
-              { label: t.home.returns, value: s?.orders.returns, tone: 'text-amber-600 dark:text-amber-400', to: '/orders?tab=returns' },
-              { label: t.home.completed, value: s?.orders.completed, tone: 'text-primary', to: '/orders?tab=completed' },
-            ]}
-          />
-          <CountsCard
-            title={t.home.products}
-            to="/products"
-            loading={summary.isPending}
-            items={[
-              { label: t.home.published, value: s?.products.published, tone: 'text-primary', to: '/products?status=PUBLISHED' },
-              { label: t.home.pending, value: s?.products.pending, tone: 'text-amber-600 dark:text-amber-400', to: '/products?status=PENDING' },
-              { label: t.home.drafts, value: s?.products.draft, tone: 'text-muted-foreground', to: '/products?status=DRAFT' },
-              { label: t.home.lowStock, value: s?.products.lowStock, tone: 'text-red-600 dark:text-red-400', to: '/products' },
-            ]}
-          />
-        </div>
-
-        {/* Phones: the tool grid is the navigation (desktop has the sidebar). */}
-        <Card className="py-3 md:hidden">
-          <CardContent className="grid grid-cols-4 gap-y-2 px-2">
-            {TOOLS.map(({ to, label, icon: Icon }) => (
-              <Link
-                key={to}
-                to={to}
-                className="flex flex-col items-center gap-2 rounded-xl px-1 py-3 text-center transition-colors hover:bg-muted"
-              >
-                <Icon className="size-7 text-primary" strokeWidth={1.75} />
-                <span className="text-xs leading-tight">{t.nav[label]}</span>
-              </Link>
-            ))}
-          </CardContent>
-        </Card>
+              </li>
+            )
+          })}
+        </ul>
       </PageBody>
     </>
   )
@@ -232,42 +208,5 @@ function Alerts({ shop, setup }: { shop?: MyShop; setup?: { pickupAddress: boole
         </div>
       ))}
     </div>
-  )
-}
-
-function CountsCard({
-  title,
-  to,
-  loading,
-  items,
-}: {
-  title: string
-  to: string
-  loading: boolean
-  items: { label: string; value?: number; tone: string; to: string }[]
-}) {
-  const { t, locale } = useI18n()
-  return (
-    <Card className="gap-2">
-      <CardHeader className="flex items-center justify-between">
-        <CardTitle className="text-base">{title}</CardTitle>
-        <Link to={to} className="flex items-center text-sm text-primary hover:underline">
-          {t.common.viewAll}
-          <ChevronRight className="size-4" />
-        </Link>
-      </CardHeader>
-      <CardContent className="grid grid-cols-4 divide-x px-2">
-        {items.map((item) => (
-          <Link key={item.label} to={item.to} className="flex flex-col items-center gap-1 rounded-lg px-1 py-2 text-center hover:bg-muted">
-            {loading ? (
-              <Skeleton className="h-7 w-8" />
-            ) : (
-              <span className={cn('text-2xl font-semibold tabular-nums', item.tone)}>{formatNumber(item.value ?? 0, locale)}</span>
-            )}
-            <span className="text-xs leading-tight text-muted-foreground">{item.label}</span>
-          </Link>
-        ))}
-      </CardContent>
-    </Card>
   )
 }

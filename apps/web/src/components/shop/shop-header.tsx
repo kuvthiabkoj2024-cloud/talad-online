@@ -77,7 +77,7 @@ export function ShopHeader({ shop, locale, dict }: { shop: PublicShop; locale: L
         </div>
 
         <Link
-          href={`/${locale}/chat?shop=${shop.slug}`}
+          href={`/${locale}/messages/new?shop=${shop.slug}`}
           className="flex items-center justify-center gap-1.5 self-stretch rounded-full border border-primary px-5 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary-soft sm:self-end"
         >
           <MessageCircleMore className="size-4" />

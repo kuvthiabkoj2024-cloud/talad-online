@@ -125,6 +125,7 @@ export default async function ProductPage(props: Props) {
             priceMax={product.priceMax}
             compareAtPrice={product.compareAtPrice}
             stock={product.stock}
+            options={product.options ?? []}
             variants={product.variants}
           />
         </div>

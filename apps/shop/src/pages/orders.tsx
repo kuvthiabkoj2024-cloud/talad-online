@@ -1,4 +1,4 @@
-import { isShopOrderTab, SHOP_ORDER_TABS, type ShopOrderTab } from '@talad/shared'
+import { isShopOrderTab, SHOP_ORDER_TABS, type OrderStatus, type ShopOrderTab } from '@talad/shared'
 import { cn } from '@talad/ui/lib/utils'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ChevronRight, ImageOff, ReceiptText, ScanSearch } from 'lucide-react'
@@ -7,7 +7,7 @@ import { FilterTabs, Pager, SearchBox } from '@/components/list-controls'
 import { PageBody, PageIntro, TopBar } from '@/components/page-header'
 import { EmptyState, ErrorState, LoadingState } from '@/components/states'
 import { OrderStatusBadge } from '@/components/status-badge'
-import { queryKeys } from '@/hooks/queries'
+import { queryKeys, useClearBadge } from '@/hooks/queries'
 import { useSearchParamInput, useUrlParams } from '@/hooks/use-url-params'
 import { useI18n } from '@/i18n/context'
 import { api } from '@/lib/api'
@@ -15,20 +15,36 @@ import { fill, formatDate, formatMoney } from '@/lib/format'
 import type { ShopOrderList, ShopOrderSummary } from '@/lib/types'
 
 const TABS = Object.keys(SHOP_ORDER_TABS) as ShopOrderTab[]
+const PAGE_SIZES = [10, 20, 50]
+const DEFAULT_PAGE_SIZE = 20
+
+/** Each status has its own card border, so the queue reads at a glance. */
+const STATUS_BORDER: Record<OrderStatus, string> = {
+  PENDING: 'border-orange-400 dark:border-orange-600',
+  CONFIRMED: 'border-yellow-400 dark:border-yellow-600',
+  PACKED: 'border-purple-400 dark:border-purple-600',
+  SHIPPED: 'border-sky-500 dark:border-sky-600',
+  DELIVERED: 'border-sky-500 dark:border-sky-600',
+  RETURN_REQUESTED: 'border-red-400 dark:border-red-600',
+  COMPLETED: 'border-green-500 dark:border-green-600',
+  CANCELLED: 'border-zinc-300 dark:border-zinc-600',
+}
 
 /** Order queue by status (§3.6). `?tab=to-ship&q=&page=` */
 export function OrdersPage() {
+  useClearBadge('orders')
   const { t } = useI18n()
   const { params, set, page } = useUrlParams()
   const tab = isShopOrderTab(params.get('tab')) ? (params.get('tab') as ShopOrderTab) : 'all'
   const q = params.get('q') ?? ''
   const [search, setSearch] = useSearchParamInput(q, set)
+  const size = PAGE_SIZES.includes(Number(params.get('size'))) ? Number(params.get('size')) : DEFAULT_PAGE_SIZE
 
-  const query = new URLSearchParams({ page: String(page) })
+  const query = new URLSearchParams({ page: String(page), pageSize: String(size) })
   if (tab !== 'all') query.set('tab', tab)
   if (q) query.set('q', q)
   const list = useQuery({
-    queryKey: [...queryKeys.orders, { tab, q, page }],
+    queryKey: [...queryKeys.orders, { tab, q, page, size }],
     queryFn: () => api<ShopOrderList>(`/me/shop/orders?${query}`),
     placeholderData: keepPreviousData,
   })
@@ -56,14 +72,26 @@ export function OrdersPage() {
           <EmptyState icon={ReceiptText} title={t.orders.emptyTitle} body={t.orders.emptyBody} />
         ) : (
           <>
-            <ul className="flex flex-col gap-3">
+            {/* Up to 3 per row; cards in a row share a height so their footers line up. */}
+            <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {data!.items.map((o) => (
-                <li key={o.number}>
+                <li key={o.number} className="flex min-w-0">
                   <OrderCard order={o} />
                 </li>
               ))}
             </ul>
-            <Pager page={data!.page} totalPages={data!.totalPages} onPage={(p) => set({ page: String(p) })} />
+            <Pager
+              page={data!.page}
+              totalPages={data!.totalPages}
+              onPage={(p) => {
+                set({ page: String(p) })
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+              }}
+              total={data!.total}
+              pageSize={size}
+              pageSizes={PAGE_SIZES}
+              onPageSize={(n) => set({ size: n === DEFAULT_PAGE_SIZE ? undefined : String(n), page: undefined })}
+            />
           </>
         )}
       </PageBody>
@@ -78,14 +106,14 @@ function OrderCard({ order: o }: { order: ShopOrderSummary }) {
     <Link
       to={`/orders/${o.number}`}
       className={cn(
-        'flex flex-col overflow-hidden rounded-xl border bg-card transition-shadow hover:shadow-md',
-        o.awaitingConfirmation && 'border-amber-300 dark:border-amber-800',
+        'flex w-full min-w-0 flex-col overflow-hidden rounded-xl border bg-card transition-shadow hover:shadow-md',
+        STATUS_BORDER[o.status],
       )}
     >
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5">
         <span className="flex min-w-0 items-center gap-2 text-sm">
           <span className="font-mono font-semibold">{o.number}</span>
-          <span className="text-muted-foreground">· {o.customer.name}</span>
+          <span className="truncate text-muted-foreground">· {o.customer.name}</span>
         </span>
         <span className="flex items-center gap-2">
           {o.awaitingConfirmation && (
@@ -97,7 +125,7 @@ function OrderCard({ order: o }: { order: ShopOrderSummary }) {
           <OrderStatusBadge status={o.status} />
         </span>
       </div>
-      <div className="flex flex-col gap-2 px-4 py-3">
+      <div className="flex flex-1 flex-col gap-2 px-4 py-3">
         {shown.map((i) => (
           <div key={i.sku} className="flex items-center gap-3">
             <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-muted-foreground">

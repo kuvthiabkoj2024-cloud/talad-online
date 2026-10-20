@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
+import type { Server } from 'node:http';
 import { AppModule } from './app.module.js';
 import type { Env } from './config/env.validation.js';
 
@@ -39,5 +40,9 @@ async function bootstrap() {
   }
 
   await app.listen(config.get('PORT', { infer: true }));
+  // Node ends a request after 5 minutes by default; a 200 MB product video sent from a phone on
+  // mobile data can take longer, so uploads get 30 minutes (headers must still arrive promptly).
+  const server = app.getHttpServer() as Server;
+  server.requestTimeout = 30 * 60_000;
 }
 await bootstrap();

@@ -9,18 +9,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@talad/ui/components/textarea'
 import { cn } from '@talad/ui/lib/utils'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Clock3, ImageOff, LoaderCircle, MapPin, MoreHorizontal, Phone, Printer, ScanSearch, TriangleAlert, Truck, UserRound } from 'lucide-react'
+import { ChevronDown, Clock3, ImageOff, LoaderCircle, MapPin, MoreHorizontal, Phone, Printer, ReceiptText, ScanSearch, Tag, TriangleAlert, Truck, UserRound } from 'lucide-react'
 import { useState } from 'react'
 import { useParams } from 'react-router'
 import { toast } from 'sonner'
 import { PageBody, TopBar } from '@/components/page-header'
 import { ErrorState, LoadingState } from '@/components/states'
 import { OrderStatusBadge } from '@/components/status-badge'
-import { queryKeys, useDeliveryProviders, useMyShop } from '@/hooks/queries'
+import { queryKeys, useDeliveryProviders, useMyShop, useShopProfile } from '@/hooks/queries'
 import type { Dict } from '@/i18n/en'
 import { useI18n } from '@/i18n/context'
 import { ApiError, api, getToken, send } from '@/lib/api'
 import { fill, formatDate, formatMoney } from '@/lib/format'
+import { billHtml, printHtml, stickerHtml } from '@/lib/print-order'
 import type { ShopOrderDetail } from '@/lib/types'
 
 /** The main next step first; destructive ones last. */
@@ -36,6 +37,7 @@ export function OrderDetailPage() {
     queryFn: () => api<ShopOrderDetail>(`/me/shop/orders/${encodeURIComponent(number)}`),
   })
   const shop = useMyShop()
+  const profile = useShopProfile()
   const [action, setAction] = useState<ShopOrderAction | null>(null)
 
   if (order.isPending) {
@@ -59,6 +61,14 @@ export function OrderDetailPage() {
   const o = order.data
   const actions = [...o.actions].sort((a, b) => Number(PRIMARY.includes(b)) - Number(PRIMARY.includes(a)))
   const net = o.total - o.commissionAmount
+  // Printed on bills and stickers: the profile has the address, the shop the logo and contacts.
+  const printShop = {
+    name: profile.data?.name ?? shop.data?.name ?? '',
+    logoUrl: profile.data?.logoUrl ?? shop.data?.logoUrl ?? null,
+    phone: profile.data?.phone ?? shop.data?.phone ?? '',
+    email: profile.data?.email ?? shop.data?.email ?? '',
+    address: profile.data?.address ?? null,
+  }
   const address = o.shippingAddress
 
   return (
@@ -73,10 +83,32 @@ export function OrderDetailPage() {
             </div>
             <p className="text-sm text-muted-foreground">{fill(t.orders.placed, { date: formatDate(o.createdAt, locale, true) })}</p>
           </div>
-          <Button variant="outline" onClick={() => printPackingSlip(o, shop.data?.name ?? '', t, locale)}>
-            <Printer />
-            {t.orders.printSlip}
-          </Button>
+          {/* Print: the A4 bill, or the 100 × 150 mm sticker for the parcel. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <Printer />
+                {t.print.button}
+                <ChevronDown className="opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuItem className="items-start gap-3 py-2" onSelect={() => printHtml(billHtml(o, printShop, t, locale))}>
+                <ReceiptText className="mt-0.5 size-5 text-primary" />
+                <span>
+                  <span className="block font-medium">{t.print.bill}</span>
+                  <span className="block text-xs text-muted-foreground">{t.print.billHint}</span>
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem className="items-start gap-3 py-2" onSelect={() => printHtml(stickerHtml(o, printShop, t, locale))}>
+                <Tag className="mt-0.5 size-5 text-primary" />
+                <span>
+                  <span className="block font-medium">{t.print.sticker}</span>
+                  <span className="block text-xs text-muted-foreground">{t.print.stickerHint}</span>
+                </span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {o.awaitingConfirmation && (
@@ -433,30 +465,4 @@ async function openSlip(number: string) {
   })
   if (!res.ok || !tab) return tab?.close()
   tab.location.href = URL.createObjectURL(await res.blob())
-}
-
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
-
-/** A plain printable packing slip in its own window (works with any printer or "Save as PDF"). */
-function printPackingSlip(o: ShopOrderDetail, shopName: string, t: Dict, locale: Locale) {
-  const w = window.open('', '_blank', 'width=720,height=900')
-  if (!w) return
-  const a = o.shippingAddress
-  const rows = o.items
-    .map((i) => `<tr><td>${esc(i.name)}${i.variant ? `<br><small>${esc(i.variant)}</small>` : ''}</td><td>${esc(i.sku)}</td><td class="n">${i.quantity}</td></tr>`)
-    .join('')
-  w.document.write(`<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><title>${esc(t.orders.packingSlip)} ${esc(o.number)}</title>
-<style>body{font-family:system-ui,'Noto Sans Lao',sans-serif;margin:32px;color:#111}h1{font-size:20px;margin:0}small{color:#555}
-.top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:12px;margin-bottom:16px}
-.box{border:1px solid #ccc;border-radius:8px;padding:12px;margin-bottom:16px}table{width:100%;border-collapse:collapse}
-th,td{text-align:left;padding:8px;border-bottom:1px solid #ddd;vertical-align:top}.n{text-align:right}.big{font-size:18px;font-weight:600}</style></head>
-<body><div class="top"><div><h1>${esc(shopName)}</h1><small>${esc(t.orders.packingSlip)}</small></div>
-<div style="text-align:right"><div class="big">${esc(o.number)}</div><small>${esc(formatDate(o.createdAt, locale, true))}</small></div></div>
-<div class="box"><small>${esc(t.orders.shipTo)}</small><div class="big">${esc(a?.recipientName ?? o.customer.name)}</div>
-<div>${esc(formatPhone(a?.phone ?? o.customer.phone ?? ''))}</div>${a ? `<div>${esc(formatAddress(a, locale))}</div>` : ''}</div>
-${o.note ? `<div class="box"><small>${esc(t.orders.note)}</small><div>${esc(o.note)}</div></div>` : ''}
-<table><thead><tr><th>${esc(t.products.product)}</th><th>SKU</th><th class="n">#</th></tr></thead><tbody>${rows}</tbody></table>
-<p style="margin-top:16px"><small>${esc(o.payment ? t.orders.methods[o.payment.method] : '')}${o.payment?.method === 'COD' ? ` · ${esc(t.orders.total)}: ${esc(formatMoney(o.total, locale))}` : ''}</small></p>
-<script>window.onload=()=>{window.print()}</script></body></html>`)
-  w.document.close()
 }

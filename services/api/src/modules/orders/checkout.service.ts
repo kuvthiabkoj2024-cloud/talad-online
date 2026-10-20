@@ -6,13 +6,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { CheckoutPaymentMethod } from '@talad/shared';
+import { formatMoney, type CheckoutPaymentMethod } from '@talad/shared';
 import { randomInt } from 'node:crypto';
 import type { Env } from '../../config/env.validation.js';
 import { Prisma, type OrderStatus } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { CmsService } from '../cms/cms.service.js';
-import { CartService, groupByShop, type CartLine } from '../cart/cart.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
+import { CartService, groupByShop, type CartLine, type VirtualItem } from '../cart/cart.service.js';
 import {
   allocateDiscount,
   couponDiscount,
@@ -52,6 +53,8 @@ export interface DeliveryOption {
 /** What the customer has chosen so far; everything but the items is optional for a quote. */
 export interface CheckoutSelection {
   itemIds: string[];
+  /** Instead of cart lines: items of an order card in a chat (the cart isn't touched). */
+  items?: VirtualItem[];
   deliveryProviderId?: string;
   couponCode?: string;
   /** Decides which couriers serve the province; defaults to the customer's default address. */
@@ -78,6 +81,7 @@ export class CheckoutService {
     private readonly cart: CartService,
     private readonly config: ConfigService<Env, true>,
     private readonly cms: CmsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -90,7 +94,7 @@ export class CheckoutService {
   }
 
   private async price(customerId: string, selection: CheckoutSelection) {
-    const lines = await this.selected(customerId, selection.itemIds);
+    const lines = await this.linesFor(customerId, selection);
     const issues: QuoteIssue[] = [];
     for (const l of lines) {
       if (l.ownShop) issues.push({ itemId: l.id, code: 'OWN_PRODUCT' });
@@ -176,7 +180,7 @@ export class CheckoutService {
     const address = await this.prisma.address.findFirst({ where: { id: input.addressId, customerId } });
     if (!address) throw new BadRequestException({ code: 'ADDRESS_REQUIRED', message: 'Choose a delivery address' });
 
-    const lines = await this.selected(customerId, input.itemIds);
+    const lines = await this.linesFor(customerId, input);
     const defaultRate = await this.defaultCommissionRate();
     const now = new Date();
     // COD needs no payment step. A transfer waits in "to pay" until the shop checks the slip.
@@ -293,9 +297,22 @@ export class CheckoutService {
               },
             });
             shopOrders.push(shopNumber);
+            // The shop hears about it right away (live in the Seller Center, with a sound).
+            const units = groupLines.reduce((n, l) => n + l.quantity, 0);
+            const pay = isTransfer ? { lo: 'ກວດສະລິບການໂອນ', en: 'transfer slip to check' } : { lo: 'ຈ່າຍປາຍທາງ', en: 'cash on delivery' };
+            await this.notifications.toShop(
+              tx,
+              group.shop.id,
+              'ORDER',
+              {
+                lo: { title: `ມີຄຳສັ່ງຊື້ໃໝ່ ${shopNumber}`, body: `${units} ລາຍການ · ${formatMoney(group.total, 'lo')} · ${pay.lo}` },
+                en: { title: `New order ${shopNumber}`, body: `${units} item${units === 1 ? '' : 's'} · ${formatMoney(group.total, 'en')} · ${pay.en}` },
+              },
+              { link: `/orders/${shopNumber}` },
+            );
           }
 
-          await tx.cartItem.deleteMany({ where: { customerId, id: { in: lines.map((l) => l.id) } } });
+          if (!input.items) await tx.cartItem.deleteMany({ where: { customerId, id: { in: lines.map((l) => l.id) } } });
           return { orderNumber: order.number, shopOrders, total: quote.total, paymentMethod: input.paymentMethod };
         });
       } catch (e) {
@@ -395,7 +412,7 @@ export class CheckoutService {
         code: { equals: normalized, mode: 'insensitive' },
         OR: [{ shopId: null }, { shopId: { in: groups.map((g) => g.shop.id) } }],
       },
-      include: { _count: { select: { redemptions: { where: { customerId } } } } },
+      include: { shop: { select: { ownerId: true } }, _count: { select: { redemptions: { where: { customerId } } } } },
     });
     if (rows.length === 0) return { ...none, couponError: 'COUPON_INVALID' };
 
@@ -403,8 +420,9 @@ export class CheckoutService {
     let best: { coupon: CouponRule; discounts: Map<string, number>; amount: number } | null = null;
     let firstError: CouponErrorCode | null = null;
     for (const row of rows) {
+      const { shop, _count, ...fields } = row;
       const rule: CouponRule = {
-        ...row,
+        ...fields,
         value: row.value.toNumber(),
         minOrderAmount: row.minOrderAmount?.toNumber() ?? null,
         maxDiscount: row.maxDiscount?.toNumber() ?? null,
@@ -413,7 +431,7 @@ export class CheckoutService {
         .filter((g) => rule.shopId === null || g.shop.id === rule.shopId)
         .map((g) => ({ id: g.shop.id, subtotal: g.subtotal }));
       const base = eligible.reduce((n, g) => n + g.subtotal, 0);
-      const problem = couponProblem(rule, { base, now, usedByCustomer: row._count.redemptions });
+      const problem = couponProblem(rule, { base, now, usedByCustomer: _count.redemptions, ownShop: shop?.ownerId === customerId });
       if (problem) {
         firstError ??= problem;
         continue;
@@ -464,6 +482,15 @@ export class CheckoutService {
           },
         ]),
     );
+  }
+
+  /** Checkout lines for items outside the cart (an order card in a chat). */
+  lines(customerId: string, items: VirtualItem[]): Promise<CartLine[]> {
+    return this.cart.virtualLines(customerId, items);
+  }
+
+  private linesFor(customerId: string, selection: CheckoutSelection): Promise<CartLine[]> {
+    return selection.items ? this.cart.virtualLines(customerId, selection.items) : this.selected(customerId, selection.itemIds);
   }
 
   private async selected(customerId: string, itemIds: string[]): Promise<CartLine[]> {

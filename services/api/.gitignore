@@ -5,3 +5,6 @@ coverage
 
 # Prisma client is generated from prisma/schema.prisma
 /src/generated/prisma
+
+# Downloaded image-search model (MODEL_CACHE_DIR)
+/.cache

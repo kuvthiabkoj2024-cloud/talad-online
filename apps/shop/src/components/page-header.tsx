@@ -2,11 +2,12 @@ import { Button } from '@talad/ui/components/button'
 import { Separator } from '@talad/ui/components/separator'
 import { SidebarTrigger } from '@talad/ui/components/sidebar'
 import { cn } from '@talad/ui/lib/utils'
-import { ArrowLeft, Bell } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { Link } from 'react-router'
 import { useAuth } from '@/auth/context'
 import { useI18n } from '@/i18n/context'
 import { AccountAvatar, AccountMenu } from './account-menu'
+import { NotificationBell } from './notification-bell'
 
 /**
  * Sticky top bar. Phones: brand-coloured, with a back arrow (like a native app) and the
@@ -44,14 +45,7 @@ export function TopBar({
         <span className="w-2 md:hidden" />
       )}
       <h1 className="min-w-0 flex-1 truncate text-lg font-semibold md:text-base">{title}</h1>
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label={t.nav.notifications}
-        className="hover:bg-white/15 hover:text-current md:hover:bg-accent"
-      >
-        <Bell className="size-5" />
-      </Button>
+      <NotificationBell className="hover:bg-white/15 hover:text-current md:hover:bg-accent" />
       {account && (
         <AccountMenu
           trigger={

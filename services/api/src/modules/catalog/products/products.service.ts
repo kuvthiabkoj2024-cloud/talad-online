@@ -4,6 +4,7 @@ import { PrismaService } from '../../../prisma/prisma.service.js';
 import { MediaService } from '../../media/media.service.js';
 import { flashPrice, FlashSalePricingService, type FlashDiscount } from '../../promotions/flash-sale-pricing.service.js';
 import type { FeedQuery } from './feed.query.js';
+import { productOptions, variantLabel, type ProductOption } from './product-options.js';
 import type { ListProductsQuery } from './list-products.query.js';
 
 export interface ProductCard {
@@ -26,6 +27,10 @@ export interface ProductCard {
 export interface FeedItem extends Omit<ProductCard, 'shop'> {
   videoUrl: string;
   shop: { slug: string; name: string; logoUrl: string | null };
+  /** Units available (all variants together). */
+  stock: number;
+  hasVariants: boolean;
+  stats: { views: number; favorites: number; comments: number; shares: number };
 }
 
 export interface FeedPage {
@@ -52,6 +57,8 @@ export interface ProductDetail extends Omit<ProductCard, 'imageUrl'> {
   stock: number;
   imageUrls: string[];
   ratingCount: number;
+  /** What the variants differ by (e.g. Colour, then Size), values in the seller's order. */
+  options: ProductOption[];
   variants: ProductVariantOption[];
   unit: { code: string; name: unknown };
   category: {
@@ -99,6 +106,15 @@ const SHOP_SORT_SQL: Record<ShopProductSort, Prisma.Sql> = {
   price_asc: Prisma.sql`${MIN_PRICE} ASC, p.id ASC`,
   price_desc: Prisma.sql`${MIN_PRICE} DESC, p.id DESC`,
 };
+
+/** Joins and text the storefront search looks in: product, shop and category names (both languages). */
+const SEARCH_JOINS = Prisma.sql`
+  JOIN "Shop" s ON s.id = p."shopId"
+  JOIN "Category" c ON c.id = p."categoryId"
+  LEFT JOIN "Category" pc ON pc.id = c."parentId"`;
+const SEARCHABLE = Prisma.sql`concat_ws(' ', p.name, p.description, p.sku, s.name, c.name->>'lo', c.name->>'en', pc.name->>'lo', pc.name->>'en')`;
+/** ILIKE pattern with wildcards escaped; always passed as a bound parameter. */
+const like = (term: string) => `%${term.replace(/[\\%_]/g, '\\$&')}%`;
 
 /** Only published products from approved shops are visible on the storefront. */
 const VISIBLE = {
@@ -162,12 +178,22 @@ export class ProductsService {
       orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
       take: query.limit + 1,
       ...(query.cursor && { cursor: { id: query.cursor }, skip: 1 }),
-      select: { ...cardSelect, videoKey: true, shop: { select: { slug: true, name: true, logoUrl: true } } },
+      select: {
+        ...cardSelect,
+        videoKey: true,
+        stock: true,
+        variants: { select: { price: true, stock: true } },
+        videoViewCount: true,
+        videoShareCount: true,
+        videoCommentCount: true,
+        _count: { select: { wishlistBy: true } },
+        shop: { select: { slug: true, name: true, logoUrl: true } },
+      },
     });
     const page = rows.slice(0, query.limit);
     const discounts = await this.flash.discounts(page.map((r) => r.id));
     return {
-      items: page.map(({ videoKey, shop, ...row }) => ({
+      items: page.map(({ videoKey, shop, stock, videoViewCount, videoShareCount, videoCommentCount, _count, ...row }) => ({
         ...this.toCard({ ...row, shop }, discounts.get(row.id)),
         videoUrl: this.media.publicUrl(videoKey!),
         shop: {
@@ -175,6 +201,9 @@ export class ProductsService {
           name: shop.name,
           logoUrl: shop.logoUrl ? this.media.publicUrl(shop.logoUrl) : null,
         },
+        stock: row.variants.length ? row.variants.reduce((sum, v) => sum + v.stock, 0) : stock,
+        hasVariants: row.variants.length > 0,
+        stats: { views: videoViewCount, favorites: _count.wishlistBy, comments: videoCommentCount, shares: videoShareCount },
       })),
       nextCursor: rows.length > query.limit ? page[page.length - 1].id : null,
     };
@@ -209,6 +238,71 @@ export class ProductsService {
     const cards = new Map((await this.toCards(rows)).map((c) => [c.id, c]));
     const items = ids.flatMap(({ id }) => (cards.has(id) ? [cards.get(id)!] : []));
     return { items, page, pageSize, total, hasMore: page * pageSize < total };
+  }
+
+  /** Storefront search (§5): every word must match the name, description, SKU, shop or category (Lao or English). */
+  async search(q: string, page: number, pageSize: number) {
+    const words = q.trim().split(/\s+/).filter(Boolean).slice(0, 8);
+    if (!words.length) return { items: [], page, pageSize, total: 0, hasMore: false };
+    const where = Prisma.sql`p.status = 'PUBLISHED' AND s.status = 'APPROVED' AND ${Prisma.join(
+      words.map((w) => Prisma.sql`(${SEARCHABLE}) ILIKE ${like(w)}`),
+      ' AND ',
+    )}`;
+    const [ids, [{ total }]] = await Promise.all([
+      this.prisma.$queryRaw<{ id: string }[]>`
+        SELECT p.id FROM "Product" p ${SEARCH_JOINS}
+        WHERE ${where}
+        ORDER BY (p.name ILIKE ${like(words.join(' '))}) DESC, p."isPinned" DESC, p."soldCount" DESC, p.id DESC
+        LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`,
+      this.prisma.$queryRaw<{ total: number }[]>`SELECT COUNT(*)::int AS total FROM "Product" p ${SEARCH_JOINS} WHERE ${where}`,
+    ]);
+    return { items: await this.cardsByIds(ids.map((r) => r.id)), page, pageSize, total, hasMore: page * pageSize < total };
+  }
+
+  /**
+   * Visible products matching any of `keywords` (photo search), best first: a keyword in the
+   * name counts double, and products in `category` (or its subcategories) get a bonus.
+   */
+  async keywordMatches(keywords: string[], category: string | null, limit: number, shopId?: string): Promise<{ productId: string; hits: number }[]> {
+    if (!keywords.length && !category) return [];
+    const scores = keywords.map(
+      (k) => Prisma.sql`(CASE WHEN p.name ILIKE ${like(k)} THEN 2 WHEN (${SEARCHABLE}) ILIKE ${like(k)} THEN 1 ELSE 0 END)`,
+    );
+    const inCategory = category ? Prisma.sql`(CASE WHEN c.slug = ${category} OR pc.slug = ${category} THEN 1 ELSE 0 END)` : Prisma.sql`0`;
+    const score = Prisma.sql`(${scores.length ? Prisma.join(scores, ' + ') : Prisma.sql`0`} + ${inCategory})`;
+    const rows = await this.prisma.$queryRaw<{ id: string; hits: number }[]>`
+      SELECT p.id, ${score}::int AS hits FROM "Product" p ${SEARCH_JOINS}
+      WHERE p.status = 'PUBLISHED' AND s.status = 'APPROVED' AND ${score} > 0 ${shopId ? Prisma.sql`AND p."shopId" = ${shopId}` : Prisma.empty}
+      ORDER BY hits DESC, p."soldCount" DESC
+      LIMIT ${limit}`;
+    return rows.map((r) => ({ productId: r.id, hits: r.hits }));
+  }
+
+  /**
+   * Visible products matching every group (any alternative within a group), best sellers
+   * first — e.g. [["food", "ອາຫານ"], ["cat", "ແມວ"]] finds cat food in either language.
+   * `shopId`: only that shop's products (its chat bot).
+   */
+  async matchAll(groups: string[][], limit: number, shopId?: string): Promise<string[]> {
+    const usable = groups.map((g) => g.filter((w) => w.trim())).filter((g) => g.length);
+    if (!usable.length) return [];
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT p.id FROM "Product" p ${SEARCH_JOINS}
+      WHERE p.status = 'PUBLISHED' AND s.status = 'APPROVED' ${shopId ? Prisma.sql`AND p."shopId" = ${shopId}` : Prisma.empty} AND ${Prisma.join(
+        usable.map((g) => Prisma.sql`(${Prisma.join(g.map((w) => Prisma.sql`(${SEARCHABLE}) ILIKE ${like(w)}`), ' OR ')})`),
+        ' AND ',
+      )}
+      ORDER BY p."isPinned" DESC, p."soldCount" DESC, p.id DESC
+      LIMIT ${limit}`;
+    return rows.map((r) => r.id);
+  }
+
+  /** Cards for `ids`, in that order (missing or hidden ones are skipped). */
+  async cardsByIds(ids: string[]): Promise<ProductCard[]> {
+    if (!ids.length) return [];
+    const rows = await this.prisma.product.findMany({ where: { id: { in: ids }, ...VISIBLE }, select: cardSelect });
+    const cards = new Map((await this.toCards(rows)).map((c) => [c.id, c]));
+    return ids.flatMap((id) => (cards.has(id) ? [cards.get(id)!] : []));
   }
 
   private async toCards(rows: CardRow[]): Promise<ProductCard[]> {
@@ -260,13 +354,14 @@ export class ProductsService {
 
     const flash = (await this.flash.discounts([product.id])).get(product.id);
     const base = product.price.toNumber();
+    const options = productOptions(product.options, product.variants);
     const variants = product.variants.map((v) => {
       const attributes = v.attributes as Record<string, string>;
       const price = v.price?.toNumber() ?? base;
       return {
         id: v.id,
         sku: v.sku,
-        label: Object.values(attributes).join(' / '),
+        label: variantLabel(options, attributes),
         attributes,
         price: flash ? flashPrice(price, flash.percent) : price,
         regularPrice: flash ? price : null,
@@ -281,6 +376,7 @@ export class ProductsService {
       sku: product.sku,
       name: product.name,
       description: product.description,
+      options,
       ...withFlash(
         priceRange(
           base,

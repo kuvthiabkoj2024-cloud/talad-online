@@ -49,10 +49,12 @@ export interface DeliveryOption {
 
 export type CouponErrorCode =
   | "COUPON_INVALID"
+  | "COUPON_NOT_STARTED"
   | "COUPON_EXPIRED"
   | "COUPON_USED_UP"
   | "COUPON_ALREADY_USED"
-  | "COUPON_MIN_ORDER";
+  | "COUPON_MIN_ORDER"
+  | "COUPON_OWN_SHOP";
 
 export interface CheckoutQuote {
   shops: (CartShop & { discount: number; total: number; transfer: ShopTransferInfo | null })[];

@@ -3,6 +3,7 @@ import { TooltipProvider } from '@talad/ui/components/tooltip'
 import { Outlet } from 'react-router'
 import { AppSidebar } from './app-sidebar'
 import { InstallBanner } from './install-banner'
+import { RealtimeBridge } from './realtime-bridge'
 
 /** The sidebar remembers expanded/collapsed in its `sidebar_state` cookie. */
 function sidebarDefaultOpen(): boolean {
@@ -19,6 +20,7 @@ export function AppShell() {
           <Outlet />
         </SidebarInset>
         <InstallBanner />
+        <RealtimeBridge />
       </SidebarProvider>
     </TooltipProvider>
   )

@@ -123,12 +123,12 @@ export default async function OrdersPage({ searchParams }: PageProps<"/[lang]/ac
           </Link>
         </div>
       ) : (
-        <ul className="flex flex-col gap-3">
+        <ul className="grid gap-3 md:grid-cols-2">
           {orders.map((order) => {
             const href = `${base}/${order.number}`;
             const hidden = order.itemCount - order.items.length;
             return (
-              <li key={order.number} className="overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-border transition-shadow hover:shadow-md">
+              <li key={order.number} className="flex min-w-0 flex-col overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-border transition-shadow hover:shadow-md">
                 <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
                   <span className="flex min-w-0 items-center gap-2 text-sm font-semibold">
                     <Store className="size-4 shrink-0 text-primary" />
@@ -140,7 +140,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/[lang]/ac
                   />
                 </div>
 
-                <Link href={href} className="flex flex-col gap-3 px-4 py-3">
+                <Link href={href} className="flex flex-1 flex-col gap-3 px-4 py-3">
                   {order.items.map((item) => (
                     <div key={item.sku} className="flex items-center gap-3">
                       <OrderThumb src={item.imageUrl} size="sm" />

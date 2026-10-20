@@ -28,6 +28,7 @@ export function PaymentPanel({
   slip,
   onPickSlip,
   dict,
+  bare = false,
 }: {
   title: string;
   /** Image URL of the shop's QR (null when the shop only has account details). */
@@ -37,6 +38,8 @@ export function PaymentPanel({
   slip: SlipState;
   onPickSlip: (file: File) => void;
   dict: Dictionary["checkout"];
+  /** No card frame of its own, for use inside another card (the chat order card). */
+  bare?: boolean;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
@@ -50,7 +53,7 @@ export function PaymentPanel({
   }
 
   return (
-    <section className="flex flex-col gap-4 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border sm:p-5">
+    <section className={bare ? "flex flex-col gap-4" : "flex flex-col gap-4 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border sm:p-5"}>
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
         <h3 className="mt-0.5 flex items-center gap-2 font-semibold text-primary">
@@ -60,11 +63,11 @@ export function PaymentPanel({
         <p className="mt-1 text-sm text-muted-foreground">{dict.scanBody}</p>
       </div>
 
-      <div className="flex flex-col items-center gap-3 rounded-2xl bg-muted/50 p-4 text-center">
+      <div className={`flex flex-col items-center gap-3 rounded-2xl bg-muted/50 text-center ${bare ? "px-2 py-3" : "p-4"}`}>
         {qrSrc && (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element -- private image streamed per session */}
-            <img src={qrSrc} alt={dict.scanTitle} className="size-56 rounded-xl bg-white p-2 ring-1 ring-border sm:size-64" />
+            <img src={qrSrc} alt={dict.scanTitle} className="aspect-square w-full max-w-56 rounded-xl bg-white p-2 ring-1 ring-border sm:max-w-64" />
           </>
         )}
         <div>
@@ -84,15 +87,15 @@ export function PaymentPanel({
           </div>
         )}
         {transfer.accountNumber && (
-          <div className="mt-1 w-full rounded-xl bg-card px-4 py-2.5 text-left text-sm ring-1 ring-border">
+          <div className={`mt-1 w-full rounded-xl bg-card py-2.5 text-left text-sm ring-1 ring-border ${bare ? "px-3" : "px-4"}`}>
             {bank && <p className="text-xs text-muted-foreground">{bank}</p>}
-            <p className="font-medium">{transfer.accountName}</p>
+            <p className="break-words font-medium">{transfer.accountName}</p>
             <div className="flex items-center justify-between gap-2">
-              <span className="font-mono tracking-wide">{groupDigits(transfer.accountNumber)}</span>
+              <span className="min-w-0 break-all font-mono tracking-wide">{groupDigits(transfer.accountNumber)}</span>
               <button
                 type="button"
                 onClick={copyAccount}
-                className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary-soft"
+                className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary-soft"
               >
                 {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
                 {copied ? dict.copied : dict.copy}

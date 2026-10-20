@@ -1,7 +1,8 @@
 import { BottomNav } from "@/components/bottom-nav";
 import { SiteFooter } from "@/components/site-footer";
-import { HideOnFocusRoutes } from "@/components/focus-routes";
+import { HideFooterOnRoutes, HideHeaderOnPhones } from "@/components/focus-routes";
 import { InstallBanner } from "@/components/pwa/install-banner";
+import { StaleClientReload } from "@/components/stale-client-reload";
 import { SiteHeader } from "@/components/site-header";
 import { getDictionary, getLocale } from "../dictionaries";
 
@@ -14,13 +15,16 @@ export default async function StoreLayout({ children }: { children: React.ReactN
   const dict = await getDictionary();
   return (
     <>
-      <SiteHeader locale={locale} dict={dict.header} accountDict={{ auth: dict.auth, account: dict.account }} />
+      <HideHeaderOnPhones>
+        <SiteHeader locale={locale} dict={dict.header} accountDict={{ auth: dict.auth, account: dict.account }} />
+      </HideHeaderOnPhones>
       <main className="flex-1">{children}</main>
-      <HideOnFocusRoutes>
+      <HideFooterOnRoutes>
         <SiteFooter locale={locale} dict={dict.footer} />
-      </HideOnFocusRoutes>
+      </HideFooterOnRoutes>
       <BottomNav locale={locale} dict={dict.nav} />
       <InstallBanner dict={dict.pwa} />
+      <StaleClientReload />
     </>
   );
 }

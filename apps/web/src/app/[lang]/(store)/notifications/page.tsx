@@ -26,6 +26,7 @@ import { formatDate } from "@/lib/orders";
 import { requireCustomer } from "@/lib/require-customer";
 import { apiGetAsCustomer } from "@/lib/session";
 import { getDictionary, getLocale, type Dictionary } from "@/app/[lang]/dictionaries";
+import { RefreshOnLive } from "@/components/realtime/refresh-on-live";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { notifications } = await getDictionary();
@@ -111,6 +112,7 @@ export default async function NotificationsPage({ searchParams }: PageProps<"/[l
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-6 sm:py-8">
+      <RefreshOnLive />
       <PageHeading
         title={dict.title}
         description={dict.description}

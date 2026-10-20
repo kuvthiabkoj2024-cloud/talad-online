@@ -136,6 +136,16 @@ export const lo: Dict = {
     TWO_FACTOR_INVALID: 'ລະຫັດບໍ່ຖືກຕ້ອງ. ກະລຸນາກວດແລ້ວລອງໃໝ່.',
     CHALLENGE_EXPIRED: 'ການເຂົ້າສູ່ລະບົບໝົດເວລາ. ກະລຸນາເລີ່ມໃໝ່.',
   },
+  notifications: {
+    title: 'ການແຈ້ງເຕືອນ',
+    empty: 'ຍັງບໍ່ມີການແຈ້ງເຕືອນ. ຮ້ານທີ່ສະໝັກໃໝ່ຈະສະແດງຢູ່ນີ້.',
+    markAllRead: 'ອ່ານທັງໝົດແລ້ວ',
+    soundOn: 'ເປີດສຽງ',
+    soundOff: 'ປິດສຽງ',
+    view: 'ເບິ່ງ',
+    loadMore: 'ສະແດງເພີ່ມ',
+    unread: 'ຍັງບໍ່ອ່ານ {n}',
+  },
   dashboard: {
     title: 'ພາບລວມ',
     description: 'ສະພາບຂອງຕະຫຼາດ.',

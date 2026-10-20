@@ -52,7 +52,7 @@ export function ShopCard({
           </span>
         </Link>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
-          <Link href={`/${locale}/chat?shop=${shop.slug}`} className={outline}>
+          <Link href={`/${locale}/messages/new?shop=${shop.slug}${productId ? `&product=${productId}` : ""}`} className={outline}>
             <MessageCircleMore className="size-5" />
             {dict.chatWithShop}
           </Link>

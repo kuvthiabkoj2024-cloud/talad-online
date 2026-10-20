@@ -29,7 +29,8 @@ export default async function HomePage() {
   }));
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:py-8">
+    <>
+    <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 pt-6 sm:pt-8">
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <HeroCarousel slides={home.slides} banners={bannerSlides} slideLabel={home.slide} />
         <PromoCards dict={home} />
@@ -47,10 +48,14 @@ export default async function HomePage() {
         labels={{ title: home.categories, all: home.all, prev: home.prev, next: home.next }}
       />
 
-      <Suspense fallback={null}>
-        <FlashSale dict={home} locale={locale} />
-      </Suspense>
+    </div>
 
+    {/* Flash sale: a full-width band between the page's centred sections. */}
+    <Suspense fallback={<div className="h-6" />}>
+      <FlashSale dict={home} locale={locale} />
+    </Suspense>
+
+    <div className="mx-auto max-w-7xl px-4 pb-6 sm:pb-8">
       <div className="mt-4 flex flex-col gap-10">
         <Suspense fallback={<ProductGridSkel />}>
           <ProductGrid id="recommended" title={home.recommended} query={{ sort: "popular" }} />
@@ -60,5 +65,6 @@ export default async function HomePage() {
         </Suspense>
       </div>
     </div>
+    </>
   );
 }

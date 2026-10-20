@@ -9,10 +9,12 @@ import {
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsIn,
   IsInt,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
@@ -33,11 +35,9 @@ export class ShopProductVariantDto {
   @IsUUID('7')
   id?: string;
 
-  /** Option value, e.g. "L" or "500 g". */
-  @Transform(trim)
-  @IsString()
-  @Length(1, 50)
-  value: string;
+  /** One value per option, e.g. { "Colour": "Red", "Size": "M" }. */
+  @IsObject()
+  attributes: Record<string, string>;
 
   @Transform(trim)
   @Matches(PRODUCT_RULES.skuPattern)
@@ -55,6 +55,22 @@ export class ShopProductVariantDto {
   @Min(0)
   @Max(PRODUCT_RULES.maxStock)
   stock: number;
+}
+
+/** An option the variants differ by, with its values in the order shown to customers. */
+export class ShopProductOptionDto {
+  @Transform(trim)
+  @IsString()
+  @Length(1, 30)
+  name: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(PRODUCT_RULES.maxOptionValues)
+  @Transform(({ value }: { value: unknown }) => (Array.isArray(value) ? value.map((v) => (typeof v === 'string' ? v.trim() : v)) : value))
+  @IsString({ each: true })
+  @Length(1, 50, { each: true })
+  values: string[];
 }
 
 export class ShopProductDto {
@@ -116,12 +132,13 @@ export class ShopProductDto {
   @IsString()
   videoKey?: string | null;
 
-  /** Name of the option the variants differ by, e.g. "Size". Required with variants. */
+  /** What the variants differ by (1–2 options, e.g. colour and size). Required with variants. */
   @IsOptional()
-  @Transform(trim)
-  @IsString()
-  @Length(1, 30)
-  variantOption?: string;
+  @IsArray()
+  @ArrayMaxSize(PRODUCT_RULES.maxOptions)
+  @ValidateNested({ each: true })
+  @Type(() => ShopProductOptionDto)
+  options?: ShopProductOptionDto[];
 
   @IsArray()
   @ArrayMaxSize(PRODUCT_RULES.maxVariants)

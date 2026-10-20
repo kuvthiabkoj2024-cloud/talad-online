@@ -6,6 +6,7 @@ import { Link } from 'react-router'
 import { useAuth } from '@/auth/context'
 import { useI18n } from '@/i18n/context'
 import { AccountMenu, AdminAvatar } from './account-menu'
+import { NotificationBell } from './notification-bell'
 
 /** Sticky top bar: sidebar toggle, optional back link, title, and the account on phones. */
 export function TopBar({ title, backTo }: { title: string; backTo?: string }) {
@@ -21,6 +22,7 @@ export function TopBar({ title, backTo }: { title: string; backTo?: string }) {
         </Link>
       )}
       <h1 className="min-w-0 flex-1 truncate text-base font-semibold">{title}</h1>
+      {admin && <NotificationBell />}
       {admin && (
         <span className="md:hidden">
           <AccountMenu

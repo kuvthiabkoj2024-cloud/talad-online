@@ -1,8 +1,8 @@
 import {
-  BarChart3,
   BotMessageSquare,
   House,
   Megaphone,
+  MessagesSquare,
   Package,
   ReceiptText,
   ShieldCheck,
@@ -24,7 +24,7 @@ export interface NavItem {
   icon: LucideIcon
 }
 
-/** Sidebar (desktop) groups; the phone home screen shows `TOOLS` as a grid instead. */
+/** Sidebar groups (a slide-out menu on phones). */
 export const NAV_GROUPS: { label: NavKey; items: NavItem[] }[] = [
   {
     label: 'groupShop',
@@ -38,6 +38,7 @@ export const NAV_GROUPS: { label: NavKey; items: NavItem[] }[] = [
     label: 'groupSales',
     items: [
       { to: '/orders', label: 'orders', icon: ReceiptText },
+      { to: '/messages', label: 'messages', icon: MessagesSquare },
       { to: '/coupons', label: 'coupons', icon: TicketPercent },
       { to: '/marketing', label: 'marketing', icon: Megaphone },
       { to: '/customers', label: 'customers', icon: Users },
@@ -47,7 +48,6 @@ export const NAV_GROUPS: { label: NavKey; items: NavItem[] }[] = [
     label: 'groupInsights',
     items: [
       { to: '/finance', label: 'finance', icon: Wallet },
-      { to: '/stats', label: 'stats', icon: BarChart3 },
       { to: '/reviews', label: 'reviews', icon: Star },
       { to: '/chatbot', label: 'chatbot', icon: BotMessageSquare },
     ],
@@ -61,17 +61,5 @@ export const NAV_GROUPS: { label: NavKey; items: NavItem[] }[] = [
   },
 ]
 
-/** Phone home-screen tool grid, in the order sellers reach for them. */
-export const TOOLS: NavItem[] = [
-  { to: '/products', label: 'products', icon: Package },
-  { to: '/orders', label: 'orders', icon: ReceiptText },
-  { to: '/finance', label: 'finance', icon: Wallet },
-  { to: '/stats', label: 'stats', icon: BarChart3 },
-  { to: '/videos', label: 'videos', icon: Video },
-  { to: '/chatbot', label: 'chatbot', icon: BotMessageSquare },
-  { to: '/coupons', label: 'coupons', icon: TicketPercent },
-  { to: '/marketing', label: 'marketing', icon: Megaphone },
-]
-
 /** Sections that aren't built yet; they render the "coming soon" page. */
-export const COMING_SOON: NavItem[] = NAV_GROUPS.flatMap((g) => g.items).filter((i) => i.to === '/chatbot')
+export const COMING_SOON: NavItem[] = []

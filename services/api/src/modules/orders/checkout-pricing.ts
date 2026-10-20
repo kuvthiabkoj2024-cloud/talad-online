@@ -2,10 +2,12 @@
 
 export type CouponErrorCode =
   | 'COUPON_INVALID'
+  | 'COUPON_NOT_STARTED'
   | 'COUPON_EXPIRED'
   | 'COUPON_USED_UP'
   | 'COUPON_ALREADY_USED'
-  | 'COUPON_MIN_ORDER';
+  | 'COUPON_MIN_ORDER'
+  | 'COUPON_OWN_SHOP';
 
 export interface CouponRule {
   id: string;
@@ -30,10 +32,13 @@ export const normalizeCouponCode = (code: string) => code.trim().toUpperCase();
 /** Why `rule` can't be used on `base` (the subtotal it applies to), or null if it can. */
 export function couponProblem(
   rule: CouponRule,
-  { base, now, usedByCustomer }: { base: number; now: Date; usedByCustomer: number },
+  { base, now, usedByCustomer, ownShop = false }: { base: number; now: Date; usedByCustomer: number; ownShop?: boolean },
 ): CouponErrorCode | null {
   if (!rule.isActive) return 'COUPON_INVALID';
-  if (now < rule.startsAt || now > rule.endsAt) return 'COUPON_EXPIRED';
+  // A seller can't give themselves their own shop's discount.
+  if (ownShop) return 'COUPON_OWN_SHOP';
+  if (now < rule.startsAt) return 'COUPON_NOT_STARTED';
+  if (now > rule.endsAt) return 'COUPON_EXPIRED';
   if (rule.usageLimit !== null && rule.usedCount >= rule.usageLimit) return 'COUPON_USED_UP';
   if (rule.perCustomer !== null && usedByCustomer >= rule.perCustomer) return 'COUPON_ALREADY_USED';
   if (base <= 0 || (rule.minOrderAmount !== null && base < rule.minOrderAmount)) return 'COUPON_MIN_ORDER';

@@ -4,11 +4,8 @@ import { IsBoolean, IsDate, IsIn, IsInt, IsNumber, IsOptional, Matches, Max, Min
 
 const upper = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim().toUpperCase() : value);
 
-export class ShopCouponDto {
-  @Transform(upper)
-  @Matches(COUPON_RULES.codePattern)
-  code: string;
-
+/** What a coupon gives and when — shared by single codes and generated batches. */
+export class CouponRulesDto {
   @IsIn(['PERCENTAGE', 'FIXED_AMOUNT'])
   type: 'PERCENTAGE' | 'FIXED_AMOUNT';
 
@@ -33,14 +30,6 @@ export class ShopCouponDto {
   @Max(PRODUCT_RULES.maxPrice)
   maxDiscount?: number | null;
 
-  /** Total redemptions; null = unlimited. */
-  @IsOptional()
-  @ValidateIf((_, v) => v !== null)
-  @IsInt()
-  @Min(1)
-  @Max(1_000_000)
-  usageLimit?: number | null;
-
   /** Per customer; null = unlimited. */
   @IsOptional()
   @ValidateIf((_, v) => v !== null)
@@ -59,6 +48,40 @@ export class ShopCouponDto {
 
   @IsBoolean()
   isActive: boolean;
+}
+
+/** One code; `usageLimit` caps how many customers (or times) can use it. */
+export class ShopCouponDto extends CouponRulesDto {
+  @Transform(upper)
+  @Matches(COUPON_RULES.codePattern)
+  code: string;
+
+  /** Total redemptions; null = unlimited. */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000)
+  usageLimit?: number | null;
+}
+
+/** Many distinct codes with the same rules, e.g. one per customer on printed vouchers. */
+export class CouponBatchDto extends CouponRulesDto {
+  @IsInt()
+  @Min(2)
+  @Max(COUPON_RULES.batchMax)
+  quantity: number;
+
+  @IsOptional()
+  @Transform(upper)
+  @Matches(COUPON_RULES.prefixPattern)
+  prefix?: string;
+
+  /** How many times each code can be used (1 = a single-use voucher). */
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  usesPerCode: number;
 }
 
 export class CouponActiveDto {

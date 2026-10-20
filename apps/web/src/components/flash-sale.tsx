@@ -15,22 +15,25 @@ export async function FlashSale({ dict, locale }: { dict: Dictionary["home"]; lo
   const { product } = await getDictionary();
 
   return (
-    <section aria-labelledby="flash-sale" className="rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border sm:p-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 id="flash-sale" className="text-xl font-bold text-sale sm:text-2xl">
-          ⚡ {dict.flashSale}
-        </h2>
-        <span className="flex items-center gap-2 text-sm text-muted-foreground">
-          {dict.endsIn} <Countdown endsAt={sale.endsAt} />
-        </span>
+    // Full width: the home page renders this between its centred sections; content keeps the page's column.
+    <section aria-labelledby="flash-sale" className="my-6 bg-gradient-to-r from-[#d6332a] via-[#e5482b] to-[#f57c1f] py-5 text-white sm:my-8 sm:py-7">
+      <div className="mx-auto max-w-7xl px-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 id="flash-sale" className="text-xl font-extrabold drop-shadow-sm sm:text-2xl">
+            ⚡ {dict.flashSale}
+          </h2>
+          <span className="flex items-center gap-2 text-sm font-medium text-white/90">
+            {dict.endsIn} <Countdown endsAt={sale.endsAt} />
+          </span>
+        </div>
+        <ul className="no-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:gap-4">
+          {sale.items.map((p) => (
+            <li key={p.id} className="flex w-40 shrink-0 text-foreground sm:w-48">
+              <ProductCard product={p} locale={locale} soldLabel={product.sold} />
+            </li>
+          ))}
+        </ul>
       </div>
-      <ul className="no-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:gap-4 sm:px-6">
-        {sale.items.map((p) => (
-          <li key={p.id} className="flex w-40 shrink-0 sm:w-48">
-            <ProductCard product={p} locale={locale} soldLabel={product.sold} />
-          </li>
-        ))}
-      </ul>
     </section>
   );
 }

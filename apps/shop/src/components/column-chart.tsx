@@ -10,6 +10,8 @@ const HEIGHT = 200
 const PAD = { top: 12, right: 8, bottom: 24, left: 48 }
 const MAX_BAR = 24
 const GAP = 2
+/** Date labels closer than this to the last one are skipped (narrow screens). */
+const MIN_LABEL_GAP = 56
 
 /** 0 / 1,000 / 2,000…: about four clean steps covering `max` (whole steps for counts). */
 function niceTicks(max: number, integer: boolean): number[] {
@@ -114,7 +116,7 @@ export function ColumnChart({
               )}
               {/* Hit target: the whole column band, taller than the mark. */}
               <rect x={PAD.left + i * band} y={PAD.top} width={band} height={plotH} fill="transparent" onPointerEnter={() => setActive(i)} />
-              {(i % labelEvery === 0 || i === data.length - 1) && (
+              {((i % labelEvery === 0 && (data.length - 1 - i) * band >= MIN_LABEL_GAP) || i === data.length - 1) && (
                 <text x={PAD.left + i * band + band / 2} y={HEIGHT - 6} textAnchor="middle" className="fill-muted-foreground text-[11px]">
                   {formatKey(d.key)}
                 </text>

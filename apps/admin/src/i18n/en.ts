@@ -134,6 +134,16 @@ export const en = {
     TWO_FACTOR_INVALID: 'That code isn’t right. Check it and try again.',
     CHALLENGE_EXPIRED: 'This sign-in took too long. Please start again.',
   },
+  notifications: {
+    title: 'Notifications',
+    empty: 'No notifications yet. New shop applications show up here.',
+    markAllRead: 'Mark all as read',
+    soundOn: 'Sound on',
+    soundOff: 'Sound off',
+    view: 'View',
+    loadMore: 'Show more',
+    unread: '{n} unread',
+  },
   dashboard: {
     title: 'Dashboard',
     description: 'How the marketplace is doing.',

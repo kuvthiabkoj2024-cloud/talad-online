@@ -39,7 +39,8 @@ describe('couponProblem', () => {
   it.each([
     [rule({ isActive: false }), ok, 'COUPON_INVALID'],
     [rule({ endsAt: new Date('2026-10-01') }), ok, 'COUPON_EXPIRED'],
-    [rule({ startsAt: new Date('2026-11-01') }), ok, 'COUPON_EXPIRED'],
+    [rule({ startsAt: new Date('2026-11-01') }), ok, 'COUPON_NOT_STARTED'],
+    [rule({ shopId: 's1' }), { ...ok, ownShop: true }, 'COUPON_OWN_SHOP'],
     [rule({ usageLimit: 100, usedCount: 100 }), ok, 'COUPON_USED_UP'],
     [rule({ perCustomer: 1 }), { ...ok, usedByCustomer: 1 }, 'COUPON_ALREADY_USED'],
     [rule({ minOrderAmount: 300_000 }), ok, 'COUPON_MIN_ORDER'],

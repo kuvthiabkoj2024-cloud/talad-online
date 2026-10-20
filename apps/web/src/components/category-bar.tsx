@@ -1,34 +1,9 @@
 "use client";
 
-import {
-  Baby,
-  ChevronLeft,
-  ChevronRight,
-  Dumbbell,
-  PawPrint,
-  Shirt,
-  Smartphone,
-  Sofa,
-  Sparkles,
-  Star,
-  Tag,
-  UtensilsCrossed,
-  type LucideIcon,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, Star } from "lucide-react";
 import Link from "next/link";
 import { useRef } from "react";
-
-// Fallback icons by category slug until admins upload category icons (§2.6).
-const ICONS: Record<string, LucideIcon> = {
-  food: UtensilsCrossed,
-  fashion: Shirt,
-  electronics: Smartphone,
-  home: Sofa,
-  beauty: Sparkles,
-  baby: Baby,
-  pets: PawPrint,
-  sports: Dumbbell,
-};
+import { categoryIcon } from "@/lib/category-icons";
 
 export interface CategoryItem {
   slug: string;
@@ -54,7 +29,7 @@ export function CategoryBar({
 
   const items = [
     { slug: "", name: labels.all, iconUrl: null, icon: Star, active: true },
-    ...categories.map((c) => ({ ...c, icon: ICONS[c.slug] ?? Tag, active: false })),
+    ...categories.map((c) => ({ ...c, icon: categoryIcon(c.slug), active: false })),
   ];
 
   return (

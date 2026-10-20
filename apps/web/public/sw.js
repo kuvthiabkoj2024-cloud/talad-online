@@ -5,12 +5,14 @@
  *   network is down the visitor gets /offline.html instead of the browser's error page.
  *   Pages are never cached, so nothing personal stays on shared phones.
  * - Hashed build files (/_next/static) are cache-first; icons and optimized images are
- *   stale-while-revalidate with a size cap.
+ *   stale-while-revalidate with a size cap. Only files the server marks immutable are kept:
+ *   `next dev` serves changing files under the same names, and a phone that installed this
+ *   worker from a production build must not keep running old code against a dev server.
  * - API calls, Server Actions and RSC requests pass straight through.
  *
  * Bump VERSION when this file's caching rules change.
  */
-const VERSION = "v1";
+const VERSION = "v2";
 const STATIC = `talad-static-${VERSION}`;
 const IMAGES = `talad-images-${VERSION}`;
 const OFFLINE_URL = "/offline.html";
@@ -59,7 +61,7 @@ async function cacheFirst(request) {
   const hit = await cache.match(request);
   if (hit) return hit;
   const res = await fetch(request);
-  if (res.ok) cache.put(request, res.clone());
+  if (res.ok && /immutable/.test(res.headers.get("cache-control") ?? "")) cache.put(request, res.clone());
   return res;
 }
 

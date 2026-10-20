@@ -14,13 +14,14 @@ export async function generateMetadata(): Promise<Metadata> {
 /** Feed: shops' product videos, newest first, one per screen (§2.5). */
 export default async function FeedPage() {
   const locale = await getLocale();
-  const { feed: dict } = await getDictionary();
+  const { feed: dict, cartErrors } = await getDictionary();
   const first = await apiGet<FeedPage>(feedPath());
 
   return (
     <FeedView
       locale={locale}
       dict={dict}
+      cartErrors={cartErrors}
       initialItems={first?.items ?? []}
       initialCursor={first?.nextCursor ?? null}
     />

@@ -42,3 +42,13 @@ export function localized(
 export function productPath(locale: Locale, shopSlug: string, slug: string): string {
   return `/${locale}/p/${shopSlug}/${slug}`;
 }
+
+/** "Just now", "5 min ago", "3 days ago" — for comment timestamps. */
+export function formatRelativeTime(iso: string, locale: Locale, justNow: string, now = Date.now()): string {
+  const seconds = Math.round((new Date(iso).getTime() - now) / 1000);
+  if (Math.abs(seconds) < 60) return justNow;
+  const rtf = new Intl.RelativeTimeFormat(LOCALE_TAGS[locale], { numeric: "auto" });
+  const units: [Intl.RelativeTimeFormatUnit, number][] = [["year", 31_536_000], ["month", 2_592_000], ["week", 604_800], ["day", 86_400], ["hour", 3_600], ["minute", 60]];
+  const [unit, size] = units.find(([, s]) => Math.abs(seconds) >= s)!;
+  return rtf.format(Math.round(seconds / size), unit);
+}

@@ -354,20 +354,28 @@ The example domains below are placeholders; use your own.
 
 ### 2. Build
 
-On the server or in CI, with Node 24 and pnpm 12:
+Production settings live in a **`.env.production`** file in each app. Git ignores these files
+(`.gitignore`): copy them to the server yourself, never commit them.
+
+| File | Domain |
+|---|---|
+| `services/api/.env.production` | api.taladonline.la (read when `NODE_ENV=production`, before `.env`) |
+| `apps/web/.env.production` | taladonline.la and www.taladonline.la |
+| `apps/shop/.env.production` | shop.taladonline.la |
+| `apps/admin/.env.production` | admin.taladonline.la |
+| `apps/mobile/.env.production` | the mobile app's API address |
+
+Fill in every `CHANGE_ME` value: database, Redis, and Bunny. The JWT secrets and the first
+admin password are already generated. Then, on the server or in CI, with Node 24 and pnpm 12:
 
 ```bash
 pnpm install --frozen-lockfile
-
-# Build-time settings for the browser apps (they're compiled into the bundles)
-export VITE_API_URL=https://api.taladonline.la/api/v1
-export VITE_STOREFRONT_URL=https://www.taladonline.la
-export API_URL=https://api.taladonline.la/api/v1
-export NEXT_PUBLIC_SHOP_URL=https://shop.taladonline.la
-export NEXT_PUBLIC_MEDIA_HOST=your-zone.b-cdn.net
-
-pnpm build          # builds @talad/shared first, then the API, storefront, Seller Center and admin
+NODE_ENV=production pnpm build   # @talad/shared first, then the API, storefront, Seller Center and admin
 ```
+
+Don't keep the development `apps/web/.env.local` on the build machine. Next.js lets `.env.local`
+override `.env.production`, so its `localhost` addresses would be used. Vite apps prefer
+`.env.production`, so `.env.local` is harmless there.
 
 Outputs:
 
@@ -381,17 +389,16 @@ Outputs:
 ### 3. Configure and migrate the API
 
 ```bash
-cd services/api
-cp .env.example .env            # then set NODE_ENV=production and the production values
-pnpm db:deploy                  # apply all migrations (safe to run on every release)
-pnpm db:seed                    # FIRST DEPLOY ONLY: roles, the first Super Admin, categories, units
+cd services/api                 # .env.production is in place (see step 2)
+NODE_ENV=production pnpm db:deploy   # apply all migrations (safe to run on every release)
+NODE_ENV=production pnpm db:seed     # FIRST DEPLOY ONLY: roles, the first Super Admin, categories, units
 ```
 
 The seed also adds a demo shop and products. On a real launch, remove or hide them afterwards:
 in the admin console, suspend the demo shop.
 
-Set `CORS_ORIGINS` to the exact origins of the storefront, Seller Center and admin, and
-`ADMIN_APP_URL` to the admin console.
+`CORS_ORIGINS` already lists taladonline.la, www.taladonline.la, shop.taladonline.la and
+admin.taladonline.la, and `ADMIN_APP_URL` points at the admin console.
 
 ### 4. Run the API and storefront
 
@@ -504,8 +511,8 @@ npx eas-cli submit --platform all
 ```bash
 git pull
 pnpm install --frozen-lockfile
-pnpm build                              # with the same build-time env as before
-pnpm --filter @talad/api db:deploy      # new migrations, if any
+NODE_ENV=production pnpm build                          # uses the .env.production files
+NODE_ENV=production pnpm --filter @talad/api db:deploy  # new migrations, if any
 # restart the API and storefront; upload the new apps/shop/dist and apps/admin/dist
 ```
 

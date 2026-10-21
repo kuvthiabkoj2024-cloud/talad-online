@@ -3,7 +3,9 @@
  * delivery provider), CMS page stubs, platform settings and a demo catalog.
  * Idempotent — safe to run repeatedly.
  */
-import 'dotenv/config';
+import { config } from 'dotenv';
+// Production servers keep their settings in .env.production (never committed); the first file wins.
+config({ path: process.env.NODE_ENV === 'production' ? ['.env.production', '.env'] : ['.env'], quiet: true });
 import { createHash, randomUUID } from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import argon2 from 'argon2';

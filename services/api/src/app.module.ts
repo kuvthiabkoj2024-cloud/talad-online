@@ -31,6 +31,8 @@ import { AuditModule } from './modules/audit/audit.module.js';
     ConfigModule.forRoot({
       isGlobal: true,
       cache: true,
+      // Production servers keep their settings in .env.production (never committed); the first file wins.
+      envFilePath: process.env.NODE_ENV === 'production' ? ['.env.production', '.env'] : ['.env'],
       validate: validateEnv,
     }),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),

@@ -1,4 +1,6 @@
-import 'dotenv/config';
+import { config } from 'dotenv';
+// Production servers keep their settings in .env.production (never committed); the first file wins.
+config({ path: process.env.NODE_ENV === 'production' ? ['.env.production', '.env'] : ['.env'], quiet: true });
 import { defineConfig } from 'prisma/config';
 
 export default defineConfig({

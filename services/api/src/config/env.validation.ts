@@ -64,6 +64,15 @@ class EnvironmentVariables {
   @IsString()
   ANTHROPIC_MODEL: string = 'claude-sonnet-5-5';
 
+  /**
+   * Behind a reverse proxy (nginx, Docker): how many proxy hops to trust for the client's IP
+   * (X-Forwarded-For), e.g. "1", or an Express value like "loopback". Unset = no proxy. Without
+   * it every visitor appears to come from the proxy, sharing one rate limit.
+   */
+  @IsOptional()
+  @IsString()
+  TRUST_PROXY?: string;
+
   /** Admin console origin, for links in emails (password reset). */
   @IsString()
   ADMIN_APP_URL: string = 'http://localhost:5173';

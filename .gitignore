@@ -22,6 +22,7 @@ android/
 # Production settings and secrets: kept on the server only, never committed
 .env.production
 .env.*.production
+.env.prod
 !.env.example
 
 # logs & os

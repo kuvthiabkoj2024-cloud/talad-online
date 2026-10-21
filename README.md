@@ -21,6 +21,7 @@ console. Product scope lives in [`marketplace-project-scope.md`](marketplace-pro
 - [Repository layout](#repository-layout)
 - [Getting started](#getting-started)
 - [Commands](#commands)
+- [Build commands](#build-commands)
 - [Configuration](#configuration)
 - [How it fits together](#how-it-fits-together)
 - [Deployment](#deployment)
@@ -229,6 +230,62 @@ Run from the repository root.
 
 ---
 
+## Build commands
+
+Run from the repository root. `@talad/shared` is always built first (Turbo handles the order).
+
+### Without Docker
+
+| Build | Command | Output |
+|---|---|---|
+| Everything | `NODE_ENV=production pnpm build` | all of the below |
+| API | `pnpm turbo run build --filter=@talad/api` | `services/api/dist/` |
+| Storefront | `NODE_ENV=production pnpm turbo run build --filter=@talad/web` | `apps/web/.next/` |
+| Seller Center | `NODE_ENV=production pnpm turbo run build --filter=@talad/shop` | `apps/shop/dist/` |
+| Admin | `NODE_ENV=production pnpm turbo run build --filter=@talad/admin` | `apps/admin/dist/` |
+| Shared package only | `pnpm --filter @talad/shared build` | `packages/shared/dist/` |
+
+With `NODE_ENV=production`, the storefront, Seller Center and admin read their
+`.env.production` and bake those URLs into the build.
+
+### With Docker
+
+All images come from `infra/docker/Dockerfile`, one target per app:
+
+```bash
+# One image at a time
+docker build -f infra/docker/Dockerfile --target api   -t talad/api   .
+docker build -f infra/docker/Dockerfile --target web   -t talad/web   .
+docker build -f infra/docker/Dockerfile --target shop  -t talad/shop  .
+docker build -f infra/docker/Dockerfile --target admin -t talad/admin .
+
+# Or the whole production stack through compose
+docker compose -f infra/docker/docker-compose.prod.yml --env-file infra/docker/.env.prod build
+docker compose -f infra/docker/docker-compose.prod.yml --env-file infra/docker/.env.prod build web   # one service
+
+# Build without cache (after changing a .env.production, or if a build looks stale)
+docker compose -f infra/docker/docker-compose.prod.yml --env-file infra/docker/.env.prod build --no-cache web
+```
+
+| Image | Target | Runs | Port inside |
+|---|---|---|---|
+| `talad/api` | `api` | `node dist/main.js` | 4000 |
+| `talad/web` | `web` | `next start` | 3000 |
+| `talad/shop` | `shop` | nginx serving the Seller Center | 80 |
+| `talad/admin` | `admin` | nginx serving the admin console | 80 |
+
+Building an image for a server with a different CPU (for example on an Apple Silicon Mac for
+an Intel/AMD server): add `--platform linux/amd64` to `docker build`.
+
+### Mobile
+
+```bash
+cd apps/mobile
+npx eas-cli build --platform android    # or ios, or all
+```
+
+---
+
 ## Configuration
 
 Every app reads its own env file. The `.env.example` files list every value with comments.
@@ -382,7 +439,7 @@ Outputs:
 | App | Output | Run with |
 |---|---|---|
 | API | `services/api/dist/` | `node dist/main.js` (from `services/api`, with its `.env`) |
-| Storefront | `apps/web/.next/` | `pnpm --filter @talad/web start` (port 3000, `-p` to change) |
+| Storefront | `apps/web/.next/` | `pnpm --filter @talad/web start -- -p 3010` (pick a free port) |
 | Seller Center | `apps/shop/dist/` | static files |
 | Admin | `apps/admin/dist/` | static files |
 
@@ -409,7 +466,7 @@ Keep both processes running with your process manager (systemd, PM2, Docker…),
 cd services/api && NODE_ENV=production node dist/main.js
 
 # Storefront
-cd apps/web && NODE_ENV=production pnpm start -- -p 3000
+cd apps/web && NODE_ENV=production pnpm start -- -p 3010
 ```
 
 - **Health checks:** `GET /api/health/live` (process up) and `GET /api/health/ready`
@@ -419,6 +476,83 @@ cd apps/web && NODE_ENV=production pnpm start -- -p 3000
 - **Running several API instances:** they can share the work. Live events reach every instance
   through Postgres, and the order-deadline sweeps use conditional updates, so an order is
   never moved twice.
+
+### Running with Docker (recommended on a shared server)
+
+Never use `pnpm dev` on a server: it starts development servers on fixed ports (3000, 5173,
+5174, 8081…) that other apps may already use. Everything is built and run with Docker instead:
+
+| File | What it does |
+|---|---|
+| `infra/docker/Dockerfile` | One image per app: `api`, `web` (Node), `shop`, `admin` (nginx serving the built files) |
+| `infra/docker/Dockerfile.dockerignore` | Keeps `node_modules`, `.env`, `.env.local` and the API's `.env.production` out of every image |
+| `infra/docker/nginx-spa.conf` | nginx inside the Seller Center / admin images (app routes, long caching of hashed assets) |
+| `infra/docker/docker-compose.prod.yml` | The whole stack: Postgres, Redis, API, storefront, Seller Center, admin |
+
+Every container listens on **127.0.0.1 only**, on ports chosen to avoid other apps. The
+server's own nginx handles TLS and sends each domain to its port:
+
+| Domain | Container | Local port |
+|---|---|---|
+| api.taladonline.la | `api` | 127.0.0.1:4000 |
+| taladonline.la, www.taladonline.la | `web` | 127.0.0.1:3010 |
+| shop.taladonline.la | `shop` | 127.0.0.1:8110 |
+| admin.taladonline.la | `admin` | 127.0.0.1:8120 |
+| (backups, admin tools) | `postgres`, `redis` | 127.0.0.1:5433, 127.0.0.1:6380 |
+
+Change a port in `docker-compose.prod.yml` (and in nginx) if it's taken; `ss -tlnp` lists what's
+in use. Inside the stack the API reaches Postgres and Redis by service name. Compose sets
+`DATABASE_URL`, `REDIS_URL` and `TRUST_PROXY` itself, over the values in `.env.production`.
+
+**First deploy**, from the repository root on the server:
+
+```bash
+# 0. Files that are not in git: copy the .env.production files to the server
+#    (services/api, apps/web, apps/shop, apps/admin), then create the database passwords:
+printf 'POSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\n' "$(openssl rand -hex 24)" "$(openssl rand -hex 24)" > infra/docker/.env.prod
+
+# A shortcut for the commands below
+alias talad='docker compose -f infra/docker/docker-compose.prod.yml --env-file infra/docker/.env.prod'
+
+# 1. Build the images and start Postgres + Redis
+talad build
+talad up -d postgres redis
+
+# 2. Create the tables, then the first Super Admin, roles and catalog (seed: first deploy only)
+talad run --rm api pnpm db:deploy
+talad run --rm api pnpm db:seed
+
+# 3. Start everything
+talad up -d
+talad ps                                   # all "healthy" / "running"
+curl http://127.0.0.1:4000/api/health/ready
+```
+
+**Updating:**
+
+```bash
+git pull
+talad build
+talad run --rm api pnpm db:deploy          # new migrations, if any
+talad up -d                                # recreates only the containers that changed
+docker image prune -f                      # remove old image layers
+```
+
+**Logs and backups:**
+
+```bash
+talad logs -f api                          # or web, shop, admin
+talad exec postgres pg_dump -U talad talad | gzip > talad-$(date +%F).sql.gz
+```
+
+Notes:
+- **Build-time settings.** The storefront, Seller Center and admin bake their public URLs
+  (from their `.env.production`) into the build. Rebuild those images after changing them.
+- **Memory.** Building the storefront needs about 2–3 GB of RAM. On a small server, build when
+  traffic is low, or build on another machine and push the images to a registry.
+- **Don't run the development stack here.** The development `infra/docker/docker-compose.yml`
+  publishes Postgres, Meilisearch and Mailpit on all interfaces with dev passwords. Stop it on a
+  server: `docker compose -f infra/docker/docker-compose.yml down`.
 
 ### 5. Reverse proxy
 
@@ -450,11 +584,11 @@ server {
 
 # Storefront
 server {
-  server_name www.taladonline.la;
+  server_name taladonline.la www.taladonline.la;
   client_max_body_size 20m;             # payment slips, photo search
-  location / { proxy_pass http://127.0.0.1:3000; proxy_set_header Host $host; }
+  location / { proxy_pass http://127.0.0.1:3010; proxy_set_header Host $host; }
   location /api/events {                # storefront live updates (SSE proxy)
-    proxy_pass http://127.0.0.1:3000;
+    proxy_pass http://127.0.0.1:3010;
     proxy_http_version 1.1;
     proxy_set_header Connection '';
     proxy_buffering off;
@@ -462,17 +596,20 @@ server {
   }
 }
 
-# Seller Center (same for admin, with apps/admin/dist)
+# Seller Center and admin (Docker containers serve the built files)
 server {
   server_name shop.taladonline.la;
-  root /srv/talad/apps/shop/dist;
-  location /assets/ { expires 1y; add_header Cache-Control "public, immutable"; }
-  location / { try_files $uri /index.html; }   # client-side routes
+  location / { proxy_pass http://127.0.0.1:8110; proxy_set_header Host $host; }
+}
+server {
+  server_name admin.taladonline.la;
+  location / { proxy_pass http://127.0.0.1:8120; proxy_set_header Host $host; }
 }
 ```
 
-Instead of nginx, the Seller Center and admin can go to any static host (Bunny, Cloudflare
-Pages, S3 + CDN…) as long as unknown paths fall back to `index.html`.
+Without Docker, the Seller Center and admin can be served straight from `apps/shop/dist` and
+`apps/admin/dist` by nginx (`try_files $uri /index.html;`) or any static host. Add TLS with
+`certbot --nginx -d taladonline.la -d www.taladonline.la -d api.taladonline.la -d shop.taladonline.la -d admin.taladonline.la`.
 
 ### 6. Mobile app
 

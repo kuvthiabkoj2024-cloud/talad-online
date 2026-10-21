@@ -1,0 +1,100 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Taladonline production stack, for a server that also runs other apps.
+# Everything listens on 127.0.0.1 only; the server's own nginx (TLS) proxies the domains:
+#   api.taladonline.la                → 127.0.0.1:4000  (api)
+#   taladonline.la, www.taladonline.la → 127.0.0.1:3010  (web)
+#   shop.taladonline.la               → 127.0.0.1:8110  (shop)
+#   admin.taladonline.la              → 127.0.0.1:8120  (admin)
+#   Postgres 127.0.0.1:5433, Redis 127.0.0.1:6380 (for backups / admin tools only)
+#
+# Needs (none committed):
+#   infra/docker/.env.prod          POSTGRES_PASSWORD=…  REDIS_PASSWORD=…
+#   services/api/.env.production    API settings (JWT secrets, Bunny, CORS…)
+#   apps/{web,shop,admin}/.env.production   public URLs, baked in at build time
+#
+# Commands (from the repository root):
+#   docker compose -f infra/docker/docker-compose.prod.yml --env-file infra/docker/.env.prod up -d --build
+#   docker compose -f infra/docker/docker-compose.prod.yml --env-file infra/docker/.env.prod run --rm api pnpm db:deploy
+#   docker compose -f infra/docker/docker-compose.prod.yml --env-file infra/docker/.env.prod run --rm api pnpm db:seed   (first deploy only)
+# ─────────────────────────────────────────────────────────────────────────────
+name: talad-prod
+
+x-build: &build
+  context: ../..
+  dockerfile: infra/docker/Dockerfile
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: talad
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infra/docker/.env.prod}
+      POSTGRES_DB: talad
+    ports: ['127.0.0.1:5433:5432']
+    volumes: ['postgres:/var/lib/postgresql']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U talad -d talad']
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: ['sh', '-c', 'exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes']
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in infra/docker/.env.prod}
+    ports: ['127.0.0.1:6380:6379']
+    volumes: ['redis:/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli -a "$$REDIS_PASSWORD" --no-auth-warning ping | grep PONG']
+      interval: 5s
+      retries: 10
+
+  api:
+    build: { <<: *build, target: api }
+    image: talad/api
+    restart: unless-stopped
+    env_file: ../../services/api/.env.production
+    # These win over the env file: the database and Redis are the containers above.
+    environment:
+      NODE_ENV: production
+      PORT: '4000'
+      DATABASE_URL: postgresql://talad:${POSTGRES_PASSWORD}@postgres:5432/talad?schema=public
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      MODEL_CACHE_DIR: /models
+      # The server's nginx sits in front: trust one proxy hop for the visitor's IP.
+      TRUST_PROXY: '1'
+    ports: ['127.0.0.1:4000:4000']
+    volumes: ['models:/models'] # photo-search model (~90 MB), downloaded once
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  web:
+    build: { <<: *build, target: web }
+    image: talad/web
+    restart: unless-stopped
+    env_file: ../../apps/web/.env.production
+    environment:
+      # Server-side calls go straight to the API container (browsers never use this).
+      API_URL: http://api:4000/api/v1
+    ports: ['127.0.0.1:3010:3000']
+    depends_on: [api]
+
+  shop:
+    build: { <<: *build, target: shop }
+    image: talad/shop
+    restart: unless-stopped
+    ports: ['127.0.0.1:8110:80']
+
+  admin:
+    build: { <<: *build, target: admin }
+    image: talad/admin
+    restart: unless-stopped
+    ports: ['127.0.0.1:8120:80']
+
+volumes:
+  postgres:
+  redis:
+  models:

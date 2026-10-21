@@ -1,0 +1,20 @@
+# Build context for infra/docker/Dockerfile (BuildKit uses this instead of the root .dockerignore).
+# Installed / built output is recreated inside the image.
+**/node_modules
+**/dist
+**/.next
+**/.expo
+**/.turbo
+**/coverage
+**/*.tsbuildinfo
+**/.cache
+.git
+**/.DS_Store
+
+# Secrets and local settings never go into an image.
+**/.env
+**/.env.local
+**/.env.*.local
+services/api/.env.production
+infra/docker/.env.prod
+# Browser apps' .env.production files are kept: they only hold public URLs, read at build time.

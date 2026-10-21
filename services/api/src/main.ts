@@ -1,6 +1,7 @@
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import type { Server } from 'node:http';
@@ -8,8 +9,12 @@ import { AppModule } from './app.module.js';
 import type { Env } from './config/env.validation.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(ConfigService<Env, true>);
+
+  // Behind nginx / Docker: read the visitor's IP from X-Forwarded-For (rate limits, session logs).
+  const trustProxy = config.get('TRUST_PROXY', { infer: true });
+  if (trustProxy) app.set('trust proxy', /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy);
 
   app.use(helmet());
   app.enableCors({

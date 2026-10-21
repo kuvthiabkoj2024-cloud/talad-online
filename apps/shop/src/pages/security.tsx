@@ -87,7 +87,7 @@ export function SecurityPage() {
   return (
     <>
       <TopBar title={t.security.title} backTo="/" />
-      <PageBody className="max-w-3xl">
+      <PageBody>
         <PageIntro title={t.security.title} description={t.security.description} />
         <SecuritySettings />
         {sessions.isPending ? (

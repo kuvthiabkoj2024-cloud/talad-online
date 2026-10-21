@@ -234,6 +234,8 @@ export interface ShopOrderDetail extends Omit<ShopOrderSummary, 'customer' | 'pa
   subtotal: number
   discountTotal: number
   shippingFee: number
+  /** Part of the discount Taladonline funds (platform coupon), paid back to the shop. */
+  platformDiscount: number
   commissionAmount: number
   note: string | null
   customer: { id: string; name: string; phone: string | null }
@@ -305,7 +307,14 @@ export interface ShopCustomerList {
 export interface ShopFinance {
   from: string
   to: string
-  earned: { orders: number; gross: number; commission: number; net: number }
+  /** `gross` = customers paid + platform coupons paid back; `discounts` = what prices were lowered by. */
+  earned: {
+    orders: number
+    gross: number
+    commission: number
+    net: number
+    discounts: { flashSale: number; shopCoupons: number; platformCoupons: number }
+  }
   inProgress: { orders: number; amount: number }
   refunded: { orders: number; amount: number }
   balance: number

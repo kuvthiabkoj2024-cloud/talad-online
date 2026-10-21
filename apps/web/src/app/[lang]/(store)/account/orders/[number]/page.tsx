@@ -18,6 +18,7 @@ import { notFound } from "next/navigation";
 import { OrderProgress } from "@/components/account/order-progress";
 import { OrderStatusBadge } from "@/components/account/order-status-badge";
 import { OrderThumb } from "@/components/account/order-thumb";
+import { ReceiveOrderButton } from "@/components/account/receive-order-button";
 import { OrderPayment } from "@/components/cart/order-payment";
 import { SimulatePaymentButton } from "@/components/cart/simulate-payment-button";
 import { interpolate, productPath } from "@/lib/format";
@@ -110,9 +111,12 @@ export default async function OrderDetailPage({ params }: Props) {
           )}
         </div>
       )}
-      {order.status === "DELIVERED" && order.autoConfirmAt && (
-        <Notice tone="green" icon={Truck}>
-          {interpolate(dict.autoConfirmOn, { date: formatDate(order.autoConfirmAt, locale) })}
+      {order.status === "DELIVERED" && (
+        <Notice tone="green" icon={Truck} title={dict.receiveTitle}>
+          <span className="flex flex-col gap-3">
+            {order.autoConfirmAt && interpolate(dict.autoConfirmOn, { date: formatDate(order.autoConfirmAt, locale) })}
+            <ReceiveOrderButton orderNumber={order.number} labels={dict} />
+          </span>
         </Notice>
       )}
       {order.status === "CANCELLED" && (

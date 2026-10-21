@@ -3,13 +3,13 @@ import { Button } from '@talad/ui/components/button'
 import { Card, CardContent } from '@talad/ui/components/card'
 import { Input } from '@talad/ui/components/input'
 import { Tabs, TabsList, TabsTrigger } from '@talad/ui/components/tabs'
-import { Textarea } from '@talad/ui/components/textarea'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, LoaderCircle } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Field } from '@/components/field'
 import { PageBody, PageIntro, TopBar } from '@/components/page-header'
+import { RichTextEditor } from '@/components/rich-text-editor'
 import { ErrorState, LoadingState } from '@/components/states'
 import { useI18n } from '@/i18n/context'
 import { api, send } from '@/lib/api'
@@ -29,7 +29,7 @@ export function PagesPage() {
   return (
     <>
       <TopBar title={t.pages.title} />
-      <PageBody className="max-w-4xl">
+      <PageBody>
         <PageIntro title={t.pages.title} description={t.pages.description} />
         <Tabs value={slug} onValueChange={(v) => setSlug(v as Slug)}>
           <TabsList className="h-auto flex-wrap">
@@ -88,7 +88,7 @@ function PageEditor({ slug, page }: { slug: Slug; page?: CmsPage }) {
               <Input id={`${l}-title`} required={l === 'lo'} maxLength={120} value={content[l].title} onChange={(e) => edit(l, 'title', e.target.value)} />
             </Field>
             <Field id={`${l}-body`} label={t.pages.body} hint={t.pages.bodyHint}>
-              <Textarea id={`${l}-body`} rows={14} maxLength={50_000} className="font-mono text-sm" value={content[l].body} onChange={(e) => edit(l, 'body', e.target.value)} />
+              <RichTextEditor id={`${l}-body`} value={content[l].body} onChange={(html) => edit(l, 'body', html)} />
             </Field>
           </CardContent>
         </Card>

@@ -70,3 +70,20 @@ export function allocateDiscount(discount: number, shops: { id: string; subtotal
   }
   return parts;
 }
+
+/**
+ * Commission per item: each at its own rate, on what it sold for after its share of a
+ * shop-funded coupon (the shop gave that discount; a platform coupon doesn't lower the fee).
+ */
+export function itemCommissions(lines: { id: string; lineTotal: number; rate: number }[], shopDiscount: number): Map<string, number> {
+  const shares = allocateDiscount(shopDiscount, lines.map((l) => ({ id: l.id, subtotal: l.lineTotal })));
+  return new Map(lines.map((l) => [l.id, Math.round(((l.lineTotal - (shares.get(l.id) ?? 0)) * l.rate) / 100)]));
+}
+
+/**
+ * What a shop is owed for an order: what the customer paid it, plus the discount Taladonline
+ * funds (platform coupons, paid back to the shop), minus commission.
+ */
+export function shopNet(o: { total: number; platformDiscount: number; commission: number }): number {
+  return o.total + o.platformDiscount - o.commission;
+}

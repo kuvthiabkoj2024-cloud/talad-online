@@ -128,3 +128,64 @@
     @apply bg-background text-foreground;
     }
 }
+/* ── Sidebar "tab" active item (opt in with .sidebar-tab on SidebarMenuButton) ────────────────
+   The current page's item reaches the sidebar's edge in the page colour, rounded on the left,
+   with concave corners above and below, as if cut out of the sidebar and joined to the page.
+   Apps give their content area `bg-(--page)` so both match. */
+:root {
+  --page: color-mix(in oklab, var(--muted) 40%, var(--background));
+}
+
+[data-side='left'] [data-slot='sidebar-container'] {
+  border-right-width: 0;
+}
+
+.sidebar-tab[data-active='true'] {
+  position: relative;
+  overflow: visible;
+  /* Out to the sidebar's edge, past the group's padding. */
+  width: calc(100% + 0.5rem);
+  margin-right: -0.5rem;
+  border-radius: 9999px 0 0 9999px;
+  background: var(--page);
+  /* The brand colour reads on the page in both light and dark mode. */
+  color: var(--primary);
+  font-weight: 600;
+}
+.sidebar-tab[data-active='true']:hover {
+  background: var(--page);
+  color: var(--primary);
+}
+.sidebar-tab[data-active='true']::before,
+.sidebar-tab[data-active='true']::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  width: 1rem;
+  height: 1rem;
+  pointer-events: none;
+}
+.sidebar-tab[data-active='true']::before {
+  top: -1rem;
+  border-bottom-right-radius: 1rem;
+  box-shadow: 0.5rem 0.5rem 0 0.5rem var(--page);
+}
+.sidebar-tab[data-active='true']::after {
+  bottom: -1rem;
+  border-top-right-radius: 1rem;
+  box-shadow: 0.5rem -0.5rem 0 0.5rem var(--page);
+}
+
+/* Collapsed to icons, and the phone sheet (no page beside it): a plain rounded highlight. */
+[data-collapsible='icon'] .sidebar-tab[data-active='true'],
+[data-mobile='true'] .sidebar-tab[data-active='true'] {
+  width: 100%;
+  margin-right: 0;
+  border-radius: 0.5rem;
+}
+[data-collapsible='icon'] .sidebar-tab[data-active='true']::before,
+[data-collapsible='icon'] .sidebar-tab[data-active='true']::after,
+[data-mobile='true'] .sidebar-tab[data-active='true']::before,
+[data-mobile='true'] .sidebar-tab[data-active='true']::after {
+  display: none;
+}

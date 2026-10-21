@@ -305,7 +305,7 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
   return (
     <>
       <TopBar title={title} backTo="/products" />
-      <PageBody className="max-w-none pb-28">
+      <PageBody className="pb-28">
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="hidden text-2xl font-semibold tracking-tight md:block">{title}</h2>
           {product && <ProductStatusBadge status={product.status} />}

@@ -1,4 +1,4 @@
-import type { AdminRole, KycDocumentType, Locale, OrderStatus, PaymentMethod, ProductStatus, ShopOrderTab } from '@talad/shared'
+import type { AdminPermission, KycDocumentType, Locale, OrderStatus, PaymentMethod, ProductStatus, ShopOrderTab } from '@talad/shared'
 
 export type LocalizedText = Partial<Record<Locale, string>>
 export type ShopStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED'
@@ -14,12 +14,29 @@ export interface Paged<T> {
   totalPages: number
 }
 
+/** Mirrors `AdminRoleView` (API `GET /admin/roles` adds `adminCount`). */
+export interface AdminRoleInfo {
+  id: string
+  /** Built-in roles: SUPER_ADMIN, SUPPORT, FINANCE; null for roles admins made. */
+  key: string | null
+  name: string
+  description: string | null
+  permissions: AdminPermission[]
+  isSuper: boolean
+  adminCount?: number
+}
+
 /** Mirrors `AdminProfile`. */
 export interface Admin {
   id: string
   email: string
   name: string
-  role: AdminRole
+  role: AdminRoleInfo
+  /** Own permissions replace the role's. */
+  customPermissions: boolean
+  permissions: AdminPermission[]
+  /** What they can actually do (every permission for a Super Admin). */
+  can: AdminPermission[]
   isActive: boolean
   /** Authenticator app (TOTP) is on. */
   twoFactor: boolean
@@ -232,6 +249,41 @@ export interface PayoutRow {
   reference: string | null
   orderCount: number
   createdAt: string
+}
+
+/** API `GET /admin/payouts/:id`. */
+export interface PayoutDetail {
+  id: string
+  shop: {
+    id: string
+    name: string
+    phone: string
+    paymentBankCode: string | null
+    paymentAccountName: string | null
+    paymentAccountNumber: string | null
+    hasQr: boolean
+  }
+  periodStart: string
+  periodEnd: string
+  gross: number
+  commission: number
+  refunds: number
+  net: number
+  status: PayoutStatus
+  paidAt: string | null
+  reference: string | null
+  createdAt: string
+  orders: {
+    number: string
+    placedAt: string
+    completedAt: string
+    subtotal: number
+    discount: number
+    platformDiscount: number
+    total: number
+    commission: number
+    net: number
+  }[]
 }
 
 export interface PayoutList extends Paged<PayoutRow> {

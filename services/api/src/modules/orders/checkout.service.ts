@@ -18,6 +18,7 @@ import {
   allocateDiscount,
   couponDiscount,
   couponProblem,
+  itemCommissions,
   normalizeCouponCode,
   type CouponErrorCode,
   type CouponRule,
@@ -241,7 +242,11 @@ export class CheckoutService {
           const shopOrders: string[] = [];
           for (const [i, group] of quote.shops.entries()) {
             const groupLines = lines.filter((l) => l.shop.id === group.shop.id);
-            const rate = groupLines[0].internal.commissionRate ?? defaultRate;
+            // A shop coupon is the shop's own discount; a platform coupon is funded by Taladonline.
+            const shopDiscount = couponRule?.shopId ? group.discount : 0;
+            const platformDiscount = couponRule && !couponRule.shopId ? group.discount : 0;
+            const rates = new Map(groupLines.map((l) => [l.id, l.internal.commissionRate ?? defaultRate]));
+            const fees = itemCommissions(groupLines.map((l) => ({ id: l.id, lineTotal: l.lineTotal, rate: rates.get(l.id)! })), shopDiscount);
             const shopNumber = quote.shops.length > 1 ? `${number}-${i + 1}` : number;
             const slipKey = isTransfer ? input.slips![group.shop.id] : null;
             await tx.shopOrder.create({
@@ -254,8 +259,9 @@ export class CheckoutService {
                 paymentDueAt: status === 'PENDING' ? new Date(now.getTime() + groupLines[0].internal.paymentWindowHrs * 3_600_000) : null,
                 subtotal: group.subtotal,
                 discountTotal: group.discount,
-                // A shop's own coupon comes out of its revenue; platform coupons don't.
-                commissionAmount: Math.round(((group.subtotal - (couponRule?.shopId ? group.discount : 0)) * rate) / 100),
+                platformDiscount,
+                // Each item at its own rate (shop override, else its category, else the default).
+                commissionAmount: [...fees.values()].reduce((n, f) => n + f, 0),
                 total: group.total,
                 ...(quote.delivery.selectedId && { deliveryProvider: { connect: { id: quote.delivery.selectedId } } }),
                 items: {
@@ -265,8 +271,11 @@ export class CheckoutService {
                     name: l.name,
                     sku: l.sku,
                     unitPrice: l.unitPrice,
+                    regularPrice: l.regularPrice,
                     quantity: l.quantity,
                     lineTotal: l.lineTotal,
+                    commissionRate: rates.get(l.id)!,
+                    commissionAmount: fees.get(l.id)!,
                   })),
                 },
                 // Each shop is paid separately (its own QR / its own courier collecting COD).

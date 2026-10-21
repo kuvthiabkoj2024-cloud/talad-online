@@ -60,7 +60,8 @@ export function OrderDetailPage() {
   }
   const o = order.data
   const actions = [...o.actions].sort((a, b) => Number(PRIMARY.includes(b)) - Number(PRIMARY.includes(a)))
-  const net = o.total - o.commissionAmount
+  // A platform coupon is Taladonline's discount: it's paid back to the shop.
+  const net = o.total + o.platformDiscount - o.commissionAmount
   // Printed on bills and stickers: the profile has the address, the shop the logo and contacts.
   const printShop = {
     name: profile.data?.name ?? shop.data?.name ?? '',
@@ -74,7 +75,7 @@ export function OrderDetailPage() {
   return (
     <>
       <TopBar title={o.number} backTo="/orders" />
-      <PageBody className="max-w-5xl pb-28 md:pb-6">
+      <PageBody className="pb-28 md:pb-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -263,6 +264,7 @@ export function OrderDetailPage() {
                 {o.shippingFee > 0 && <Row label={t.orders.shipping} value={formatMoney(o.shippingFee, locale)} />}
                 <Row label={t.orders.total} value={formatMoney(o.total, locale)} strong />
                 <div className="my-1 border-t" />
+                {o.platformDiscount > 0 && <Row label={t.orders.platformCoupon} value={`+${formatMoney(o.platformDiscount, locale)}`} muted />}
                 <Row label={t.orders.commission} value={`−${formatMoney(o.commissionAmount, locale)}`} muted />
                 <Row label={t.orders.youReceive} value={formatMoney(net, locale)} strong />
               </CardContent>

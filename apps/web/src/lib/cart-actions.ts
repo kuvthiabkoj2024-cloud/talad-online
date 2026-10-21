@@ -120,6 +120,12 @@ export async function simulatePayment(shopOrderNumber: string): Promise<CartResu
   return res.ok ? { ok: true } : res;
 }
 
+/** "I received it": completes a delivered order now (interim — returns come later). */
+export async function receiveOrder(shopOrderNumber: string): Promise<CartResult> {
+  const res = await send("POST", `/me/orders/${encodeURIComponent(shopOrderNumber)}/receive`);
+  return res.ok ? { ok: true } : res;
+}
+
 /** `slip` in the form data: the transfer slip image, uploaded before placing the order. */
 export async function uploadCheckoutSlip(form: FormData): Promise<CartResult<{ slipKey: string }>> {
   const slip = form.get("slip");

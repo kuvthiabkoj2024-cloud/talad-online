@@ -105,7 +105,7 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
 
   const approved = p.status === 'APPROVED'
   return (
-    <PageBody className="max-w-4xl pb-28 md:pb-24">
+    <PageBody className="pb-28 md:pb-24">
       <PageIntro
         title={t.profile.title}
         description={t.profile.description}
@@ -285,7 +285,7 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
       </form>
 
       <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 px-4 py-3 backdrop-blur md:sticky md:px-6">
-        <div className="mx-auto flex max-w-4xl justify-end">
+        <div className="mx-auto flex max-w-6xl justify-end">
           <Button type="submit" form="profile-form" className="w-full sm:w-auto" disabled={save.isPending}>
             {save.isPending && <LoaderCircle className="animate-spin" />}
             {t.profile.save}

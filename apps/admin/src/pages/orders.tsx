@@ -123,7 +123,7 @@ export function OrderDetailPage() {
   return (
     <>
       <TopBar title={o.number} backTo="/orders" />
-      <PageBody className="max-w-6xl">
+      <PageBody>
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="font-mono text-2xl font-semibold">{o.number}</h2>
           <OrderStatusBadge status={o.status} />

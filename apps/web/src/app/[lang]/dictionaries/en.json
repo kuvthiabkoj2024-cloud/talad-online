@@ -333,7 +333,12 @@
     "backToAccount": "Back to Profile",
     "openShop": "Open your shop",
     "openShopDescription": "Sell on Taladonline with this account — free to join.",
-    "messages": "Messages"
+    "messages": "Messages",
+    "receiveTitle": "Got your order?",
+    "receive": "I received it",
+    "receiveConfirm": "Confirm you received everything in this order. It will be completed and can no longer be returned through the app.",
+    "receiveYes": "Yes, I received it",
+    "receiveError": "Couldn't confirm. Please try again."
   },
   "cart": {
     "title": "Cart",

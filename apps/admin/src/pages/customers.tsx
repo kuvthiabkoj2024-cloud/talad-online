@@ -132,7 +132,7 @@ export function CustomerDetailPage() {
   return (
     <>
       <TopBar title={c.name} backTo="/customers" />
-      <PageBody className="max-w-6xl">
+      <PageBody>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">

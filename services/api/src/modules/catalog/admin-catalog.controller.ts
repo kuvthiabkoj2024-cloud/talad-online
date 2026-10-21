@@ -3,7 +3,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { MEDIA_LIMITS } from '@talad/shared';
 import type { AdminUser } from '../../generated/prisma/client.js';
-import { AdminAuthGuard, CurrentAdmin, Roles } from '../auth/admin-auth.guard.js';
+import { AdminAuthGuard, CurrentAdmin, Permission } from '../auth/admin-auth.guard.js';
 import { AdminMediaService } from '../media/admin-media.service.js';
 import { AdminCategoryDto, AdminUnitDto } from './admin-catalog.dto.js';
 import { AdminCatalogService } from './admin-catalog.service.js';
@@ -14,7 +14,7 @@ const id = new ParseUUIDPipe({ version: '7' });
 @ApiTags('admin')
 @ApiBearerAuth()
 @UseGuards(AdminAuthGuard)
-@Roles('SUPER_ADMIN')
+@Permission('catalog')
 @Controller('admin')
 export class AdminCatalogController {
   constructor(

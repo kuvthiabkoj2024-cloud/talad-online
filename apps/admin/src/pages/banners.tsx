@@ -40,7 +40,7 @@ export function BannersPage() {
   return (
     <>
       <TopBar title={t.banners.title} />
-      <PageBody className="max-w-5xl">
+      <PageBody>
         <PageIntro
           title={t.banners.title}
           description={t.banners.description}

@@ -4,9 +4,11 @@ import argon2 from 'argon2';
 import { createHash, randomBytes } from 'node:crypto';
 import QRCode from 'qrcode';
 import type { Env } from '../../config/env.validation.js';
-import type { AdminRole, AdminUser } from '../../generated/prisma/client.js';
+import { ADMIN_PERMISSIONS, effectivePermissions, isAdminPermission, type AdminPermission } from '@talad/shared';
+import type { AdminUser } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import type { AdminWithRole } from '../auth/admin-auth.guard.js';
 import { CHALLENGE_TTL_MS, readChallenge, signChallenge } from '../auth/challenge.js';
 import { EmailService } from '../auth/email.service.js';
 import { SessionService, type ClientInfo } from '../auth/session.service.js';
@@ -19,23 +21,54 @@ export const ADMIN_PASSWORD_MIN = 10;
 const RESET_TTL_MS = 30 * 60_000;
 const RESET_PURPOSE = 'admin_reset';
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
+const withRole = { role: true } as const;
+/** A role's or admin's permission list: known names only, each once, in the console's order. */
+const cleanPermissions = (list: string[]) => ADMIN_PERMISSIONS.filter((p) => list.includes(p));
+
+export interface AdminRoleView {
+  id: string;
+  /** Built-in roles: SUPER_ADMIN, SUPPORT, FINANCE (shown translated); null for roles admins made. */
+  key: string | null;
+  name: string;
+  description: string | null;
+  permissions: AdminPermission[];
+  isSuper: boolean;
+}
 
 export interface AdminProfile {
   id: string;
   email: string;
   name: string;
-  role: AdminRole;
+  role: AdminRoleView;
+  /** True when this admin has their own permissions instead of the role's. */
+  customPermissions: boolean;
+  /** This admin's own list (used when `customPermissions`). */
+  permissions: AdminPermission[];
+  /** What they can actually do: every permission for a Super Admin. */
+  can: AdminPermission[];
   isActive: boolean;
   /** Authenticator app (TOTP) is the only second step for staff; they have no phone on file. */
   twoFactor: boolean;
   createdAt: Date;
 }
 
-export const toProfile = (a: AdminUser): AdminProfile => ({
+export const toRoleView = (r: AdminWithRole['role']): AdminRoleView => ({
+  id: r.id,
+  key: r.key,
+  name: r.name,
+  description: r.description,
+  permissions: r.permissions.filter(isAdminPermission),
+  isSuper: r.isSuper,
+});
+
+export const toProfile = (a: AdminWithRole): AdminProfile => ({
   id: a.id,
   email: a.email,
   name: a.name,
-  role: a.role,
+  role: toRoleView(a.role),
+  customPermissions: a.customPermissions,
+  permissions: a.permissions.filter(isAdminPermission),
+  can: a.role.isSuper ? [...ADMIN_PERMISSIONS] : effectivePermissions(a),
   isActive: a.isActive,
   twoFactor: a.twoFactorMethod === 'TOTP',
   createdAt: a.createdAt,
@@ -53,7 +86,7 @@ export class AdminAuthService {
   ) {}
 
   async login(email: string, password: string, client: ClientInfo) {
-    const admin = await this.prisma.adminUser.findUnique({ where: { email: email.trim().toLowerCase() } });
+    const admin = await this.prisma.adminUser.findUnique({ where: { email: email.trim().toLowerCase() }, include: withRole });
     // Same answer for unknown email and wrong password.
     const ok = admin ? await argon2.verify(admin.passwordHash, password).catch(() => false) : false;
     if (!admin || !ok) throw new UnauthorizedException({ code: 'INVALID_CREDENTIALS', message: 'Wrong email or password' });
@@ -68,7 +101,7 @@ export class AdminAuthService {
   /** Second step: the authenticator code for a login challenge. */
   async verifyTwoFactor(challenge: string, code: string, client: ClientInfo) {
     const read = readChallenge(this.secret(), 'admin', challenge);
-    const admin = read && (await this.prisma.adminUser.findUnique({ where: { id: read.id } }));
+    const admin = read && (await this.prisma.adminUser.findUnique({ where: { id: read.id }, include: withRole }));
     if (!admin?.isActive) throw new BadRequestException({ code: 'CHALLENGE_EXPIRED', message: 'Sign-in expired, start again' });
     if (!admin.totpSecret || !verifyTotp(admin.totpSecret, code)) {
       throw new BadRequestException({ code: 'TWO_FACTOR_INVALID', message: 'Incorrect code' });
@@ -81,7 +114,7 @@ export class AdminAuthService {
    * an active admin, so the form can't be used to discover staff accounts.
    */
   async forgotPassword(email: string) {
-    const admin = await this.prisma.adminUser.findUnique({ where: { email: email.trim().toLowerCase() } });
+    const admin = await this.prisma.adminUser.findUnique({ where: { email: email.trim().toLowerCase() }, include: withRole });
     if (!admin?.isActive) return { sent: true };
     const token = randomBytes(32).toString('base64url');
     await this.prisma.$transaction([
@@ -109,7 +142,7 @@ export class AdminAuthService {
     const otp = await this.prisma.oneTimeCode.findFirst({
       where: { actorType: 'ADMIN', purpose: RESET_PURPOSE, codeHash: sha256(token), consumedAt: null, expiresAt: { gt: new Date() } },
     });
-    const admin = otp && (await this.prisma.adminUser.findUnique({ where: { id: otp.actorId } }));
+    const admin = otp && (await this.prisma.adminUser.findUnique({ where: { id: otp.actorId }, include: withRole }));
     if (!otp || !admin?.isActive) throw new BadRequestException({ code: 'RESET_LINK_INVALID', message: 'This reset link has expired or was already used' });
     await this.prisma.$transaction([
       this.prisma.oneTimeCode.update({ where: { id: otp.id }, data: { consumedAt: new Date() } }),
@@ -130,7 +163,7 @@ export class AdminAuthService {
 
   async totpEnable(admin: AdminUser, code: string) {
     if (!admin.totpSecret || !verifyTotp(admin.totpSecret, code)) throw new BadRequestException({ code: 'TWO_FACTOR_INVALID', message: 'Incorrect code' });
-    const saved = await this.prisma.adminUser.update({ where: { id: admin.id }, data: { twoFactorMethod: 'TOTP' } });
+    const saved = await this.prisma.adminUser.update({ where: { id: admin.id }, data: { twoFactorMethod: 'TOTP' }, include: withRole });
     await this.audit.log({ adminId: admin.id, action: 'admin.2fa_on', entityType: 'AdminUser', entityId: admin.id });
     return toProfile(saved);
   }
@@ -139,7 +172,7 @@ export class AdminAuthService {
     if (admin.twoFactorMethod !== 'TOTP' || !admin.totpSecret || !verifyTotp(admin.totpSecret, code)) {
       throw new BadRequestException({ code: 'TWO_FACTOR_INVALID', message: 'Incorrect code' });
     }
-    const saved = await this.prisma.adminUser.update({ where: { id: admin.id }, data: { twoFactorMethod: 'NONE', totpSecret: null } });
+    const saved = await this.prisma.adminUser.update({ where: { id: admin.id }, data: { twoFactorMethod: 'NONE', totpSecret: null }, include: withRole });
     await this.audit.log({ adminId: admin.id, action: 'admin.2fa_off', entityType: 'AdminUser', entityId: admin.id });
     return toProfile(saved);
   }
@@ -148,7 +181,7 @@ export class AdminAuthService {
     return this.config.get('JWT_ACCESS_SECRET', { infer: true });
   }
 
-  private async startSession(admin: AdminUser, client: ClientInfo) {
+  private async startSession(admin: AdminWithRole, client: ClientInfo) {
     const session = await this.sessions.issue('ADMIN', admin.id, client, ADMIN_SESSION_MS);
     await this.audit.log({ adminId: admin.id, action: 'admin.login', entityType: 'AdminUser', entityId: admin.id, ip: client.ip });
     return { ...session, admin: toProfile(admin) };
@@ -169,43 +202,61 @@ export class AdminAuthService {
   }
 
   async list(): Promise<AdminProfile[]> {
-    return (await this.prisma.adminUser.findMany({ orderBy: { createdAt: 'asc' } })).map(toProfile);
+    return (await this.prisma.adminUser.findMany({ orderBy: { createdAt: 'asc' }, include: withRole })).map(toProfile);
   }
 
-  async create(by: AdminUser, input: { email: string; name: string; role: AdminRole; password: string }) {
+  async create(by: AdminUser, input: { email: string; name: string; roleId: string; password: string; customPermissions?: boolean; permissions?: string[] }) {
     const email = input.email.trim().toLowerCase();
     if (await this.prisma.adminUser.findUnique({ where: { email } })) {
       throw new ConflictException({ code: 'EMAIL_TAKEN', message: 'An admin with this email exists' });
     }
+    await this.role(input.roleId);
     const admin = await this.prisma.adminUser.create({
-      data: { email, name: input.name.trim(), role: input.role, passwordHash: await argon2.hash(input.password) },
+      data: {
+        email,
+        name: input.name.trim(),
+        roleId: input.roleId,
+        customPermissions: input.customPermissions ?? false,
+        permissions: cleanPermissions(input.permissions ?? []),
+        passwordHash: await argon2.hash(input.password),
+      },
+      include: withRole,
     });
-    await this.audit.log({ adminId: by.id, action: 'admin.create', entityType: 'AdminUser', entityId: admin.id, changes: { email, role: input.role } });
+    await this.audit.log({ adminId: by.id, action: 'admin.create', entityType: 'AdminUser', entityId: admin.id, changes: { email, role: admin.role.name } });
     return toProfile(admin);
   }
 
-  /** Role / active / password reset. Disabling or resetting signs the account out everywhere. */
-  async update(by: AdminUser, id: string, input: { name?: string; role?: AdminRole; isActive?: boolean; password?: string; resetTwoFactor?: boolean }) {
-    const target = await this.prisma.adminUser.findUnique({ where: { id } });
+  /** Role, own permissions, active, password reset. Disabling or resetting signs the account out everywhere. */
+  async update(
+    by: AdminUser,
+    id: string,
+    input: { name?: string; roleId?: string; customPermissions?: boolean; permissions?: string[]; isActive?: boolean; password?: string; resetTwoFactor?: boolean },
+  ) {
+    const target = await this.prisma.adminUser.findUnique({ where: { id }, include: withRole });
     if (!target) throw new NotFoundException('Admin not found');
-    if (target.id === by.id && (input.isActive === false || (input.role && input.role !== 'SUPER_ADMIN'))) {
+    const nextRole = input.roleId ? await this.role(input.roleId) : target.role;
+    const losesSuper = target.role.isSuper && (input.isActive === false || !nextRole.isSuper);
+    if (target.id === by.id && losesSuper) {
       throw new BadRequestException({ code: 'SELF_LOCKOUT', message: 'You cannot disable or demote yourself' });
     }
     // Keep at least one active Super Admin.
-    if (target.role === 'SUPER_ADMIN' && (input.isActive === false || (input.role && input.role !== 'SUPER_ADMIN'))) {
-      const supers = await this.prisma.adminUser.count({ where: { role: 'SUPER_ADMIN', isActive: true } });
+    if (losesSuper) {
+      const supers = await this.prisma.adminUser.count({ where: { role: { isSuper: true }, isActive: true } });
       if (supers <= 1) throw new BadRequestException({ code: 'LAST_SUPER_ADMIN', message: 'Keep at least one Super Admin' });
     }
     const updated = await this.prisma.adminUser.update({
       where: { id },
       data: {
         ...(input.name && { name: input.name.trim() }),
-        ...(input.role && { role: input.role }),
+        ...(input.roleId && { roleId: input.roleId }),
+        ...(input.customPermissions !== undefined && { customPermissions: input.customPermissions }),
+        ...(input.permissions && { permissions: cleanPermissions(input.permissions) }),
         ...(input.isActive !== undefined && { isActive: input.isActive }),
         ...(input.password && { passwordHash: await argon2.hash(input.password) }),
         // For staff who lost their authenticator; they can set it up again after signing in.
         ...(input.resetTwoFactor && { twoFactorMethod: 'NONE', totpSecret: null }),
       },
+      include: withRole,
     });
     if (input.isActive === false || input.password || input.resetTwoFactor) {
       await this.prisma.session.updateMany({ where: { actorType: 'ADMIN', actorId: id, revokedAt: null }, data: { revokedAt: new Date() } });
@@ -215,8 +266,48 @@ export class AdminAuthService {
       action: 'admin.update',
       entityType: 'AdminUser',
       entityId: id,
-      changes: { ...input, password: input.password ? '(reset)' : undefined },
+      changes: { ...input, ...(input.roleId && { role: nextRole.name }), password: input.password ? '(reset)' : undefined },
     });
     return toProfile(updated);
+  }
+
+  /* ── Roles ── */
+
+  async roles(): Promise<(AdminRoleView & { adminCount: number })[]> {
+    const rows = await this.prisma.adminRole.findMany({
+      // Super Admin first, then the other built-in roles, then the ones admins made.
+      orderBy: [{ isSuper: 'desc' }, { key: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
+      include: { _count: { select: { admins: true } } },
+    });
+    return rows.map((r) => ({ ...toRoleView(r), adminCount: r._count.admins }));
+  }
+
+  async saveRole(by: AdminUser, id: string | null, input: { name: string; description?: string | null; permissions: string[] }) {
+    const name = input.name.trim();
+    if (id) {
+      const current = await this.role(id);
+      if (current.isSuper) throw new BadRequestException({ code: 'ROLE_LOCKED', message: 'The Super Admin role always has every permission' });
+    }
+    const clash = await this.prisma.adminRole.findFirst({ where: { name: { equals: name, mode: 'insensitive' }, ...(id && { NOT: { id } }) }, select: { id: true } });
+    if (clash) throw new ConflictException({ code: 'ROLE_NAME_TAKEN', message: 'Another role has this name' });
+    const data = { name, description: input.description?.trim() || null, permissions: cleanPermissions(input.permissions) };
+    const saved = id ? await this.prisma.adminRole.update({ where: { id }, data }) : await this.prisma.adminRole.create({ data });
+    await this.audit.log({ adminId: by.id, action: id ? 'role.update' : 'role.create', entityType: 'AdminRole', entityId: saved.id, changes: data });
+    return toRoleView(saved);
+  }
+
+  async deleteRole(by: AdminUser, id: string) {
+    const role = await this.role(id);
+    if (role.key) throw new BadRequestException({ code: 'ROLE_LOCKED', message: 'Built-in roles can’t be deleted' });
+    const used = await this.prisma.adminUser.count({ where: { roleId: id } });
+    if (used) throw new ConflictException({ code: 'ROLE_IN_USE', message: 'Move its admins to another role first', count: used });
+    await this.prisma.adminRole.delete({ where: { id } });
+    await this.audit.log({ adminId: by.id, action: 'role.delete', entityType: 'AdminRole', entityId: id, changes: { name: role.name } });
+  }
+
+  private async role(id: string) {
+    const role = await this.prisma.adminRole.findUnique({ where: { id } });
+    if (!role) throw new BadRequestException({ code: 'INVALID_ROLE', message: 'Unknown role' });
+    return role;
   }
 }

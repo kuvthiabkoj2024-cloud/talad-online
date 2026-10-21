@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { MediaService } from '../media/media.service.js';
+import { shopNet } from '../orders/checkout-pricing.js';
 
 const DAY = 86_400_000;
 export const STATS_RANGES = [7, 30, 90] as const;
@@ -16,7 +17,18 @@ export interface ShopFinance {
   from: Date;
   to: Date;
   /** Completed orders in the period: what the shop has earned. */
-  earned: { orders: number; gross: number; commission: number; net: number };
+  /**
+   * `gross` = what customers paid + platform coupons Taladonline pays back; `net` = gross − commission.
+   * `discounts`: what the shop's prices were lowered by — flash sales and its own coupons (both
+   * the shop's cost) and platform coupons (funded by Taladonline, included in `gross`).
+   */
+  earned: {
+    orders: number;
+    gross: number;
+    commission: number;
+    net: number;
+    discounts: { flashSale: number; shopCoupons: number; platformCoupons: number };
+  };
   /** Paid or cash orders still on their way to the customer. */
   inProgress: { orders: number; amount: number };
   refunded: { orders: number; amount: number };
@@ -60,11 +72,11 @@ export class ShopReportsService {
 
   async finance(shopId: string, from: Date, to: Date): Promise<ShopFinance> {
     const inPeriod = { shopId, createdAt: { gte: from, lt: to } };
-    const [earned, active, refunded, lifetime, payouts] = await Promise.all([
+    const [earned, active, refunded, lifetime, payouts, flash] = await Promise.all([
       this.prisma.shopOrder.aggregate({
         where: { ...inPeriod, status: 'COMPLETED' },
         _count: { _all: true },
-        _sum: { total: true, commissionAmount: true },
+        _sum: { total: true, commissionAmount: true, discountTotal: true, platformDiscount: true },
       }),
       this.prisma.shopOrder.aggregate({
         where: { ...inPeriod, status: { in: ['CONFIRMED', 'PACKED', 'SHIPPED', 'DELIVERED'] } },
@@ -76,19 +88,31 @@ export class ShopReportsService {
         _count: { _all: true },
         _sum: { total: true },
       }),
-      this.prisma.shopOrder.aggregate({ where: { shopId, status: 'COMPLETED' }, _sum: { total: true, commissionAmount: true } }),
+      this.prisma.shopOrder.aggregate({ where: { shopId, status: 'COMPLETED' }, _sum: { total: true, commissionAmount: true, platformDiscount: true } }),
       this.prisma.payout.findMany({ where: { shopId }, orderBy: { periodStart: 'desc' }, take: 24 }),
+      // Flash-sale savings: regular price − sale price, per unit sold (unknown on older orders).
+      this.prisma.$queryRaw<{ amount: Prisma.Decimal | null }[]>`
+        SELECT SUM((COALESCE(oi."regularPrice", oi."unitPrice") - oi."unitPrice") * oi.quantity) AS amount
+        FROM "OrderItem" oi JOIN "ShopOrder" so ON so.id = oi."shopOrderId"
+        WHERE so."shopId" = ${shopId} AND so.status = 'COMPLETED' AND so."createdAt" >= ${from} AND so."createdAt" < ${to}`,
     ]);
-    const gross = num(earned._sum.total);
+    const platformCoupons = num(earned._sum.platformDiscount);
+    const gross = num(earned._sum.total) + platformCoupons;
     const commission = num(earned._sum.commissionAmount);
     const paidOut = payouts.filter((p) => p.status === 'PAID').reduce((s, p) => s + num(p.netAmount), 0);
     return {
       from,
       to,
-      earned: { orders: earned._count._all, gross, commission, net: gross - commission },
+      earned: {
+        orders: earned._count._all,
+        gross,
+        commission,
+        net: gross - commission,
+        discounts: { flashSale: num(flash[0]?.amount), shopCoupons: num(earned._sum.discountTotal) - platformCoupons, platformCoupons },
+      },
       inProgress: { orders: active._count._all, amount: num(active._sum.total) },
       refunded: { orders: refunded._count._all, amount: num(refunded._sum.total) },
-      balance: num(lifetime._sum.total) - num(lifetime._sum.commissionAmount) - paidOut,
+      balance: shopNet({ total: num(lifetime._sum.total), platformDiscount: num(lifetime._sum.platformDiscount), commission: num(lifetime._sum.commissionAmount) }) - paidOut,
       payouts: payouts.map((p) => ({
         id: p.id,
         periodStart: p.periodStart,
@@ -115,8 +139,10 @@ export class ShopReportsService {
         status: true,
         subtotal: true,
         discountTotal: true,
+        platformDiscount: true,
         total: true,
         commissionAmount: true,
+        items: { select: { unitPrice: true, regularPrice: true, quantity: true } },
         payments: { take: 1, orderBy: { createdAt: 'desc' }, select: { method: true, status: true } },
         // Older single-shop checkouts keep the payment on the order.
         order: { select: { payments: { where: { shopOrderId: null }, take: 1, select: { method: true, status: true } } } },
@@ -126,10 +152,17 @@ export class ShopReportsService {
       const s = String(v);
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    const header = ['Date', 'Order', 'Status', 'Payment', 'Payment status', 'Subtotal', 'Discount', 'Total', 'Commission', 'Net'];
+    const header = [
+      'Date', 'Order', 'Status', 'Payment', 'Payment status',
+      'Regular price', 'Flash sale discount', 'Subtotal', 'Shop coupon', 'Platform coupon',
+      'Customer paid', 'Commission', 'Net',
+    ];
     const lines = rows.map((r) => {
       const total = num(r.total);
-      const commission = r.status === 'CANCELLED' ? 0 : num(r.commissionAmount);
+      const platform = num(r.platformDiscount);
+      const cancelled = r.status === 'CANCELLED';
+      const commission = cancelled ? 0 : num(r.commissionAmount);
+      const regular = r.items.reduce((s, i) => s + num(i.regularPrice ?? i.unitPrice) * i.quantity, 0);
       const payment = r.payments[0] ?? r.order.payments[0];
       return [
         toDay(r.createdAt),
@@ -137,11 +170,14 @@ export class ShopReportsService {
         r.status,
         payment?.method ?? '',
         payment?.status ?? '',
+        regular,
+        regular - num(r.subtotal),
         num(r.subtotal),
-        num(r.discountTotal),
+        num(r.discountTotal) - platform,
+        platform,
         total,
         commission,
-        r.status === 'CANCELLED' ? 0 : total - commission,
+        cancelled ? 0 : shopNet({ total, platformDiscount: platform, commission }),
       ]
         .map(cell)
         .join(',');

@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Customer } from '../../generated/prisma/client.js';
 import { CurrentCustomer, CustomerAuthGuard } from '../auth/customer-auth.guard.js';
@@ -21,5 +21,11 @@ export class CustomerOrdersController {
   @Get(':number')
   detail(@CurrentCustomer() customer: Customer, @Param('number') number: string) {
     return this.orders.detail(customer.id, number);
+  }
+
+  /** "I received it" on a delivered order: completes it now. */
+  @Post(':number/receive')
+  receive(@CurrentCustomer() customer: Customer, @Param('number') number: string) {
+    return this.orders.receive(customer.id, number);
   }
 }

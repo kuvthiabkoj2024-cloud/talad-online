@@ -1,6 +1,7 @@
+import type { AdminPermission } from '@talad/shared'
 import { Lock } from 'lucide-react'
 import { Navigate, Outlet, useLocation } from 'react-router'
-import { can, useAuth } from '@/auth/context'
+import { can, isSuperAdmin, useAuth } from '@/auth/context'
 import { useI18n } from '@/i18n/context'
 import { PageBody } from './page-header'
 import { EmptyState, ErrorState, FullScreen, LoadingState } from './states'
@@ -27,11 +28,11 @@ export function RequireAdmin() {
   return <Outlet />
 }
 
-/** A page for some roles only (`area` in auth/context ACCESS; omitted = Super Admin). */
-export function RequireArea({ area, children }: { area?: string; children: React.ReactNode }) {
+/** A page for admins with the `area` permission (omitted = Super Admin only). */
+export function RequireArea({ area, children }: { area?: AdminPermission; children: React.ReactNode }) {
   const { admin } = useAuth()
   const { t } = useI18n()
-  const ok = area ? can(admin?.role, area) : admin?.role === 'SUPER_ADMIN'
+  const ok = area ? can(admin, area) : isSuperAdmin(admin)
   if (ok) return children
   return (
     <PageBody>

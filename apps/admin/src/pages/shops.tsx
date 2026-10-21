@@ -166,7 +166,7 @@ export function ShopDetailPage() {
   return (
     <>
       <TopBar title={s.name} backTo="/shops" />
-      <PageBody className="max-w-6xl">
+      <PageBody>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-4">
             <span className="flex size-14 items-center justify-center overflow-hidden rounded-full bg-muted text-muted-foreground">
@@ -194,7 +194,7 @@ export function ShopDetailPage() {
                 </a>
               </Button>
             )}
-            {can(admin?.role, 'shop-decisions') &&
+            {can(admin, 'shops.review') &&
               DECISIONS[s.status].map((d) => (
                 <Button key={d} variant={d === 'reject' || d === 'suspend' ? 'outline' : 'default'} className={d === 'reject' || d === 'suspend' ? 'text-destructive hover:text-destructive' : ''} onClick={() => decide(d)}>
                   {t.shops.actions[d]}
@@ -249,7 +249,7 @@ export function ShopDetailPage() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-base">{t.shops.performance}</CardTitle>
                 <div className="flex gap-3 text-sm">
-                  {can(admin?.role, 'products') && (
+                  {can(admin, 'products') && (
                     <Link to={`/products?shopId=${s.id}`} className="text-primary hover:underline">
                       {t.shops.viewProducts}
                     </Link>
@@ -283,7 +283,7 @@ export function ShopDetailPage() {
                 <CardContent className="text-sm">
                   <p className="font-medium">{s.owner.name}</p>
                   <p className="text-muted-foreground">{s.owner.phone ? formatPhone(s.owner.phone) : s.owner.email}</p>
-                  {can(admin?.role, 'customers') && (
+                  {can(admin, 'customers') && (
                     <Link to={`/customers/${s.owner.id}`} className="mt-2 inline-block text-primary hover:underline">
                       {t.common.open}
                     </Link>
@@ -308,7 +308,7 @@ export function ShopDetailPage() {
                 {s.payment.hasQr && <p className="mt-1 text-xs text-primary">{t.shops.hasQr}</p>}
               </CardContent>
             </Card>
-            {can(admin?.role, 'shop-commission') && (
+            {can(admin, 'shops.commission') && (
               <CommissionCard shop={s} defaultRate={s.platformCommissionRate} onSaved={(saved) => queryClient.setQueryData(['admin', 'shops', id], saved)} />
             )}
           </div>

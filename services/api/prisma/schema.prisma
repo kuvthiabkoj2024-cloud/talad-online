@@ -15,12 +15,6 @@ datasource db {
 
 // ─── Enums ──────────────────────────────────────────────────────────────────
 
-enum AdminRole {
-  SUPER_ADMIN
-  SUPPORT
-  FINANCE
-}
-
 enum ActorType {
   ADMIN
   SHOP
@@ -116,19 +110,41 @@ enum PayoutStatus {
 // ─── Identity & access (§2.1, §3.1, §4.1) ───────────────────────────────────
 
 model AdminUser {
-  id              String          @id @default(uuid(7))
-  email           String          @unique
-  name            String
-  passwordHash    String
-  role            AdminRole       @default(SUPPORT)
-  twoFactorMethod TwoFactorMethod @default(NONE)
-  totpSecret      String?
-  isActive        Boolean         @default(true)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  id                String          @id @default(uuid(7))
+  email             String          @unique
+  name              String
+  passwordHash      String
+  roleId            String
+  /// When set, `permissions` replaces the role's for this admin (see effectivePermissions in @talad/shared).
+  customPermissions Boolean         @default(false)
+  permissions       String[]        @default([])
+  twoFactorMethod   TwoFactorMethod @default(NONE)
+  totpSecret        String?
+  isActive          Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
-  auditLogs AuditLog[]
-  notifications   Notification[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+
+  role AdminRole @relation(fields: [roleId], references: [id])
+
+  @@index([roleId])
+}
+
+/// A named set of admin permissions (§2.1 RBAC). Built-in roles have a `key`; Super Admin
+/// (`isSuper`) has every permission and can't be edited or deleted.
+model AdminRole {
+  id          String   @id @default(uuid(7))
+  key         String?  @unique
+  name        String   @unique
+  description String?
+  permissions String[] @default([])
+  isSuper     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  admins AdminUser[]
 }
 
 /// Login sessions for every actor type — also powers device history (§3.1).
@@ -526,6 +542,8 @@ model ShopOrder {
   status             OrderStatus @default(PENDING)
   subtotal           Decimal     @db.Decimal(14, 2)
   discountTotal      Decimal     @default(0) @db.Decimal(14, 2)
+  /// The part of `discountTotal` Taladonline funds (platform coupons): paid back to the shop with its payout.
+  platformDiscount   Decimal     @default(0) @db.Decimal(14, 2)
   shippingFee        Decimal     @default(0) @db.Decimal(14, 2)
   commissionAmount   Decimal     @default(0) @db.Decimal(14, 2)
   total              Decimal     @db.Decimal(14, 2)
@@ -556,16 +574,21 @@ model ShopOrder {
 }
 
 model OrderItem {
-  id          String  @id @default(uuid(7))
-  shopOrderId String
-  productId   String
-  variantId   String?
+  id               String   @id @default(uuid(7))
+  shopOrderId      String
+  productId        String
+  variantId        String?
   /// Snapshots so historic orders survive product edits.
-  name        String
-  sku         String
-  unitPrice   Decimal @db.Decimal(14, 2)
-  quantity    Int
-  lineTotal   Decimal @db.Decimal(14, 2)
+  name             String
+  sku              String
+  unitPrice        Decimal  @db.Decimal(14, 2)
+  /// Price before a flash sale (null on orders placed before this was recorded): flash savings = (regular − unit) × quantity.
+  regularPrice     Decimal? @db.Decimal(14, 2)
+  quantity         Int
+  lineTotal        Decimal  @db.Decimal(14, 2)
+  /// This item's own rate (shop override, else its category, else the platform default) and fee.
+  commissionRate   Decimal? @db.Decimal(5, 2)
+  commissionAmount Decimal? @db.Decimal(14, 2)
 
   shopOrder ShopOrder       @relation(fields: [shopOrderId], references: [id], onDelete: Cascade)
   product   Product         @relation(fields: [productId], references: [id])
@@ -881,17 +904,17 @@ model AssistantMessage {
 
 /// One private conversation between a customer and a shop.
 model ShopConversation {
-  id             String   @id @default(uuid(7))
+  id             String    @id @default(uuid(7))
   shopId         String
   customerId     String
-  lastMessageAt  DateTime @default(now())
+  lastMessageAt  DateTime  @default(now())
   /// Messages the customer / the shop hasn't read yet.
-  customerUnread Int      @default(0)
-  shopUnread     Int      @default(0)
+  customerUnread Int       @default(0)
+  shopUnread     Int       @default(0)
   /// When each side last opened the chat: the other side's messages up to then show as read.
   customerReadAt DateTime?
   shopReadAt     DateTime?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime  @default(now())
 
   shop     Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
   customer Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)

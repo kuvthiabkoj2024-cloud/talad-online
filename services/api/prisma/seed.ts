@@ -9,7 +9,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import argon2 from 'argon2';
 import QRCode from 'qrcode';
 import { PrismaClient } from '../src/generated/prisma/client.js';
-import { normalizePhone } from '@talad/shared';
+import { DEFAULT_ROLE_PERMISSIONS, normalizePhone } from '@talad/shared';
 import { DEMO_PAGES } from './demo-content.js';
 import { DEMO_PRODUCT_IMAGES } from './demo-images.js';
 import { DEMO_PRODUCT_VIDEOS } from './demo-videos.js';
@@ -24,6 +24,21 @@ const prisma = new PrismaClient({
 const t = (lo: string, en: string) => ({ lo, en });
 
 async function main() {
+  // Built-in admin roles (§2.1), with their starting permissions; existing ones are left as edited.
+  const roleIds: Record<string, string> = {};
+  for (const [key, name, description] of [
+    ['SUPER_ADMIN', 'Super Admin', 'Everything, including admins and roles.'],
+    ['SUPPORT', 'Support', 'Shops, products, customers, orders and disputes.'],
+    ['FINANCE', 'Finance', 'Payouts, reports, orders and shop commission.'],
+  ] as const) {
+    const role = await prisma.adminRole.upsert({
+      where: { key },
+      update: {},
+      create: { key, name, description, isSuper: key === 'SUPER_ADMIN', permissions: key === 'SUPER_ADMIN' ? [] : DEFAULT_ROLE_PERMISSIONS[key] },
+    });
+    roleIds[key] = role.id;
+  }
+
   const email = process.env.SEED_ADMIN_EMAIL ?? 'admin@talad.local';
   const password = process.env.SEED_ADMIN_PASSWORD ?? 'ChangeMe123!';
   await prisma.adminUser.upsert({
@@ -32,7 +47,7 @@ async function main() {
     create: {
       email,
       name: 'Super Admin',
-      role: 'SUPER_ADMIN',
+      roleId: roleIds.SUPER_ADMIN,
       passwordHash: await argon2.hash(password),
     },
   });
@@ -45,7 +60,7 @@ async function main() {
     await prisma.adminUser.upsert({
       where: { email: staffEmail },
       update: {},
-      create: { email: staffEmail, name, role, passwordHash: await argon2.hash(password) },
+      create: { email: staffEmail, name, roleId: roleIds[role], passwordHash: await argon2.hash(password) },
     });
   }
 

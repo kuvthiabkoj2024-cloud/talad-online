@@ -2,7 +2,7 @@ import { BadRequestException, Controller, Get, Header, Query, UseGuards } from '
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsDate, IsIn, IsOptional } from 'class-validator';
-import { AdminAuthGuard, Roles } from '../auth/admin-auth.guard.js';
+import { AdminAuthGuard, Permission } from '../auth/admin-auth.guard.js';
 import { AdminReportsService, type SalesGroup } from './admin-reports.service.js';
 
 class DashboardQuery {
@@ -46,6 +46,7 @@ function period(q: ReportQuery) {
 export class AdminDashboardController {
   constructor(private readonly reports: AdminReportsService) {}
 
+  @Permission('dashboard')
   @Get('dashboard')
   dashboard(@Query() q: DashboardQuery) {
     return this.reports.dashboard(q.days);
@@ -62,7 +63,7 @@ export class AdminDashboardController {
 @ApiTags('admin')
 @ApiBearerAuth()
 @UseGuards(AdminAuthGuard)
-@Roles('FINANCE')
+@Permission('reports')
 @Controller('admin/reports')
 export class AdminReportsController {
   constructor(private readonly reports: AdminReportsService) {}

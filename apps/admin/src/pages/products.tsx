@@ -156,7 +156,7 @@ export function ProductDetailPage() {
   return (
     <>
       <TopBar title={p.name} backTo="/products" />
-      <PageBody className="max-w-6xl">
+      <PageBody>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">

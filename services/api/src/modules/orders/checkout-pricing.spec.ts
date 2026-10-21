@@ -1,4 +1,4 @@
-import { allocateDiscount, couponDiscount, couponProblem, type CouponRule } from './checkout-pricing.js';
+import { allocateDiscount, couponDiscount, couponProblem, itemCommissions, shopNet, type CouponRule } from './checkout-pricing.js';
 
 const now = new Date('2026-10-04T12:00:00Z');
 const rule = (over: Partial<CouponRule> = {}): CouponRule => ({
@@ -61,5 +61,31 @@ describe('allocateDiscount', () => {
 
   it('gives a single shop the whole discount', () => {
     expect(allocateDiscount(19_900, [{ id: 'a', subtotal: 199_000 }]).get('a')).toBe(19_900);
+  });
+});
+
+describe('itemCommissions', () => {
+  it('uses each item\'s own rate', () => {
+    const c = itemCommissions([{ id: 'a', lineTotal: 100_000, rate: 5 }, { id: 'b', lineTotal: 50_000, rate: 10 }], 0);
+    expect(c.get('a')).toBe(5_000);
+    expect(c.get('b')).toBe(5_000);
+  });
+
+  it('charges on what an item sold for after its share of a shop coupon', () => {
+    // ₭30,000 off split 2:1 → a pays on ₭80,000, b on ₭40,000.
+    const c = itemCommissions([{ id: 'a', lineTotal: 100_000, rate: 5 }, { id: 'b', lineTotal: 50_000, rate: 10 }], 30_000);
+    expect(c.get('a')).toBe(4_000);
+    expect(c.get('b')).toBe(4_000);
+  });
+});
+
+describe('shopNet', () => {
+  it('pays the shop back a platform-funded discount', () => {
+    // ₭160,000 of goods, ₭16,000 platform coupon → customer pays ₭144,000; 5% fee on ₭160,000.
+    expect(shopNet({ total: 144_000, platformDiscount: 16_000, commission: 8_000 })).toBe(152_000);
+  });
+
+  it('leaves a shop-funded discount with the shop', () => {
+    expect(shopNet({ total: 144_000, platformDiscount: 0, commission: 7_200 })).toBe(136_800);
   });
 });

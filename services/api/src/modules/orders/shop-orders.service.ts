@@ -77,6 +77,8 @@ export interface ShopOrderSummary {
 export interface ShopOrderDetail extends ShopOrderSummary {
   subtotal: number;
   discountTotal: number;
+  /** Part of the discount Taladonline funds (platform coupon), paid back to the shop. */
+  platformDiscount: number;
   shippingFee: number;
   commissionAmount: number;
   note: string | null;
@@ -177,6 +179,7 @@ export class ShopOrdersService {
       ...base,
       subtotal: row.subtotal.toNumber(),
       discountTotal: row.discountTotal.toNumber(),
+      platformDiscount: row.platformDiscount.toNumber(),
       shippingFee: row.shippingFee.toNumber(),
       commissionAmount: row.commissionAmount.toNumber(),
       note: row.order.note,

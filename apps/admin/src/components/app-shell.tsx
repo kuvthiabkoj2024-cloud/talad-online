@@ -15,7 +15,7 @@ export function AppShell() {
     <TooltipProvider delayDuration={0}>
       <SidebarProvider defaultOpen={sidebarDefaultOpen()}>
         <AppSidebar />
-        <SidebarInset className="min-w-0 bg-muted/40">
+        <SidebarInset className="min-w-0 bg-(--page)">
           <Outlet />
         </SidebarInset>
         <RealtimeBridge />

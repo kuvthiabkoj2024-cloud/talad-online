@@ -24,6 +24,7 @@ interface Finance {
   orders: number
   completedSales: number
   commissionCollected: number
+  platformCoupons: number
   refundsIssued: { count: number; amount: number }
   payoutsPaid: { count: number; amount: number }
 }
@@ -89,6 +90,7 @@ export function ReportsPage() {
                     [t.reports.gmv, `${money(finance.data.gmv)} · ${num(finance.data.orders)} ${t.reports.orders.toLowerCase()}`],
                     [t.reports.completedSales, money(finance.data.completedSales)],
                     [t.reports.commissionCollected, money(finance.data.commissionCollected)],
+                    [t.reports.platformCoupons, `−${money(finance.data.platformCoupons)}`],
                     [t.reports.refundsIssued, `${money(finance.data.refundsIssued.amount)} (${num(finance.data.refundsIssued.count)})`],
                     [t.reports.payoutsPaid, `${money(finance.data.payoutsPaid.amount)} (${num(finance.data.payoutsPaid.count)})`],
                   ]}

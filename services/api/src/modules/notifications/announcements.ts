@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import type { AdminUser, Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
-import { AdminAuthGuard, CurrentAdmin, Roles } from '../auth/admin-auth.guard.js';
+import { AdminAuthGuard, CurrentAdmin, Permission } from '../auth/admin-auth.guard.js';
 
 class MessageDto {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
@@ -101,7 +101,7 @@ export class AnnouncementsService {
 @ApiTags('admin')
 @ApiBearerAuth()
 @UseGuards(AdminAuthGuard)
-@Roles('SUPER_ADMIN')
+@Permission('announcements')
 @Controller('admin/announcements')
 export class AdminAnnouncementsController {
   constructor(private readonly announcements: AnnouncementsService) {}

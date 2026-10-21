@@ -4,7 +4,7 @@ import { PRODUCT_STATUSES, type ProductStatus } from '@talad/shared';
 import { IsOptional, IsUUID } from 'class-validator';
 import type { AdminUser } from '../../../generated/prisma/client.js';
 import { AdminPageQuery, ReasonDto } from '../../admins/admin.dto.js';
-import { AdminAuthGuard, ClientIp, CurrentAdmin, Roles } from '../../auth/admin-auth.guard.js';
+import { AdminAuthGuard, ClientIp, CurrentAdmin, Permission } from '../../auth/admin-auth.guard.js';
 import { AdminProductsService, type ProductDecision } from './admin-products.service.js';
 
 class AdminProductsQuery extends AdminPageQuery {
@@ -20,7 +20,7 @@ const DECISIONS: ProductDecision[] = ['approve', 'reject', 'unpublish'];
 @ApiTags('admin')
 @ApiBearerAuth()
 @UseGuards(AdminAuthGuard)
-@Roles('SUPPORT')
+@Permission('products')
 @Controller('admin/products')
 export class AdminProductsController {
   constructor(private readonly products: AdminProductsService) {}

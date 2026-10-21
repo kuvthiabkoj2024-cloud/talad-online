@@ -49,6 +49,8 @@ export interface CartLine {
   sku: string;
   imageUrl: string | null;
   unitPrice: number;
+  /** Before a running flash sale (equal to `unitPrice` otherwise). */
+  regularPrice: number;
   compareAtPrice: number | null;
   quantity: number;
   stock: number;
@@ -217,6 +219,7 @@ export class CartService {
       sku: variant?.sku ?? product.sku,
       imageUrl: product.images[0] ? this.media.publicUrl(product.images[0].key) : null,
       unitPrice,
+      regularPrice: regular,
       compareAtPrice: flash ? Math.max(product.compareAtPrice?.toNumber() ?? 0, regular) : (product.compareAtPrice?.toNumber() ?? null),
       quantity: r.quantity,
       stock,

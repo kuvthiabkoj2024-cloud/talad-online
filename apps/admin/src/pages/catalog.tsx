@@ -1,12 +1,11 @@
 import { Button } from '@talad/ui/components/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@talad/ui/components/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@talad/ui/components/dialog'
 import { Input } from '@talad/ui/components/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@talad/ui/components/select'
 import { Switch } from '@talad/ui/components/switch'
 import { cn } from '@talad/ui/lib/utils'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FolderTree, LoaderCircle, Pencil, Plus, Trash2 } from 'lucide-react'
+import { FolderTree, LoaderCircle, Pencil, Plus, Ruler, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { FlagBadge } from '@/components/badges'
@@ -26,17 +25,12 @@ const UNITS = ['admin', 'units'] as const
 type ErrorKey = keyof Dict['catalog']['errors']
 const errorText = (e: unknown, t: Dict) => (e instanceof ApiError && e.code && e.code in t.catalog.errors ? t.catalog.errors[e.code as ErrorKey] : t.common.saveError)
 
-/** Category tree and units (§2.6). */
-export function CatalogPage() {
-  const { t, locale } = useI18n()
+/** Asks, then deletes a category or unit (only possible while nothing uses it). */
+function useRemove(kind: 'categories' | 'units') {
+  const { t } = useI18n()
   const queryClient = useQueryClient()
-  const cats = useQuery({ queryKey: CATS, queryFn: () => api<Category[]>('/admin/categories') })
-  const units = useQuery({ queryKey: UNITS, queryFn: () => api<Unit[]>('/admin/units') })
-  const [editCat, setEditCat] = useState<Partial<Category> | null>(null)
-  const [editUnit, setEditUnit] = useState<Partial<Unit> | null>(null)
   const [confirm, setConfirm] = useState<ConfirmOptions | null>(null)
-
-  const remove = (kind: 'categories' | 'units', id: string, name: string) =>
+  const remove = (id: string, name: string) =>
     setConfirm({
       title: fill(t.catalog.deleteTitle, { name }),
       description: t.catalog.deleteBody,
@@ -49,81 +43,58 @@ export function CatalogPage() {
         toast.success(t.catalog.deleted)
       },
     })
+  return { remove, dialog: <ConfirmDialog options={confirm} onClose={() => setConfirm(null)} /> }
+}
 
+/** The category tree shown on the storefront (§2.6). */
+export function CategoriesPage() {
+  const { t, locale } = useI18n()
+  const cats = useQuery({ queryKey: CATS, queryFn: () => api<Category[]>('/admin/categories') })
+  const [editCat, setEditCat] = useState<Partial<Category> | null>(null)
+  const { remove, dialog } = useRemove('categories')
   const roots = cats.data?.filter((c) => !c.parentId) ?? []
   const children = (id: string) => cats.data?.filter((c) => c.parentId === id) ?? []
 
   return (
     <>
-      <TopBar title={t.catalog.title} />
-      <PageBody className="max-w-5xl">
-        <PageIntro title={t.catalog.title} description={t.catalog.description} />
-        <Card className="gap-3">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">{t.catalog.categories}</CardTitle>
-            <Button size="sm" onClick={() => setEditCat({ isActive: true, sortOrder: roots.length })}>
+      <TopBar title={t.catalog.categories} />
+      <PageBody>
+        <PageIntro
+          title={t.catalog.categories}
+          description={t.catalog.categoriesDescription}
+          actions={
+            <Button onClick={() => setEditCat({ isActive: true, sortOrder: roots.length })}>
               <Plus />
               {t.catalog.addCategory}
             </Button>
-          </CardHeader>
-          <CardContent>
-            {cats.isPending ? (
-              <LoadingState />
-            ) : cats.isError ? (
-              <ErrorState onRetry={() => void cats.refetch()} />
-            ) : (
-              <ul className="flex flex-col divide-y">
-                {roots.map((c) => (
-                  <li key={c.id} className="py-2">
-                    <CategoryRow c={c} onEdit={() => setEditCat(c)} onDelete={() => remove('categories', c.id, localized(c.name, locale))} />
-                    <ul className="ml-8 flex flex-col">
-                      {children(c.id).map((ch) => (
-                        <li key={ch.id} className="py-1">
-                          <CategoryRow c={ch} onEdit={() => setEditCat(ch)} onDelete={() => remove('categories', ch.id, localized(ch.name, locale))} />
-                        </li>
-                      ))}
-                      <li>
-                        <Button variant="link" size="sm" className="px-0" onClick={() => setEditCat({ parentId: c.id, isActive: true, sortOrder: children(c.id).length })}>
-                          <Plus />
-                          {t.catalog.addSub}
-                        </Button>
-                      </li>
-                    </ul>
+          }
+        />
+        {cats.isPending ? (
+          <LoadingState />
+        ) : cats.isError ? (
+          <ErrorState onRetry={() => void cats.refetch()} />
+        ) : (
+          <ul className="grid items-start gap-3 lg:grid-cols-2">
+            {roots.map((c) => (
+              <li key={c.id} className="rounded-xl border bg-card p-3">
+                <CategoryRow c={c} onEdit={() => setEditCat(c)} onDelete={() => remove(c.id, localized(c.name, locale))} />
+                <ul className="ml-8 flex flex-col">
+                  {children(c.id).map((ch) => (
+                    <li key={ch.id} className="py-1">
+                      <CategoryRow c={ch} onEdit={() => setEditCat(ch)} onDelete={() => remove(ch.id, localized(ch.name, locale))} />
+                    </li>
+                  ))}
+                  <li>
+                    <Button variant="link" size="sm" className="px-0" onClick={() => setEditCat({ parentId: c.id, isActive: true, sortOrder: children(c.id).length })}>
+                      <Plus />
+                      {t.catalog.addSub}
+                    </Button>
                   </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="gap-3">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">{t.catalog.units}</CardTitle>
-            <Button size="sm" onClick={() => setEditUnit({})}>
-              <Plus />
-              {t.catalog.addUnit}
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <ul className="grid gap-2 sm:grid-cols-2">
-              {units.data?.map((u) => (
-                <li key={u.id} className="flex items-center gap-3 rounded-lg border px-3 py-2">
-                  <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{u.code}</span>
-                  <span className="min-w-0 flex-1 truncate text-sm">
-                    {localized(u.name, 'lo')} · {localized(u.name, 'en')}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{fill(t.catalog.productsCount, { n: u.productCount })}</span>
-                  <Button variant="ghost" size="icon-sm" aria-label={t.common.edit} onClick={() => setEditUnit(u)}>
-                    <Pencil />
-                  </Button>
-                  <Button variant="ghost" size="icon-sm" aria-label={t.common.delete} disabled={u.productCount > 0} onClick={() => remove('units', u.id, u.code)}>
-                    <Trash2 />
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
+                </ul>
+              </li>
+            ))}
+          </ul>
+        )}
       </PageBody>
 
       <Dialog open={editCat !== null} onOpenChange={(o) => !o && setEditCat(null)}>
@@ -131,10 +102,64 @@ export function CatalogPage() {
           {editCat && <CategoryForm key={editCat.id ?? 'new'} value={editCat} roots={roots} onDone={() => setEditCat(null)} />}
         </DialogContent>
       </Dialog>
+      {dialog}
+    </>
+  )
+}
+
+/** The units products are sold in (kg, piece, box…). */
+export function UnitsPage() {
+  const { t, locale } = useI18n()
+  const units = useQuery({ queryKey: UNITS, queryFn: () => api<Unit[]>('/admin/units') })
+  const [editUnit, setEditUnit] = useState<Partial<Unit> | null>(null)
+  const { remove, dialog } = useRemove('units')
+
+  return (
+    <>
+      <TopBar title={t.catalog.units} />
+      <PageBody>
+        <PageIntro
+          title={t.catalog.units}
+          description={t.catalog.unitsDescription}
+          actions={
+            <Button onClick={() => setEditUnit({})}>
+              <Plus />
+              {t.catalog.addUnit}
+            </Button>
+          }
+        />
+        {units.isPending ? (
+          <LoadingState />
+        ) : units.isError ? (
+          <ErrorState onRetry={() => void units.refetch()} />
+        ) : (
+          <ul className="grid gap-3 lg:grid-cols-2">
+            {units.data.map((u) => (
+              <li key={u.id} className="flex items-center gap-3 rounded-xl border bg-card p-3">
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                  <Ruler className="size-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">
+                    {localized(u.name, 'lo')} <span className="font-normal text-muted-foreground">· {localized(u.name, 'en')}</span>
+                  </span>
+                  <span className="text-xs text-muted-foreground">{fill(t.catalog.productsCount, { n: u.productCount })}</span>
+                </span>
+                <Button variant="ghost" size="icon-sm" aria-label={t.common.edit} onClick={() => setEditUnit(u)}>
+                  <Pencil />
+                </Button>
+                <Button variant="ghost" size="icon-sm" aria-label={t.common.delete} disabled={u.productCount > 0} onClick={() => remove(u.id, localized(u.name, locale))}>
+                  <Trash2 />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </PageBody>
       <Dialog open={editUnit !== null} onOpenChange={(o) => !o && setEditUnit(null)}>
         <DialogContent className="sm:max-w-md">{editUnit && <UnitForm key={editUnit.id ?? 'new'} value={editUnit} onDone={() => setEditUnit(null)} />}</DialogContent>
       </Dialog>
-      <ConfirmDialog options={confirm} onClose={() => setConfirm(null)} />
+      {dialog}
     </>
   )
 }
@@ -171,7 +196,6 @@ function CategoryForm({ value, roots, onDone }: { value: Partial<Category>; root
   const queryClient = useQueryClient()
   const [lo, setLo] = useState(value.name?.lo ?? '')
   const [en, setEn] = useState(value.name?.en ?? '')
-  const [slug, setSlug] = useState(value.slug ?? '')
   const [parentId, setParentId] = useState(value.parentId ?? '')
   const [iconUrl, setIconUrl] = useState(value.iconUrl ?? '')
   const [imageUrl, setImageUrl] = useState(value.imageUrl ?? '')
@@ -183,7 +207,6 @@ function CategoryForm({ value, roots, onDone }: { value: Partial<Category>; root
     mutationFn: () => {
       const body = {
         name: { lo, en: en || undefined },
-        slug,
         parentId: parentId || null,
         iconUrl: iconUrl || null,
         imageUrl: imageUrl || null,
@@ -216,11 +239,8 @@ function CategoryForm({ value, roots, onDone }: { value: Partial<Category>; root
         <Field required id="lo" label={t.catalog.nameLo}>
           <Input id="lo" required maxLength={80} value={lo} onChange={(e) => setLo(e.target.value)} />
         </Field>
-        <Field id="en" label={t.catalog.nameEn}>
+        <Field id="en" label={t.catalog.nameEn} hint={value.slug ? fill(t.catalog.webAddress, { slug: value.slug }) : t.catalog.slugAuto}>
           <Input id="en" maxLength={80} value={en} onChange={(e) => setEn(e.target.value)} />
-        </Field>
-        <Field required id="slug" label={t.catalog.slug} hint={t.catalog.slugHint}>
-          <Input id="slug" required pattern="[a-z0-9](?:[a-z0-9-]{0,48}[a-z0-9])?" value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} />
         </Field>
         <Field id="parent" label={t.catalog.parent}>
           <Select value={parentId || 'root'} onValueChange={(v) => setParentId(v === 'root' ? '' : v)}>
@@ -277,13 +297,12 @@ function CategoryForm({ value, roots, onDone }: { value: Partial<Category>; root
 function UnitForm({ value, onDone }: { value: Partial<Unit>; onDone: () => void }) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
-  const [code, setCode] = useState(value.code ?? '')
   const [lo, setLo] = useState(value.name?.lo ?? '')
   const [en, setEn] = useState(value.name?.en ?? '')
   const [error, setError] = useState<string | null>(null)
   const save = useMutation({
     mutationFn: () => {
-      const body = { code, name: { lo, en: en || undefined } }
+      const body = { name: { lo, en: en || undefined } }
       return value.id ? send('PUT', `/admin/units/${value.id}`, body) : send('POST', '/admin/units', body)
     },
     onSuccess: () => {
@@ -303,11 +322,8 @@ function UnitForm({ value, onDone }: { value: Partial<Unit>; onDone: () => void 
     >
       <DialogHeader>
         <DialogTitle>{value.id ? t.catalog.editUnit : t.catalog.addUnit}</DialogTitle>
-        <DialogDescription>{t.catalog.codeHint}</DialogDescription>
+        <DialogDescription>{t.catalog.unitHint}</DialogDescription>
       </DialogHeader>
-      <Field required id="code" label={t.catalog.code}>
-        <Input id="code" required pattern="[a-z0-9]{1,12}" value={code} onChange={(e) => setCode(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))} className="font-mono" />
-      </Field>
       <Field required id="ulo" label={t.catalog.nameLo}>
         <Input id="ulo" required value={lo} onChange={(e) => setLo(e.target.value)} />
       </Field>

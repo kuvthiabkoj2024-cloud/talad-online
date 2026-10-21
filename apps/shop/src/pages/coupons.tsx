@@ -350,8 +350,9 @@ function PrintForm({ job, onDone }: { job: PrintJob; onDone: () => void }) {
   function print() {
     const s = shop.data
     const url = s ? storefrontUrl.shop(locale, s.slug).replace(/^https?:\/\//, '') : ''
-    printHtml(couponsHtml(coupons, { name: s?.name ?? '', logoUrl: s?.logoUrl ?? null, url }, t, locale))
+    // Close the dialog first; printing starts once it has gone (see printHtml).
     onDone()
+    printHtml(couponsHtml(coupons, { name: s?.name ?? '', logoUrl: s?.logoUrl ?? null, url }, t, locale))
   }
 
   return (

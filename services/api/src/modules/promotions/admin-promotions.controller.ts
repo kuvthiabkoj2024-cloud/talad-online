@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, P
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { AdminUser } from '../../generated/prisma/client.js';
 import { AuditService } from '../audit/audit.service.js';
-import { AdminAuthGuard, CurrentAdmin, Roles } from '../auth/admin-auth.guard.js';
+import { AdminAuthGuard, CurrentAdmin, Permission } from '../auth/admin-auth.guard.js';
 import { BannerDto } from './banner.dto.js';
 import { BannersService } from './banners.service.js';
 import { CouponActiveDto, ShopCouponDto } from './shop-coupon.dto.js';
@@ -26,7 +26,6 @@ export class BannersController {
 @ApiTags('admin')
 @ApiBearerAuth()
 @UseGuards(AdminAuthGuard)
-@Roles('SUPER_ADMIN')
 @Controller('admin')
 export class AdminPromotionsController {
   constructor(
@@ -35,32 +34,38 @@ export class AdminPromotionsController {
     private readonly audit: AuditService,
   ) {}
 
+  @Permission('banners')
   @Get('banners')
   listBanners() {
     return this.banners.list();
   }
 
+  @Permission('banners')
   @Post('banners')
   createBanner(@CurrentAdmin() a: AdminUser, @Body() dto: BannerDto) {
     return this.banners.save(a, null, dto);
   }
 
+  @Permission('banners')
   @Put('banners/:id')
   updateBanner(@CurrentAdmin() a: AdminUser, @Param('id', id) bannerId: string, @Body() dto: BannerDto) {
     return this.banners.save(a, bannerId, dto);
   }
 
+  @Permission('banners')
   @Delete('banners/:id')
   @HttpCode(204)
   deleteBanner(@CurrentAdmin() a: AdminUser, @Param('id', id) bannerId: string) {
     return this.banners.remove(a, bannerId);
   }
 
+  @Permission('coupons')
   @Get('coupons')
   listCoupons() {
     return this.coupons.list(null);
   }
 
+  @Permission('coupons')
   @Post('coupons')
   async createCoupon(@CurrentAdmin() a: AdminUser, @Body() dto: ShopCouponDto) {
     const c = await this.coupons.create(null, dto);
@@ -68,6 +73,7 @@ export class AdminPromotionsController {
     return c;
   }
 
+  @Permission('coupons')
   @Put('coupons/:id')
   async updateCoupon(@CurrentAdmin() a: AdminUser, @Param('id', id) couponId: string, @Body() dto: ShopCouponDto) {
     const c = await this.coupons.update(null, couponId, dto);
@@ -75,6 +81,7 @@ export class AdminPromotionsController {
     return c;
   }
 
+  @Permission('coupons')
   @Patch('coupons/:id')
   async setCouponActive(@CurrentAdmin() a: AdminUser, @Param('id', id) couponId: string, @Body() dto: CouponActiveDto) {
     const c = await this.coupons.setActive(null, couponId, dto.isActive);
@@ -82,6 +89,7 @@ export class AdminPromotionsController {
     return c;
   }
 
+  @Permission('coupons')
   @Delete('coupons/:id')
   @HttpCode(204)
   async deleteCoupon(@CurrentAdmin() a: AdminUser, @Param('id', id) couponId: string) {

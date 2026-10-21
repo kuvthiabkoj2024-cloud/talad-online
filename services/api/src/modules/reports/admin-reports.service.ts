@@ -105,7 +105,8 @@ export class AdminReportsService {
              COUNT(DISTINCT so.id)::int AS orders,
              SUM(oi.quantity)::int AS units,
              SUM(oi."lineTotal") AS revenue,
-             SUM(oi."lineTotal" * COALESCE(so."commissionAmount" / NULLIF(so.subtotal, 0), 0)) AS commission
+             -- Each item's own fee; older orders (before per-item fees) spread the order's fee by value.
+             SUM(COALESCE(oi."commissionAmount", oi."lineTotal" * COALESCE(so."commissionAmount" / NULLIF(so.subtotal, 0), 0))) AS commission
       FROM "OrderItem" oi
       JOIN "ShopOrder" so ON so.id = oi."shopOrderId"
       JOIN "Shop" s ON s.id = so."shopId"
@@ -122,7 +123,7 @@ export class AdminReportsService {
   async finance(from: Date, to: Date) {
     const [gross, completed, refunded, payouts] = await Promise.all([
       this.prisma.shopOrder.aggregate({ where: { status: { not: 'CANCELLED' }, createdAt: { gte: from, lt: to } }, _sum: { total: true }, _count: { _all: true } }),
-      this.prisma.shopOrder.aggregate({ where: { status: 'COMPLETED', createdAt: { gte: from, lt: to } }, _sum: { total: true, commissionAmount: true } }),
+      this.prisma.shopOrder.aggregate({ where: { status: 'COMPLETED', createdAt: { gte: from, lt: to } }, _sum: { total: true, commissionAmount: true, platformDiscount: true } }),
       this.prisma.shopOrder.aggregate({
         where: { createdAt: { gte: from, lt: to }, payments: { some: { status: 'REFUNDED' } } },
         _sum: { total: true },
@@ -135,6 +136,8 @@ export class AdminReportsService {
       orders: gross._count._all,
       completedSales: num(completed._sum.total),
       commissionCollected: num(completed._sum.commissionAmount),
+      /** Platform coupons on completed orders: Taladonline's cost, paid back to shops with their payouts. */
+      platformCoupons: num(completed._sum.platformDiscount),
       refundsIssued: { count: refunded._count._all, amount: num(refunded._sum.total) },
       payoutsPaid: { count: payouts._count._all, amount: num(payouts._sum.netAmount) },
     };

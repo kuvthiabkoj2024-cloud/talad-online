@@ -295,6 +295,9 @@ body { font-family: ${FONT}; color: #000; font-size: 9pt; line-height: 1.3; }
  * Prints `html` from a hidden frame (no pop-up to block), once its images have loaded.
  * Works with any printer, a thermal label printer, or "Save as PDF".
  */
+/** Longer than the menus' and dialogs' close animations (~200 ms). */
+const UI_SETTLE_MS = 350
+
 export function printHtml(html: string): void {
   const frame = document.createElement('iframe')
   frame.setAttribute('aria-hidden', 'true')
@@ -305,11 +308,16 @@ export function printHtml(html: string): void {
   doc.write(html)
   doc.close()
   const images = [...doc.images].map((img) => (img.complete ? Promise.resolve() : new Promise<void>((r) => ((img.onload = () => r()), (img.onerror = () => r())))))
-  // Don't wait forever on a slow image.
-  void Promise.race([Promise.all(images), new Promise((r) => setTimeout(r, 4000))]).then(() => {
+  // Don't wait forever on a slow image. Also let the menu or dialog that started this finish
+  // closing first: print() blocks the page, and a dialog frozen mid-close stays on screen with
+  // the page unclickable.
+  const settled = new Promise((r) => setTimeout(r, UI_SETTLE_MS))
+  void Promise.all([settled, Promise.race([Promise.all(images), new Promise((r) => setTimeout(r, 4000))])]).then(() => {
     const win = frame.contentWindow!
     win.focus()
     win.print()
+    // Belt and braces: a modal that was still closing leaves the page locked; free it.
+    if (!document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) document.body.style.pointerEvents = ''
     // Removed once printing is done (some browsers return from print() before that).
     win.addEventListener('afterprint', () => frame.remove())
     setTimeout(() => frame.remove(), 60_000)

@@ -26,11 +26,18 @@ async function getPage(slug: string, locale: Locale) {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const page = await getPage((await params).slug, await getLocale());
-  return { title: page.title, description: page.body.replace(/^#\s+/gm, "").slice(0, 160) };
+  const text = isHtml(page.body) ? page.body.replace(/<[^>]+>/g, " ") : page.body.replace(/^#\s+/gm, "");
+  return { title: page.title, description: text.replace(/\s+/g, " ").trim().slice(0, 160) };
 }
 
-/** Plain-text CMS body: blank lines split blocks, "# " lines are headings. */
+const isHtml = (body: string) => /<[a-z][\s\S]*>/i.test(body);
+
+/**
+ * The page body: HTML from the admin editor (cleaned to safe formatting tags by the API when
+ * saved), or — on older pages — plain text with blank lines between paragraphs and "# " headings.
+ */
 function Body({ text }: { text: string }) {
+  if (isHtml(text)) return <div className="cms-body" dangerouslySetInnerHTML={{ __html: text }} />;
   const nodes: React.ReactNode[] = [];
   let para: string[] = [];
   const flush = () => {

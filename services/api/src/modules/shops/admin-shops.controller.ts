@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { SHOP_STATUSES, type ShopStatus } from '@talad/shared';
 import type { AdminUser } from '../../generated/prisma/client.js';
 import { AdminPageQuery, RateDto, ReasonDto } from '../admins/admin.dto.js';
-import { AdminAuthGuard, ClientIp, CurrentAdmin, Roles } from '../auth/admin-auth.guard.js';
+import { AdminAuthGuard, ClientIp, CurrentAdmin, Permission } from '../auth/admin-auth.guard.js';
 import { AdminShopsService, type ShopDecision } from './admin-shops.service.js';
 
 const id = new ParseUUIDPipe({ version: '7' });
@@ -13,7 +13,7 @@ const DECISIONS: ShopDecision[] = ['approve', 'reject', 'suspend', 'reinstate'];
 @ApiTags('admin')
 @ApiBearerAuth()
 @UseGuards(AdminAuthGuard)
-@Roles('SUPPORT', 'FINANCE')
+@Permission('shops')
 @Controller('admin/shops')
 export class AdminShopsController {
   constructor(private readonly shops: AdminShopsService) {}
@@ -39,7 +39,7 @@ export class AdminShopsController {
 
   /** approve | reject | suspend | reinstate (reason required to reject or suspend). */
   @Post(':id/:decision')
-  @Roles('SUPPORT')
+  @Permission('shops.review')
   decide(
     @CurrentAdmin() admin: AdminUser,
     @Param('id', id) shopId: string,
@@ -52,7 +52,7 @@ export class AdminShopsController {
   }
 
   @Put(':id/commission')
-  @Roles('FINANCE')
+  @Permission('shops.commission')
   commission(@CurrentAdmin() admin: AdminUser, @Param('id', id) shopId: string, @Body() dto: RateDto, @ClientIp() ip: string) {
     return this.shops.setCommission(admin, shopId, dto.rate, ip);
   }

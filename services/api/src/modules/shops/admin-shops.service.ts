@@ -123,7 +123,7 @@ export class AdminShopsService {
     const [products, orders, revenue, defaultRate] = await Promise.all([
       this.prisma.product.groupBy({ by: ['status'], where: { shopId: id }, _count: { _all: true } }),
       this.prisma.shopOrder.groupBy({ by: ['status'], where: { shopId: id }, _count: { _all: true } }),
-      this.prisma.shopOrder.aggregate({ where: { shopId: id, status: 'COMPLETED' }, _sum: { total: true, commissionAmount: true } }),
+      this.prisma.shopOrder.aggregate({ where: { shopId: id, status: 'COMPLETED' }, _sum: { total: true, platformDiscount: true, commissionAmount: true } }),
       this.prisma.setting.findUnique({ where: { key: 'defaultCommissionRate' } }),
     ]);
     return {
@@ -156,7 +156,8 @@ export class AdminShopsService {
       documents: shop.kycDocuments.map((d) => ({ id: d.id, type: d.type, createdAt: d.createdAt, reviewedAt: d.reviewedAt, ext: d.fileKey.split('.').pop() })),
       productCounts: Object.fromEntries(products.map((p) => [p.status, p._count._all])),
       orderCounts: Object.fromEntries(orders.map((o) => [o.status, o._count._all])),
-      completedRevenue: revenue._sum.total?.toNumber() ?? 0,
+      // What customers paid plus platform coupons Taladonline pays back.
+      completedRevenue: (revenue._sum.total?.toNumber() ?? 0) + (revenue._sum.platformDiscount?.toNumber() ?? 0),
       commissionEarned: revenue._sum.commissionAmount?.toNumber() ?? 0,
     };
   }

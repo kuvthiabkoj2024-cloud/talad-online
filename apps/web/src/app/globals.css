@@ -75,3 +75,17 @@ body {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* CMS pages (About, Terms…): HTML from the admin editor. */
+.cms-body { line-height: 1.75; color: var(--muted-foreground); }
+.cms-body > * + * { margin-top: 0.85em; }
+.cms-body h2 { margin-top: 1.4em; font-size: 1.2rem; font-weight: 700; color: var(--foreground); }
+.cms-body h3 { margin-top: 1.1em; font-size: 1.05rem; font-weight: 600; color: var(--foreground); }
+.cms-body strong, .cms-body b { color: var(--foreground); font-weight: 600; }
+.cms-body ul { list-style: disc; padding-left: 1.5rem; }
+.cms-body ol { list-style: decimal; padding-left: 1.5rem; }
+.cms-body li + li { margin-top: 0.25em; }
+.cms-body li > p { margin: 0; }
+.cms-body blockquote { border-left: 3px solid var(--primary); padding-left: 1rem; font-style: italic; }
+.cms-body a { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+.cms-body hr { border-color: var(--border); margin: 1.5em 0; }

@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { AdminUser } from '../../generated/prisma/client.js';
-import { AdminAuthGuard, CurrentAdmin, Roles } from '../auth/admin-auth.guard.js';
+import { AdminAuthGuard, CurrentAdmin, Permission } from '../auth/admin-auth.guard.js';
 import { DeliveryProviderDto, ShippingZoneDto } from './admin-delivery.dto.js';
 import { AdminDeliveryService } from './admin-delivery.service.js';
 
@@ -11,7 +11,7 @@ const id = new ParseUUIDPipe({ version: '7' });
 @ApiTags('admin')
 @ApiBearerAuth()
 @UseGuards(AdminAuthGuard)
-@Roles('SUPER_ADMIN')
+@Permission('delivery')
 @Controller('admin/delivery')
 export class AdminDeliveryController {
   constructor(private readonly delivery: AdminDeliveryService) {}

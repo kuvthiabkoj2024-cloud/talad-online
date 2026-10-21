@@ -1,4 +1,4 @@
-import type { AdminRole } from '@talad/shared'
+import type { AdminPermission } from '@talad/shared'
 import { createContext, useContext } from 'react'
 import type { Admin } from '@/lib/types'
 
@@ -21,24 +21,10 @@ export function useAuth(): AuthState {
   return ctx
 }
 
-/**
- * What each role may open (mirrors the API's @Roles guards, §2.1). Super Admin is
- * implied everywhere; areas without an entry are Super Admin only.
- */
-export const ACCESS: Record<string, AdminRole[]> = {
-  dashboard: ['SUPPORT', 'FINANCE'],
-  shops: ['SUPPORT', 'FINANCE'],
-  products: ['SUPPORT'],
-  customers: ['SUPPORT'],
-  orders: ['SUPPORT', 'FINANCE'],
-  disputes: ['SUPPORT'],
-  payouts: ['FINANCE'],
-  reports: ['FINANCE'],
-  'shop-decisions': ['SUPPORT'],
-  'shop-commission': ['FINANCE'],
+/** Whether the signed-in admin has `permission` (Super Admins have them all). Mirrors the API's @Permission guards. */
+export function can(admin: Admin | null | undefined, permission: AdminPermission): boolean {
+  return !!admin && (admin.role.isSuper || admin.can.includes(permission))
 }
 
-export function can(role: AdminRole | undefined, area: string): boolean {
-  if (!role) return false
-  return role === 'SUPER_ADMIN' || (ACCESS[area]?.includes(role) ?? false)
-}
+/** Managing admins and roles is for Super Admins only. */
+export const isSuperAdmin = (admin: Admin | null | undefined) => !!admin?.role.isSuper

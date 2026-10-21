@@ -107,7 +107,11 @@ export function FinancePage() {
                   {t.finance.earned} · {fill(t.finance.orderCount, { n: formatNumber(data.data.earned.orders, locale) })}
                 </CardContent>
               </Card>
-              <Kpi label={t.finance.gross} value={formatMoney(data.data.earned.gross, locale)} />
+              <Kpi
+                label={t.finance.gross}
+                value={formatMoney(data.data.earned.gross, locale)}
+                hint={data.data.earned.discounts.platformCoupons > 0 ? fill(t.finance.grossHint, { amount: formatMoney(data.data.earned.discounts.platformCoupons, locale) }) : undefined}
+              />
               <Kpi label={t.finance.commission} value={`−${formatMoney(data.data.earned.commission, locale)}`} />
               <Kpi
                 label={t.finance.inProgress}
@@ -117,6 +121,24 @@ export function FinancePage() {
               <Kpi label={t.finance.refunded} value={formatMoney(data.data.refunded.amount, locale)} hint={fill(t.finance.orderCount, { n: formatNumber(data.data.refunded.orders, locale) })} />
               <Kpi label={t.finance.balance} value={formatMoney(Math.max(0, data.data.balance), locale)} hint={t.finance.balanceHint} className="sm:col-span-2" />
             </div>
+
+            <Card className="gap-3">
+              <CardHeader>
+                <CardTitle className="text-base">{t.finance.discountsTitle}</CardTitle>
+                <CardDescription>{t.finance.discountsHint}</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-px overflow-hidden rounded-xl bg-border p-0 ring-1 ring-border sm:grid-cols-3 mx-4">
+                {(['flashSale', 'shopCoupons', 'platformCoupons'] as const).map((k) => (
+                  <div key={k} className="flex flex-col gap-0.5 bg-card px-4 py-3">
+                    <span className="text-xs text-muted-foreground">{t.finance[k]}</span>
+                    <span className={cn('text-lg font-semibold tabular-nums', k === 'platformCoupons' && 'text-primary')}>
+                      {k === 'platformCoupons' ? '+' : '−'}
+                      {formatMoney(data.data.earned.discounts[k], locale)}
+                    </span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
 
             <Card className="gap-3">
               <CardHeader>

@@ -55,7 +55,7 @@ export function AnnouncementsPage() {
   return (
     <>
       <TopBar title={t.announcements.title} />
-      <PageBody className="max-w-5xl">
+      <PageBody>
         <PageIntro title={t.announcements.title} description={t.announcements.description} />
         <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
           <Card className="gap-3">

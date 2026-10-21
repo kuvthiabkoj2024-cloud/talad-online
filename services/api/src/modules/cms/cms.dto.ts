@@ -1,6 +1,7 @@
 import { CHECKOUT_PAYMENT_METHODS } from '@talad/shared';
 import { Transform, Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsIn, IsInt, IsNumber, IsOptional, IsString, Length, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { cleanPageBody } from './page-html.js';
 
 export class PageTextDto {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
@@ -8,9 +9,10 @@ export class PageTextDto {
   @Length(1, 120)
   title: string;
 
-  /** Plain text; blank lines separate paragraphs, lines starting with "# " are headings. */
+  /** HTML from the admin editor (cleaned to safe formatting tags); older pages are plain text. */
+  @Transform(({ value }) => (typeof value === 'string' ? cleanPageBody(value) : value))
   @IsString()
-  @MaxLength(50_000)
+  @MaxLength(100_000)
   body: string;
 }
 

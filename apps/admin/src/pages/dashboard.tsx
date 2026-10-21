@@ -1,3 +1,4 @@
+import type { AdminPermission } from '@talad/shared'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@talad/ui/components/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@talad/ui/components/table'
 import { cn } from '@talad/ui/lib/utils'
@@ -46,14 +47,15 @@ export function DashboardPage() {
           (() => {
             const d = data.data
             const vs = fill(t.dashboard.vsPrevious, { n: d.days })
-            const alerts: { label: string; value: number; to: string; icon: LucideIcon; area: string; money?: number }[] = [
-              { label: t.dashboard.pendingShops, value: d.alerts.pendingShops, to: '/shops?status=PENDING', icon: Store, area: 'shops' },
+            const all: { label: string; value: number; to: string; icon: LucideIcon; area: AdminPermission; money?: number }[] = [
+              { label: t.dashboard.pendingShops, value: d.alerts.pendingShops, to: '/shops?status=PENDING', icon: Store, area: 'shops.review' },
               { label: t.dashboard.pendingProducts, value: d.alerts.pendingProducts, to: '/products?status=PENDING', icon: Package, area: 'products' },
               { label: t.dashboard.openDisputes, value: d.alerts.openDisputes, to: '/disputes?status=OPEN', icon: Gavel, area: 'disputes' },
               { label: t.dashboard.payoutsDue, value: d.alerts.payoutsDue.count, money: d.alerts.payoutsDue.net, to: '/payouts?status=SCHEDULED', icon: Wallet, area: 'payouts' },
               { label: t.dashboard.unsettledOrders, value: d.alerts.unsettledOrders, to: '/payouts', icon: ReceiptText, area: 'payouts' },
               { label: t.dashboard.lowStock, value: d.alerts.lowStock, to: '/products?status=PUBLISHED', icon: PackageX, area: 'products' },
-            ].filter((a) => can(admin?.role, a.area))
+            ]
+            const alerts = all.filter((a) => can(admin, a.area))
             const waiting = alerts.filter((a) => a.value > 0)
             return (
               <>

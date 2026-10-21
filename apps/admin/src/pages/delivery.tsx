@@ -38,7 +38,7 @@ export function DeliveryPage() {
   return (
     <>
       <TopBar title={t.delivery.title} />
-      <PageBody className="max-w-5xl">
+      <PageBody>
         <PageIntro
           title={t.delivery.title}
           description={t.delivery.description}

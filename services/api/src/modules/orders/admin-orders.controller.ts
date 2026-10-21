@@ -4,7 +4,7 @@ import { isShopOrderTab } from '@talad/shared';
 import { IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import type { AdminUser, DisputeStatus, PayoutStatus } from '../../generated/prisma/client.js';
 import { AdminPageQuery, ReasonDto } from '../admins/admin.dto.js';
-import { AdminAuthGuard, ClientIp, CurrentAdmin, Roles } from '../auth/admin-auth.guard.js';
+import { AdminAuthGuard, ClientIp, CurrentAdmin, Permission } from '../auth/admin-auth.guard.js';
 import { AdminOrdersService, type DisputeDecision, type PayoutAction } from './admin-orders.service.js';
 import { ShopOrdersService } from './shop-orders.service.js';
 
@@ -33,7 +33,7 @@ const PAYOUT_STATUSES: PayoutStatus[] = ['SCHEDULED', 'PROCESSING', 'PAID', 'FAI
 @ApiTags('admin')
 @ApiBearerAuth()
 @UseGuards(AdminAuthGuard)
-@Roles('SUPPORT', 'FINANCE')
+@Permission('orders')
 @Controller('admin/orders')
 export class AdminOrdersController {
   constructor(private readonly orders: ShopOrdersService) {}
@@ -61,7 +61,7 @@ export class AdminOrdersController {
 @ApiTags('admin')
 @ApiBearerAuth()
 @UseGuards(AdminAuthGuard)
-@Roles('SUPPORT')
+@Permission('disputes')
 @Controller('admin/disputes')
 export class AdminDisputesController {
   constructor(private readonly admin: AdminOrdersService) {}
@@ -84,7 +84,7 @@ export class AdminDisputesController {
 @ApiTags('admin')
 @ApiBearerAuth()
 @UseGuards(AdminAuthGuard)
-@Roles('FINANCE')
+@Permission('payouts')
 @Controller('admin/payouts')
 export class AdminPayoutsController {
   constructor(private readonly admin: AdminOrdersService) {}
@@ -99,6 +99,17 @@ export class AdminPayoutsController {
   @Post('generate')
   generate(@CurrentAdmin() a: AdminUser, @ClientIp() ip: string) {
     return this.admin.generatePayouts(a, ip);
+  }
+
+  @Get(':id')
+  detail(@Param('id', id) payoutId: string) {
+    return this.admin.payoutDetail(payoutId);
+  }
+
+  @Get(':id/qr')
+  async qr(@Param('id', id) payoutId: string) {
+    const file = await this.admin.payoutQr(payoutId);
+    return new StreamableFile(file.body, { type: file.contentType, length: file.contentLength, disposition: 'inline' });
   }
 
   /** processing | paid (reference required) | failed */

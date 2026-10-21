@@ -22,7 +22,7 @@ export function SettingsPage() {
   return (
     <>
       <TopBar title={t.settings.title} />
-      <PageBody className="max-w-3xl">
+      <PageBody>
         <PageIntro title={t.settings.title} description={t.settings.description} />
         {settings.isPending ? <LoadingState /> : settings.isError ? <ErrorState onRetry={() => void settings.refetch()} /> : <SettingsForm value={settings.data} />}
       </PageBody>

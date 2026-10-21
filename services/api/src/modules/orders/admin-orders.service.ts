@@ -2,8 +2,10 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import type { AdminUser, DisputeStatus, PayoutStatus, Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { StorageService } from '../media/storage.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { addSold, awardPoints, moveOrder, restoreStock } from './order-transitions.js';
+import { shopNet } from './checkout-pricing.js';
 import { paymentOf } from './payment-slips.service.js';
 
 export type DisputeDecision = 'review' | 'refund' | 'reject';
@@ -19,6 +21,7 @@ export class AdminOrdersService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
+    private readonly storage: StorageService,
   ) {}
 
   // ─── Disputes ──────────────────────────────────────────────────────────────
@@ -161,7 +164,7 @@ export class AdminOrdersService {
       this.prisma.shopOrder.aggregate({
         where: { status: 'COMPLETED', payoutId: null },
         _count: { _all: true },
-        _sum: { total: true, commissionAmount: true },
+        _sum: { total: true, commissionAmount: true, platformDiscount: true },
       }),
     ]);
     return {
@@ -188,7 +191,7 @@ export class AdminOrdersService {
       /** Completed orders not yet in any payout: what "Generate" would settle. */
       unsettled: {
         orders: unsettled._count._all,
-        net: num(unsettled._sum.total) - num(unsettled._sum.commissionAmount),
+        net: shopNet({ total: num(unsettled._sum.total), platformDiscount: num(unsettled._sum.platformDiscount), commission: num(unsettled._sum.commissionAmount) }),
       },
     };
   }
@@ -198,14 +201,15 @@ export class AdminOrdersService {
     const cutoff = new Date();
     const orders = await this.prisma.shopOrder.findMany({
       where: { status: 'COMPLETED', payoutId: null, updatedAt: { lte: cutoff } },
-      select: { id: true, shopId: true, total: true, commissionAmount: true, createdAt: true },
+      select: { id: true, shopId: true, total: true, platformDiscount: true, commissionAmount: true, createdAt: true },
     });
     const byShop = new Map<string, typeof orders>();
     for (const o of orders) byShop.set(o.shopId, [...(byShop.get(o.shopId) ?? []), o]);
 
     let created = 0;
     for (const [shopId, list] of byShop) {
-      const gross = list.reduce((s, o) => s + num(o.total), 0);
+      // What customers paid plus platform coupons Taladonline pays back (shopNet = gross − commission).
+      const gross = list.reduce((s, o) => s + num(o.total) + num(o.platformDiscount), 0);
       const commission = list.reduce((s, o) => s + num(o.commissionAmount), 0);
       await this.prisma.$transaction(async (tx) => {
         const payout = await tx.payout.create({
@@ -226,6 +230,61 @@ export class AdminOrdersService {
       created++;
     }
     return { created };
+  }
+
+  /** One payout with where to send it (bank account, QR) and the orders it settles. */
+  async payoutDetail(id: string) {
+    const p = await this.prisma.payout.findUnique({
+      where: { id },
+      include: {
+        shop: {
+          select: { id: true, name: true, phone: true, paymentBankCode: true, paymentAccountName: true, paymentAccountNumber: true, paymentQrKey: true },
+        },
+        orders: {
+          orderBy: { createdAt: 'asc' },
+          select: { number: true, createdAt: true, updatedAt: true, subtotal: true, discountTotal: true, platformDiscount: true, total: true, commissionAmount: true },
+        },
+      },
+    });
+    if (!p) throw new NotFoundException('Payout not found');
+    const { paymentQrKey, ...shop } = p.shop;
+    return {
+      id: p.id,
+      shop: { ...shop, hasQr: paymentQrKey !== null },
+      periodStart: p.periodStart,
+      periodEnd: p.periodEnd,
+      gross: num(p.grossAmount),
+      commission: num(p.commissionAmount),
+      refunds: num(p.refundAmount),
+      net: num(p.netAmount),
+      status: p.status,
+      paidAt: p.paidAt,
+      reference: p.reference,
+      createdAt: p.createdAt,
+      orders: p.orders.map((o) => {
+        const total = num(o.total);
+        const platformDiscount = num(o.platformDiscount);
+        const commission = num(o.commissionAmount);
+        return {
+          number: o.number,
+          placedAt: o.createdAt,
+          completedAt: o.updatedAt,
+          subtotal: num(o.subtotal),
+          discount: num(o.discountTotal),
+          platformDiscount,
+          total,
+          commission,
+          net: shopNet({ total, platformDiscount, commission }),
+        };
+      }),
+    };
+  }
+
+  /** The shop's payment QR (private), to pay a payout by scanning it. */
+  async payoutQr(id: string) {
+    const p = await this.prisma.payout.findUnique({ where: { id }, select: { shop: { select: { paymentQrKey: true } } } });
+    if (!p?.shop.paymentQrKey) throw new NotFoundException('No payment QR');
+    return this.storage.get(p.shop.paymentQrKey);
   }
 
   async updatePayout(admin: AdminUser, id: string, action: PayoutAction, reference: string | null, ip?: string) {

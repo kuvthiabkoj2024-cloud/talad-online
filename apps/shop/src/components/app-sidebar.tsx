@@ -59,15 +59,15 @@ export function AppSidebar() {
         {NAV_GROUPS.map((group) => (
           <SidebarGroup key={group.label}>
             <SidebarGroupLabel>{t.nav[group.label]}</SidebarGroupLabel>
-            <SidebarMenu>
+            <SidebarMenu className="gap-1.5">
               {group.items.map(({ to, label, icon: Icon }) => (
                 <SidebarMenuItem key={to}>
                   <SidebarMenuButton
                     asChild
                     isActive={isActive(to)}
                     tooltip={t.nav[label]}
-                    // The current page stands out in white on the green sidebar.
-                    className="data-active:bg-white data-active:font-semibold data-active:text-sidebar data-active:shadow-sm data-active:hover:bg-white data-active:hover:text-sidebar"
+                    // The current page is a tab joined to the page (styles: .sidebar-tab in @talad/ui globals.css).
+                    className="sidebar-tab"
                   >
                     <NavLink to={to} onClick={() => isMobile && setOpenMobile(false)}>
                       <Icon />

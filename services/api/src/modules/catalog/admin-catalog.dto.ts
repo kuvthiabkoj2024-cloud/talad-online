@@ -16,9 +16,11 @@ export class LocalizedNameDto {
 }
 
 export class AdminCategoryDto {
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
+  /** Web address part (`/c/food`). Optional: made from the English name; kept as is on edits. */
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() || undefined : value))
   @Matches(/^[a-z0-9](?:[a-z0-9-]{0,48}[a-z0-9])?$/)
-  slug: string;
+  slug?: string;
 
   @ValidateNested()
   @Type(() => LocalizedNameDto)
@@ -57,9 +59,11 @@ export class AdminCategoryDto {
 }
 
 export class AdminUnitDto {
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
+  /** Short internal key. Optional: made from the English name; kept as is on edits. */
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() || undefined : value))
   @Matches(/^[a-z0-9]{1,12}$/)
-  code: string;
+  code?: string;
 
   @ValidateNested()
   @Type(() => LocalizedNameDto)

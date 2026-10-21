@@ -25,6 +25,7 @@ import { toast } from 'sonner'
 import { ME_KEY, useAuth } from '@/auth/context'
 import { CodeInput } from '@/components/code-input'
 import { useI18n } from '@/i18n/context'
+import { roleName } from '@/lib/roles'
 import { ApiError, send } from '@/lib/api'
 import { fill } from '@/lib/format'
 import type { Admin } from '@/lib/types'
@@ -68,7 +69,7 @@ export function AccountMenu({ trigger, side }: { trigger: React.ReactNode; side?
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold text-foreground">{admin.name}</span>
               <span className="block truncate text-xs font-normal text-muted-foreground">
-                {admin.email} · {t.roles[admin.role]}
+                {admin.email} · {roleName(admin.role, t)}
               </span>
             </span>
           </DropdownMenuLabel>

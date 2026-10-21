@@ -1,10 +1,11 @@
 import { Separator } from '@talad/ui/components/separator'
 import { SidebarTrigger } from '@talad/ui/components/sidebar'
 import { cn } from '@talad/ui/lib/utils'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, ChevronDown } from 'lucide-react'
 import { Link } from 'react-router'
 import { useAuth } from '@/auth/context'
 import { useI18n } from '@/i18n/context'
+import { roleName } from '@/lib/roles'
 import { AccountMenu, AdminAvatar } from './account-menu'
 import { NotificationBell } from './notification-bell'
 
@@ -24,15 +25,23 @@ export function TopBar({ title, backTo }: { title: string; backTo?: string }) {
       <h1 className="min-w-0 flex-1 truncate text-base font-semibold">{title}</h1>
       {admin && <NotificationBell />}
       {admin && (
-        <span className="md:hidden">
-          <AccountMenu
-            trigger={
-              <button type="button" className="rounded-full p-0.5 outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                <AdminAvatar name={admin.name} className="size-8" />
-              </button>
-            }
-          />
-        </span>
+        <AccountMenu
+          side="bottom"
+          trigger={
+            // Phones: just the avatar. Desktop: avatar, name and role.
+            <button
+              type="button"
+              className="flex items-center gap-2 rounded-full p-0.5 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-muted md:py-1 md:pr-2.5 md:pl-1"
+            >
+              <AdminAvatar name={admin.name} className="size-8" />
+              <span className="hidden min-w-0 text-left leading-tight md:block">
+                <span className="block max-w-40 truncate text-sm font-medium">{admin.name}</span>
+                <span className="block max-w-40 truncate text-xs text-muted-foreground">{roleName(admin.role, t)}</span>
+              </span>
+              <ChevronDown className="hidden size-4 text-muted-foreground md:block" />
+            </button>
+          }
+        />
       )}
     </header>
   )
@@ -51,5 +60,5 @@ export function PageIntro({ title, description, actions }: { title: string; desc
 }
 
 export function PageBody({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <div className={cn('mx-auto flex w-full max-w-7xl flex-col gap-5 p-4 md:p-6', className)}>{children}</div>
+  return <div className={cn('mx-auto flex w-full max-w-6xl flex-col gap-5 p-4 md:p-6', className)}>{children}</div>
 }

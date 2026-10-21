@@ -1,15 +1,16 @@
-import { LAO_BANKS, type BankCode } from '@talad/shared'
 import { Button } from '@talad/ui/components/button'
 import { Card, CardContent } from '@talad/ui/components/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@talad/ui/components/table'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Gavel, LoaderCircle, Wallet } from 'lucide-react'
+import { Eye, Gavel, LoaderCircle, Wallet } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { toast } from 'sonner'
 import { ALERTS_KEY } from '@/nav'
 import { DisputeStatusBadge, OrderStatusBadge, PayoutStatusBadge } from '@/components/badges'
 import { ConfirmDialog, type ConfirmOptions } from '@/components/confirm-dialog'
+import { PayoutDetailDialog } from '@/components/payout-detail-dialog'
+import { PAYOUT_NEXT, type PayoutAction } from '@/lib/payouts'
 import { FilterTabs, Pager } from '@/components/list-controls'
 import { PageBody, PageIntro, TopBar } from '@/components/page-header'
 import { EmptyState, ErrorState, LoadingState } from '@/components/states'
@@ -131,11 +132,11 @@ export function DisputesPage() {
 }
 
 const PAYOUT_STATUSES: PayoutStatus[] = ['SCHEDULED', 'PROCESSING', 'PAID', 'FAILED']
-type PayoutAction = 'processing' | 'paid' | 'failed'
-const NEXT: Record<PayoutStatus, PayoutAction[]> = { SCHEDULED: ['processing', 'paid', 'failed'], PROCESSING: ['paid', 'failed'], PAID: [], FAILED: [] }
+const NEXT = PAYOUT_NEXT
 
 /** Settle completed orders with shops (§2.3). */
 export function PayoutsPage() {
+  const [viewing, setViewing] = useState<string | null>(null)
   const { t, locale } = useI18n()
   const queryClient = useQueryClient()
   const { params, set, page } = useUrlParams()
@@ -222,7 +223,6 @@ export function PayoutsPage() {
                     <TableHead className="text-right">{t.payouts.gross}</TableHead>
                     <TableHead className="text-right">{t.payouts.commission}</TableHead>
                     <TableHead className="text-right">{t.payouts.net}</TableHead>
-                    <TableHead>{t.payouts.bank}</TableHead>
                     <TableHead>{t.common.status}</TableHead>
                     <TableHead className="pr-4" />
                   </TableRow>
@@ -237,6 +237,7 @@ export function PayoutsPage() {
                         <span className="block text-xs text-muted-foreground">
                           {formatNumber(p.orderCount, locale)} {t.payouts.orders}
                         </span>
+                        {!p.shop.paymentAccountNumber && <span className="block text-xs text-destructive">{t.payouts.noBank}</span>}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {formatDate(p.periodStart, locale)} – {formatDate(p.periodEnd, locale)}
@@ -244,24 +245,16 @@ export function PayoutsPage() {
                       <TableCell className="text-right tabular-nums">{formatMoney(p.gross, locale)}</TableCell>
                       <TableCell className="text-right text-muted-foreground tabular-nums">−{formatMoney(p.commission, locale)}</TableCell>
                       <TableCell className="text-right font-semibold tabular-nums">{formatMoney(p.net, locale)}</TableCell>
-                      <TableCell className="text-sm">
-                        {p.shop.paymentAccountNumber ? (
-                          <>
-                            <span className="block">{LAO_BANKS[p.shop.paymentBankCode as BankCode] ?? p.shop.paymentBankCode}</span>
-                            <span className="block font-mono text-xs text-muted-foreground">
-                              {p.shop.paymentAccountName} · {p.shop.paymentAccountNumber}
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-destructive">{t.payouts.noBank}</span>
-                        )}
-                      </TableCell>
                       <TableCell>
                         <PayoutStatusBadge status={p.status} />
                         {p.reference && <span className="mt-0.5 block font-mono text-xs text-muted-foreground">{p.reference}</span>}
                       </TableCell>
                       <TableCell className="pr-4">
                         <span className="flex justify-end gap-1">
+                          <Button size="sm" variant="outline" onClick={() => setViewing(p.id)}>
+                            <Eye />
+                            {t.payouts.details}
+                          </Button>
                           {NEXT[p.status].map((a) => (
                             <Button key={a} size="sm" variant={a === 'paid' ? 'default' : 'outline'} className={a === 'failed' ? 'text-destructive hover:text-destructive' : ''} onClick={() => act(p.id, p.shop.name, a)}>
                               {t.payouts.actions[a]}
@@ -278,6 +271,7 @@ export function PayoutsPage() {
           </>
         )}
       </PageBody>
+      <PayoutDetailDialog id={viewing} onClose={() => setViewing(null)} onAct={act} />
       <ConfirmDialog options={confirm} onClose={() => setConfirm(null)} />
     </>
   )

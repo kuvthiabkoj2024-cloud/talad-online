@@ -10,6 +10,16 @@ const plain = (dto: object): Record<string, unknown> => JSON.parse(JSON.stringif
 const localizedName = (n: { lo: string; en?: string }): Prisma.InputJsonObject => ({ lo: n.lo, ...(n.en && { en: n.en }) });
 
 /** Category tree and units (§2.6). Deleting is refused while anything still uses them. */
+/**
+ * A URL-safe key from an English name: "Home & Living" → "home-living" (sep "-") or
+ * "homeliving" (sep ""). Empty when there's nothing Latin to use (Lao-only names).
+ */
+export function toKey(name: string | undefined, sep: '-' | '', max: number): string {
+  const ascii = (name ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const key = ascii.replace(/[^a-z0-9]+/g, sep).replace(/^-+|-+$/g, '');
+  return key.slice(0, max).replace(/-+$/, '');
+}
+
 @Injectable()
 export class AdminCatalogService {
   constructor(
@@ -40,11 +50,18 @@ export class AdminCatalogService {
         throw new ConflictException({ code: 'HAS_CHILDREN', message: 'Move its subcategories first' });
       }
     }
-    const clash = await this.prisma.category.findFirst({ where: { slug: dto.slug, ...(id && { NOT: { id } }) }, select: { id: true } });
-    if (clash) throw new ConflictException({ code: 'SLUG_TAKEN', message: 'Another category uses this slug' });
+    // The web address stays put once a category exists (links and bookmarks keep working).
+    const current = id ? await this.prisma.category.findUnique({ where: { id }, select: { slug: true } }) : null;
+    let slug = dto.slug ?? current?.slug;
+    if (slug) {
+      const clash = await this.prisma.category.findFirst({ where: { slug, ...(id && { NOT: { id } }) }, select: { id: true } });
+      if (clash) throw new ConflictException({ code: 'SLUG_TAKEN', message: 'Another category uses this slug' });
+    } else {
+      slug = await this.freeKey(toKey(dto.name.en, '-', 40) || 'category', 50, '-', (k) => this.prisma.category.count({ where: { slug: k } }));
+    }
 
     const data = {
-      slug: dto.slug,
+      slug,
       name: localizedName(dto.name),
       parentId: dto.parentId ?? null,
       iconUrl: dto.iconUrl || null,
@@ -76,12 +93,27 @@ export class AdminCatalogService {
   }
 
   async saveUnit(admin: AdminUser, id: string | null, dto: AdminUnitDto) {
-    const clash = await this.prisma.unit.findFirst({ where: { code: dto.code, ...(id && { NOT: { id } }) }, select: { id: true } });
-    if (clash) throw new ConflictException({ code: 'CODE_TAKEN', message: 'Another unit uses this code' });
-    const data = { code: dto.code, name: localizedName(dto.name) };
+    const current = id ? await this.prisma.unit.findUnique({ where: { id }, select: { code: true } }) : null;
+    let code = dto.code ?? current?.code;
+    if (code) {
+      const clash = await this.prisma.unit.findFirst({ where: { code, ...(id && { NOT: { id } }) }, select: { id: true } });
+      if (clash) throw new ConflictException({ code: 'CODE_TAKEN', message: 'Another unit uses this code' });
+    } else {
+      code = await this.freeKey(toKey(dto.name.en, '', 12) || 'unit', 12, '', (k) => this.prisma.unit.count({ where: { code: k } }));
+    }
+    const data = { code, name: localizedName(dto.name) };
     const saved = id ? await this.prisma.unit.update({ where: { id }, data }) : await this.prisma.unit.create({ data });
     await this.audit.log({ adminId: admin.id, action: id ? 'unit.update' : 'unit.create', entityType: 'Unit', entityId: saved.id, changes: plain(dto) });
     return saved;
+  }
+
+  /** `base`, or `base-2`, `base-3`… (within `max` characters) — the first one not taken. */
+  private async freeKey(base: string, max: number, sep: string, taken: (key: string) => Promise<number>): Promise<string> {
+    for (let n = 1; ; n++) {
+      const suffix = n === 1 ? '' : `${sep}${n}`;
+      const key = base.slice(0, max - suffix.length).replace(/-+$/, '') + suffix;
+      if (!(await taken(key))) return key;
+    }
   }
 
   async deleteUnit(admin: AdminUser, id: string) {

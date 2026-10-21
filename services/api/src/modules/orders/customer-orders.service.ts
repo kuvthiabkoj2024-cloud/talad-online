@@ -1,9 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { ORDER_TABS, type OrderTab } from '@talad/shared';
 import type { OrderStatus, PaymentMethod, PaymentStatus, Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { MediaService } from '../media/media.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import type { ListOrdersQuery } from './list-orders.query.js';
+import { addSold, awardPoints, moveOrder } from './order-transitions.js';
 import { paymentOf } from './payment-slips.service.js';
 
 export interface OrderLine {
@@ -94,7 +96,48 @@ export class CustomerOrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly media: MediaService,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  /**
+   * The customer confirms they got a delivered order: it completes now instead of when the
+   * confirmation window ends (same effects as the automatic sweep — sold count, points).
+   * Interim flow; returns / problem reports come later.
+   */
+  async receive(customerId: string, number: string): Promise<{ status: OrderStatus }> {
+    const o = await this.prisma.shopOrder.findFirst({
+      where: { number, order: { customerId } },
+      select: {
+        id: true,
+        number: true,
+        status: true,
+        shopId: true,
+        shop: { select: { name: true } },
+        items: { take: 1, select: { product: { select: { images: { orderBy: { sortOrder: 'asc' }, take: 1, select: { key: true } } } } } },
+      },
+    });
+    if (!o) throw new NotFoundException('Order not found');
+    if (o.status !== 'DELIVERED') throw new ConflictException({ code: 'ORDER_NOT_DELIVERED', message: 'Only a delivered order can be marked as received' });
+    await this.prisma.$transaction(async (tx) => {
+      const moved = await moveOrder(tx, o.id, 'DELIVERED', 'COMPLETED', {}, { actorType: 'CUSTOMER', actorId: customerId, note: 'Received by customer' });
+      if (!moved) throw new ConflictException({ code: 'ORDER_NOT_DELIVERED', message: 'Only a delivered order can be marked as received' });
+      await addSold(tx, o.id);
+      await awardPoints(tx, o.id);
+      const imageKey = o.items[0]?.product.images[0]?.key;
+      await this.notifications.notifyOrder(tx, { customerId, number: o.number, shopName: o.shop.name, imageKey }, 'COMPLETED');
+      await this.notifications.toShop(
+        tx,
+        o.shopId,
+        'ORDER',
+        {
+          lo: { title: `ລູກຄ້າໄດ້ຮັບສິນຄ້າແລ້ວ ${o.number}`, body: 'ຄຳສັ່ງຊື້ສຳເລັດ — ນັບເຂົ້າລາຍຮັບຂອງທ່ານແລ້ວ.' },
+          en: { title: `Customer received ${o.number}`, body: 'The order is complete and counts toward your earnings.' },
+        },
+        { link: `/orders/${o.number}` },
+      );
+    });
+    return { status: 'COMPLETED' };
+  }
 
   async list(customerId: string, { tab, page, pageSize }: ListOrdersQuery) {
     const mine = { order: { customerId } } satisfies Prisma.ShopOrderWhereInput;

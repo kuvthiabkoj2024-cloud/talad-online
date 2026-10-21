@@ -1,8 +1,10 @@
+import type { AdminPermission } from '@talad/shared'
 import {
   BadgePercent,
   BarChart3,
   FileText,
   FolderTree,
+  Ruler,
   Gavel,
   Image,
   LayoutDashboard,
@@ -27,8 +29,8 @@ export interface NavItem {
   to: string
   label: NavKey
   icon: LucideIcon
-  /** Area in auth/context ACCESS; omitted = Super Admin only. */
-  area?: string
+  /** The permission it needs (see auth/context `can`); omitted = Super Admin only. */
+  area?: AdminPermission
   /** Sidebar badge from /admin/alerts. */
   badge?: (a: Alerts) => number
 }
@@ -55,25 +57,26 @@ export const NAV_GROUPS: { label: NavKey; items: NavItem[] }[] = [
     label: 'groupMoney',
     items: [
       { to: '/payouts', label: 'payouts', icon: Wallet, area: 'payouts', badge: (a) => a.payoutsDue.count },
-      { to: '/coupons', label: 'coupons', icon: BadgePercent },
+      { to: '/coupons', label: 'coupons', icon: BadgePercent, area: 'coupons' },
     ],
   },
   {
     label: 'groupContent',
     items: [
-      { to: '/catalog', label: 'catalog', icon: FolderTree },
-      { to: '/banners', label: 'banners', icon: Image },
-      { to: '/pages', label: 'pages', icon: FileText },
-      { to: '/announcements', label: 'announcements', icon: Megaphone },
+      { to: '/categories', label: 'categories', icon: FolderTree, area: 'catalog' },
+      { to: '/units', label: 'units', icon: Ruler, area: 'catalog' },
+      { to: '/banners', label: 'banners', icon: Image, area: 'banners' },
+      { to: '/pages', label: 'pages', icon: FileText, area: 'pages' },
+      { to: '/announcements', label: 'announcements', icon: Megaphone, area: 'announcements' },
     ],
   },
   {
     label: 'groupSystem',
     items: [
-      { to: '/delivery', label: 'delivery', icon: Truck },
-      { to: '/settings', label: 'settings', icon: Settings },
+      { to: '/delivery', label: 'delivery', icon: Truck, area: 'delivery' },
+      { to: '/settings', label: 'settings', icon: Settings, area: 'settings' },
       { to: '/admins', label: 'admins', icon: ShieldCheck },
-      { to: '/audit', label: 'audit', icon: ScrollText },
+      { to: '/audit', label: 'audit', icon: ScrollText, area: 'audit' },
     ],
   },
 ]

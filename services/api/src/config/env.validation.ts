@@ -105,6 +105,15 @@ class EnvironmentVariables {
   @IsString()
   BUNNY_CDN_HOST?: string;
 
+  /** Telbiz SMS gateway (telbiz.la) for sign-in codes. Unset: codes are only logged. */
+  @IsOptional()
+  @IsString()
+  TELBIZ_CLIENT_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  TELBIZ_SECRETKEY?: string;
+
   /** OAuth client id(s) for "Sign in with Google"; comma-separated for web + mobile. */
   @IsOptional()
   @IsString()

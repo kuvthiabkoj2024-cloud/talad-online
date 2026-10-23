@@ -18,3 +18,6 @@
 services/api/.env.production
 infra/docker/.env.prod
 # Browser apps' .env.production files are kept: they only hold public URLs, read at build time.
+
+# Generated in the image (build-api), never copied from the host
+services/api/src/generated

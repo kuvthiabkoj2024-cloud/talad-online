@@ -267,6 +267,55 @@ docker compose -f infra/docker/docker-compose.prod.yml --env-file infra/docker/.
 docker compose -f infra/docker/docker-compose.prod.yml --env-file infra/docker/.env.prod build --no-cache web
 ```
 
+**Small server (4 GB RAM or less): don't build on it.** Building the API or storefront needs
+2–3 GB of RAM and can freeze a small server (SSH and VS Code disconnect). Build on your own
+computer instead and send the finished images to the server, which then only restarts the
+containers:
+
+```bash
+# On your computer, from the repository root
+# One-time: log in with an SSH key instead of a password
+ssh-keygen -t ed25519                      # skip if ~/.ssh/id_ed25519 exists
+ssh-copy-id root@168.144.248.232           # asks the server password one last time
+
+infra/docker/deploy.sh                     # build + send + restart api, web, shop, admin
+infra/docker/deploy.sh shop                # only the app that changed
+infra/docker/deploy.sh web shop admin      # several
+infra/docker/deploy.sh --migrate api       # API with new database migrations
+```
+
+Install once on your computer: Docker Desktop and `brew install crane` (uploads images).
+
+For each app, `deploy.sh` builds the image for the server's CPU (`linux/amd64`, also from an
+Apple Silicon Mac), uploads **only the layers the server doesn't have yet**, runs
+`up -d --no-build` for it on the server, then removes old images there.
+
+- **What gets uploaded.** Each image is split into a dependencies layer (node_modules, about
+  500 MB, changes only when a `package.json` or `pnpm-lock.yaml` changes) and a small layer with
+  the built app. The first deploy uploads everything; after that a code change sends a few MB.
+- **How.** A small registry runs on the server (container `talad-registry`, 127.0.0.1:5055,
+  about 10 MB of RAM; the script starts it). The images go to it through the script's SSH
+  connection, and the server's Docker pulls them from there. Nothing is public.
+- **Where.** It deploys to `root@168.144.248.232`, into `/var/www/taladonline` (override with
+  `TALAD_SERVER=user@host` and `TALAD_DIR=/path`). The server needs that folder with
+  `infra/docker/docker-compose.prod.yml`, `infra/docker/.env.prod` and
+  `services/api/.env.production`; your computer needs the `.env.production` files of web, shop
+  and admin, which are baked into those images.
+- **Password.** One SSH connection is reused for the whole run, so without a key the password
+  is asked only once.
+
+If you must build on the server, build one image at a time, never `build` with no service
+name (it builds all of them at once), and add swap first:
+
+```bash
+fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+COMPOSE="docker compose -f infra/docker/docker-compose.prod.yml --env-file infra/docker/.env.prod"
+$COMPOSE build shop && $COMPOSE up -d shop   # one app; repeat for api, web, admin
+docker image prune -f
+```
+
 | Image | Target | Runs | Port inside |
 |---|---|---|---|
 | `talad/api` | `api` | `node dist/main.js` | 4000 |
@@ -304,6 +353,7 @@ Every app reads its own env file. The `.env.example` files list every value with
 | `BUNNY_STORAGE_ZONE`, `BUNNY_API_KEY`, `BUNNY_BASE_HOSTNAME`, `BUNNY_CDN_HOST` | for uploads | Storage zone name and password, its region endpoint, and the pull-zone URL |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | optional | Smart chat-bot replies, shopping assistant, photo-search keywords. Without a key the bot uses built-in replies |
 | `IMAGE_SEARCH_ENABLED`, `MODEL_CACHE_DIR` | | Photo search downloads a ~90 MB model once into `MODEL_CACHE_DIR` |
+| `TELBIZ_CLIENT_ID`, `TELBIZ_SECRETKEY` | optional | Telbiz SMS gateway for sign-in codes. Without them, codes are only written to the API log |
 | `GOOGLE_CLIENT_ID`, `APPLE_CLIENT_ID` | optional | Social sign-in audiences (comma-separated for web + mobile) |
 | `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | | The first Super Admin created by the seed |
 | `MEILI_URL`, `MEILI_MASTER_KEY` | optional | Reserved for search; not used yet |
@@ -515,6 +565,7 @@ printf 'POSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\n' "$(openssl rand -hex 24)" "$(
 alias talad='docker compose -f infra/docker/docker-compose.prod.yml --env-file infra/docker/.env.prod'
 
 # 1. Build the images and start Postgres + Redis
+#    (small server: run infra/docker/deploy.sh on your computer instead of `talad build`)
 talad build
 talad up -d postgres redis
 
@@ -528,7 +579,8 @@ talad ps                                   # all "healthy" / "running"
 curl http://127.0.0.1:4000/api/health/ready
 ```
 
-**Updating:**
+**Updating** (on a small server, use `infra/docker/deploy.sh` from your computer instead,
+see [With Docker](#with-docker)):
 
 ```bash
 git pull
@@ -548,8 +600,8 @@ talad exec postgres pg_dump -U talad talad | gzip > talad-$(date +%F).sql.gz
 Notes:
 - **Build-time settings.** The storefront, Seller Center and admin bake their public URLs
   (from their `.env.production`) into the build. Rebuild those images after changing them.
-- **Memory.** Building the storefront needs about 2–3 GB of RAM. On a small server, build when
-  traffic is low, or build on another machine and push the images to a registry.
+- **Memory.** Building the API or storefront needs about 2–3 GB of RAM. On a small server,
+  build on your computer with `infra/docker/deploy.sh` (see [With Docker](#with-docker)).
 - **Don't run the development stack here.** The development `infra/docker/docker-compose.yml`
   publishes Postgres, Meilisearch and Mailpit on all interfaces with dev passwords. Stop it on a
   server: `docker compose -f infra/docker/docker-compose.yml down`.
@@ -666,3 +718,9 @@ every push to `main` and on pull requests.
 ## build command:
 cd /var/www/talad-online
 docker compose -f infra/docker/docker-compose.prod.yml --env-file infra/docker/.env.prod build
+
+# One image at a time
+docker build -f infra/docker/Dockerfile --target api   -t talad/api   .
+docker build -f infra/docker/Dockerfile --target web   -t talad/web   .
+docker build -f infra/docker/Dockerfile --target shop  -t talad/shop  .
+docker build -f infra/docker/Dockerfile --target admin -t talad/admin .

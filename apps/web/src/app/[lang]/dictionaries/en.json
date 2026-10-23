@@ -140,6 +140,7 @@
       "OTP_COOLDOWN": "Please wait before requesting another code.",
       "OTP_EXPIRED": "This code has expired. Request a new one.",
       "OTP_INVALID": "Incorrect code. Try again.",
+      "SMS_FAILED": "We couldn't send the SMS code. Please try again in a moment.",
       "PROVIDER_NOT_CONFIGURED": "This sign-in option isn't available yet.",
       "PROVIDER_TOKEN_INVALID": "Sign-in failed. Please try again.",
       "ACCOUNT_DISABLED": "This account has been suspended. Contact support.",

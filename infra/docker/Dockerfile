@@ -26,14 +26,38 @@ WORKDIR /repo
 FROM base AS source
 COPY . .
 
-# ── API ──────────────────────────────────────────────────────────────────────
-FROM source AS build-api
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile --filter "@talad/api..."
-RUN pnpm turbo run build --filter=@talad/api
+# Each Node app is built in three layers so a deploy only re-sends what changed:
+#   deps-*   node_modules, from the package.json files + lockfile only (changes rarely, the big one)
+#   build-*  the whole source + build (never shipped)
+#   api/web  deps-* + only the built output on top (a few MB per release)
 
-FROM base AS api
+# ── API ──────────────────────────────────────────────────────────────────────
+FROM base AS deps-api
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# Every workspace's package.json (pnpm needs them all to install just one app's dependencies)
+COPY apps/web/package.json apps/web/
+COPY apps/shop/package.json apps/shop/
+COPY apps/admin/package.json apps/admin/
+COPY apps/mobile/package.json apps/mobile/
+COPY services/api/package.json services/api/
+COPY packages/shared/package.json packages/shared/
+COPY packages/ui/package.json packages/ui/
+# The client is generated in build-api, so a schema change doesn't rebuild node_modules.
+RUN cd services/api && npm pkg delete scripts.postinstall
+# Photo search's ONNX runtime ships Windows, macOS and GPU (CUDA) binaries: ~500 MB the server never loads.
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile --filter "@talad/api..." \
+    && for d in node_modules/.pnpm/onnxruntime-node@*/node_modules/onnxruntime-node/bin/napi-v*; do \
+         rm -rf "$d/win32" "$d/darwin" "$d"/linux/*/libonnxruntime_providers_cuda.so "$d"/linux/*/libonnxruntime_providers_tensorrt.so; \
+       done
+
+FROM deps-api AS build-api
+COPY --from=source /repo /repo
+RUN pnpm --filter @talad/api db:generate && pnpm turbo run build --filter=@talad/api
+
+FROM deps-api AS api
 ENV NODE_ENV=production PORT=4000
-COPY --from=build-api /repo /repo
+COPY --from=build-api /repo/packages/shared/ packages/shared/
+COPY --from=build-api /repo/services/api/ services/api/
 WORKDIR /repo/services/api
 EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
@@ -41,13 +65,27 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
 CMD ["node", "dist/main.js"]
 
 # ── Storefront ───────────────────────────────────────────────────────────────
-FROM source AS build-web
+FROM base AS deps-web
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# Every workspace's package.json (pnpm needs them all to install just one app's dependencies)
+COPY apps/web/package.json apps/web/
+COPY apps/shop/package.json apps/shop/
+COPY apps/admin/package.json apps/admin/
+COPY apps/mobile/package.json apps/mobile/
+COPY services/api/package.json services/api/
+COPY packages/shared/package.json packages/shared/
+COPY packages/ui/package.json packages/ui/
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile --filter "@talad/web..."
-RUN NODE_ENV=production pnpm turbo run build --filter=@talad/web
 
-FROM base AS web
+FROM deps-web AS build-web
+COPY --from=source /repo /repo
+# .next/cache only speeds up the next build; it's large and not needed to run.
+RUN NODE_ENV=production pnpm turbo run build --filter=@talad/web && rm -rf apps/web/.next/cache
+
+FROM deps-web AS web
 ENV NODE_ENV=production
-COPY --from=build-web /repo /repo
+COPY --from=build-web /repo/packages/shared/ packages/shared/
+COPY --from=build-web /repo/apps/web/ apps/web/
 WORKDIR /repo/apps/web
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \

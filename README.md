@@ -661,3 +661,8 @@ it never serves stale pages.
 
 `.github/workflows/ci.yml` runs `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build` on
 every push to `main` and on pull requests.
+
+
+## build command:
+cd /var/www/talad-online
+docker compose -f infra/docker/docker-compose.prod.yml --env-file infra/docker/.env.prod build

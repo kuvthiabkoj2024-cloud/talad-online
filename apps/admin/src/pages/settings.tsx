@@ -2,6 +2,7 @@ import { CHECKOUT_PAYMENT_METHODS } from '@talad/shared'
 import { Button } from '@talad/ui/components/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@talad/ui/components/card'
 import { Input } from '@talad/ui/components/input'
+import { MoneyInput } from '@talad/ui/components/money-input'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { LoaderCircle } from 'lucide-react'
 import { useState } from 'react'
@@ -87,10 +88,10 @@ function SettingsForm({ value }: { value: Settings }) {
       <Section title={t.settings.points}>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field required id="earn" label={t.settings.earnPer} hint={t.settings.earnPerHint}>
-            <Input id="earn" inputMode="numeric" value={points.earnPer} onChange={(e) => setPoints((p) => ({ ...p, earnPer: e.target.value.replace(/\D/g, '') }))} />
+            <MoneyInput id="earn" value={points.earnPer} onValueChange={(v) => setPoints((p) => ({ ...p, earnPer: v }))} />
           </Field>
           <Field required id="redeem" label={t.settings.redeemValue} hint={t.settings.redeemHint}>
-            <Input id="redeem" inputMode="numeric" value={points.redeemValue} onChange={(e) => setPoints((p) => ({ ...p, redeemValue: e.target.value.replace(/\D/g, '') }))} />
+            <MoneyInput id="redeem" value={points.redeemValue} onValueChange={(v) => setPoints((p) => ({ ...p, redeemValue: v }))} />
           </Field>
           <Field required id="expiry" label={t.settings.expiryDays}>
             <Input id="expiry" inputMode="numeric" value={points.expiryDays} onChange={(e) => setPoints((p) => ({ ...p, expiryDays: e.target.value.replace(/\D/g, '') }))} />

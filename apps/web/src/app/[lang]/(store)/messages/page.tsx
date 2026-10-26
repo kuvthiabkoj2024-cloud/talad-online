@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ImageIcon, MessagesSquare, ShoppingBag, Store } from "lucide-react";
+import { ImageIcon, MapPin, MessagesSquare, ShoppingBag, Store } from "lucide-react";
 import { Breadcrumb } from "@/components/breadcrumb";
 import type { ConversationSummary } from "@/lib/messages";
 import { interpolate } from "@/lib/format";
@@ -53,6 +53,8 @@ export default async function MessagesPage() {
                       {c.lastMessage?.mine && <span className="shrink-0">{dict.you}:</span>}
                       {c.lastMessage?.photo ? (
                         <><ImageIcon className="size-4 shrink-0" /> {dict.photo}</>
+                      ) : c.lastMessage?.location ? (
+                        <><MapPin className="size-4 shrink-0" /> {dict.location}</>
                       ) : c.lastMessage?.product ? (
                         <><ShoppingBag className="size-4 shrink-0" /> {dict.product}</>
                       ) : (

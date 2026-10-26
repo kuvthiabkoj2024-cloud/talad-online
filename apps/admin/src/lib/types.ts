@@ -92,7 +92,7 @@ export interface ShopDetail {
   rejectionReason: string | null
   description: string | null
   ownerName: string
-  email: string
+  email: string | null
   phone: string
   address: string | null
   logoUrl: string | null
@@ -101,6 +101,8 @@ export interface ShopDetail {
   /** Platform default, used when `commissionRate` is null. */
   platformCommissionRate: number
   payment: { bankCode: string | null; accountName: string | null; accountNumber: string | null; hasQr: boolean }
+  /** Cash on delivery, the shop's own choice, and when it accepted the COD terms. */
+  cod: { enabled: boolean; termsAcceptedAt: string | null }
   ratingAvg: number
   ratingCount: number
   verifiedAt: string | null

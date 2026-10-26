@@ -20,13 +20,14 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@talad/ui/components/table'
 import { cn } from '@talad/ui/lib/utils'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ExternalLink, ImageOff, MoreHorizontal, Package, Pencil, Plus, Search, Trash2, Video } from 'lucide-react'
+import { ExternalLink, ImageOff, MoreHorizontal, Package, Pencil, Plus, Search, Share2, Trash2, Video } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { useAuth } from '@/auth/context'
 import { FilterTabs, Pager, SearchBox } from '@/components/list-controls'
 import { PageBody, PageIntro, TopBar } from '@/components/page-header'
+import { ShareDialog } from '@/components/share-dialog'
 import { EmptyState, ErrorState, LoadingState } from '@/components/states'
 import { ProductStatusBadge } from '@/components/status-badge'
 import { queryKeys } from '@/hooks/queries'
@@ -171,33 +172,50 @@ function RowActions({ p, onDelete }: { p: ShopProductRow; onDelete: (p: ShopProd
   const { t, locale } = useI18n()
   const { account } = useAuth()
   const navigate = useNavigate()
+  const [sharing, setSharing] = useState(false)
+  // A product page exists only for published products of a live shop.
+  const url = p.status === 'PUBLISHED' && account?.shop?.status === 'APPROVED' ? storefrontUrl.product(locale, account.shop.slug, p.slug) : null
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label={t.common.edit}>
-          <MoreHorizontal />
+    <span className="flex items-center justify-end gap-0.5">
+      {url && (
+        <Button variant="ghost" size="icon" aria-label={t.share.share} title={t.share.share} onClick={() => setSharing(true)}>
+          <Share2 />
         </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={() => navigate(`/products/${p.id}`)}>
-          <Pencil />
-          {t.common.edit}
-        </DropdownMenuItem>
-        {p.status === 'PUBLISHED' && account?.shop?.status === 'APPROVED' && (
-          <DropdownMenuItem asChild>
-            <a href={storefrontUrl.product(locale, account.shop.slug, p.slug)} target="_blank" rel="noreferrer">
-              <ExternalLink />
-              {t.products.viewInStore}
-            </a>
+      )}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" aria-label={t.common.edit}>
+            <MoreHorizontal />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => navigate(`/products/${p.id}`)}>
+            <Pencil />
+            {t.common.edit}
           </DropdownMenuItem>
-        )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onSelect={() => onDelete(p)}>
-          <Trash2 />
-          {t.common.delete}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          {url && (
+            <>
+              <DropdownMenuItem onSelect={() => setSharing(true)}>
+                <Share2 />
+                {t.share.share}
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <a href={url} target="_blank" rel="noreferrer">
+                  <ExternalLink />
+                  {t.products.viewInStore}
+                </a>
+              </DropdownMenuItem>
+            </>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem variant="destructive" onSelect={() => onDelete(p)}>
+            <Trash2 />
+            {t.common.delete}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {url && <ShareDialog open={sharing} onOpenChange={setSharing} url={url} title={p.name} heading={t.share.productHeading} />}
+    </span>
   )
 }
 

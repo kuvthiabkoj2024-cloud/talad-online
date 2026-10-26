@@ -9,6 +9,8 @@ import { ShopApplicationController } from './shop-application.controller.js';
 import { ShopApplicationService } from './shop-application.service.js';
 import { ShopCustomersController } from './shop-customers.controller.js';
 import { ShopCustomersService } from './shop-customers.service.js';
+import { MyFollowsController, ShopFollowersController } from './shop-follows.controller.js';
+import { ShopFollowsService } from './shop-follows.service.js';
 import { ShopProfileController } from './shop-profile.controller.js';
 import { ShopProfileService } from './shop-profile.service.js';
 import { MyShopController, ShopsController, ShopSummaryController } from './shops.controller.js';
@@ -23,9 +25,11 @@ import { ShopsService } from './shops.service.js';
     ShopSummaryController,
     ShopProfileController,
     ShopCustomersController,
+    ShopFollowersController,
+    MyFollowsController,
     MyShopController,
     ShopsController,
   ],
-  providers: [ShopsService, ShopApplicationService, ShopProfileService, ShopCustomersService, AdminShopsService],
+  providers: [ShopsService, ShopApplicationService, ShopProfileService, ShopCustomersService, ShopFollowsService, AdminShopsService],
 })
 export class ShopsModule {}

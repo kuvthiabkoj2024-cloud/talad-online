@@ -1,5 +1,5 @@
 import type { Locale } from "@talad/shared";
-import { MessageCircleMore, ScanLine, Search, Store } from "lucide-react";
+import { Clapperboard, MessageCircleMore, ScanLine, Search, Store } from "lucide-react";
 import Link from "next/link";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import { AccountMenu } from "./auth/account-menu";
@@ -72,6 +72,14 @@ export function SiteHeader({
 
           {/* Phones: cart and account live in the bottom tab bar (bottom-nav.tsx). */}
           <nav className="ml-auto flex items-center gap-1 md:gap-2">
+            {/* Computers: the video feed (phones have it in the bottom tab bar). */}
+            <Link
+              href={`/${locale}/feed`}
+              className="hidden items-center gap-1.5 rounded-full border border-white/40 px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/15 md:flex"
+            >
+              <Clapperboard className="size-5" />
+              {dict.feed}
+            </Link>
             <Link href={`/${locale}/chat`} aria-label={dict.chat} title={dict.chat} className={`${iconButton} hidden md:block`}>
               <MessageCircleMore className="size-6" />
             </Link>

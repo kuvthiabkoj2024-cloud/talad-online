@@ -57,9 +57,22 @@ export type CouponErrorCode =
   | "COUPON_OWN_SHOP";
 
 export interface CheckoutQuote {
-  shops: (CartShop & { discount: number; total: number; transfer: ShopTransferInfo | null })[];
+  /** `cod`: the shop offers cash on delivery (each shop decides). */
+  shops: (CartShop & {
+    discount: number;
+    total: number;
+    transfer: ShopTransferInfo | null;
+    cod: boolean;
+    /** The shop's own urgent delivery to this address (null when it doesn't deliver there). */
+    urgent: { fee: number; eta: string } | null;
+    /** The customer chose it; its fee is `shippingFee` (in `total`). */
+    urgentSelected: boolean;
+    shippingFee: number;
+  })[];
   subtotal: number;
   discountTotal: number;
+  /** Urgent delivery fees (couriers are paid outside Taladonline). */
+  shippingTotal: number;
   total: number;
   delivery: { options: DeliveryOption[]; selectedId: string | null };
   /** The applied coupon; `couponError` says why a requested code wasn't applied. */
@@ -68,6 +81,8 @@ export interface CheckoutQuote {
   issues: { itemId: string; code: "UNAVAILABLE" | "QUANTITY_EXCEEDS_STOCK" | "OWN_PRODUCT" }[];
   /** QR transfer needs every shop in the order to accept transfers. */
   transferAvailable: boolean;
+  /** Cash on delivery needs every shop in the order to offer it. */
+  codAvailable: boolean;
   /** Methods the platform currently allows (admin settings). */
   paymentMethods: CheckoutPaymentMethod[];
 }
@@ -91,6 +106,7 @@ export type CartErrorCode =
   | "NOT_PAYABLE"
   | "SLIP_REQUIRED"
   | "TRANSFER_UNAVAILABLE"
+  | "COD_UNAVAILABLE"
   | "INVALID_IMAGE"
   | "FILE_TOO_LARGE"
   | "OWN_PRODUCT"

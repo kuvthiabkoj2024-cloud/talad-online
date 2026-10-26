@@ -1,7 +1,8 @@
 "use client";
 
 import type { Locale } from "@talad/shared";
-import { ArrowLeft, Bot, Camera, CheckCheck, ShoppingBag, CircleAlert, LoaderCircle, Lock, Package, Plus, SendHorizontal, Store, X } from "lucide-react";
+import { ArrowLeft, Bot, Camera, CheckCheck, CircleAlert, LoaderCircle, Lock, MapPin, Package, Plus, SendHorizontal, ShieldCheck, ShoppingBag, Store, X } from "lucide-react";
+import { LocationCard } from "./location-card";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
@@ -61,6 +62,9 @@ export function ShopChat({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [text, setText] = useState(order ? interpolate(dict.aboutOrder, { number: order }) : "");
   const [photo, setPhoto] = useState<{ file: File; preview: string } | null>(null);
+  /** The current position, ready to send (shown as a chip first, like a photo). */
+  const [place, setPlace] = useState<{ lat: number; lng: number } | null>(null);
+  const [locating, setLocating] = useState(false);
   const [product, setProduct] = useState<ChatProductRef | null>(null);
   const [error, setError] = useState<MessageError | null>(null);
   const [pending, startTransition] = useTransition();
@@ -160,13 +164,35 @@ export function ShopChat({
     textInput.current?.focus();
   }
 
+  /** Asks the browser for the current position; the customer then sends it like a photo. */
+  function locate() {
+    if (!("geolocation" in navigator)) return setError("LOCATION_UNAVAILABLE");
+    setError(null);
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocating(false);
+        setPlace({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      (err) => {
+        setLocating(false);
+        setError(err.code === err.PERMISSION_DENIED ? "LOCATION_DENIED" : "LOCATION_UNAVAILABLE");
+      },
+      { enableHighAccuracy: true, timeout: 15_000, maximumAge: 60_000 },
+    );
+  }
+
   function send() {
     const body = text.trim();
-    if ((!body && !photo && !product) || pending) return;
+    if ((!body && !photo && !product && !place) || pending) return;
     const form = new FormData();
     form.set("text", body);
     if (product) form.set("productId", product.id);
     if (photo) form.set("photo", photo.file);
+    if (place) {
+      form.set("latitude", String(place.lat));
+      form.set("longitude", String(place.lng));
+    }
     setError(null);
     startTransition(async () => {
       const res = await sendShopMessage(initial.id, form);
@@ -183,6 +209,7 @@ export function ShopChat({
       if (textInput.current) textInput.current.style.height = "auto";
       if (photo) URL.revokeObjectURL(photo.preview);
       setPhoto(null);
+      setPlace(null);
       setProduct(null);
       // Drop ?product / ?order so a reload doesn't bring the chip back.
       if (productId || order) router.replace(`/${locale}/messages/${initial.id}`, { scroll: false });
@@ -265,6 +292,21 @@ export function ShopChat({
             const prev = messages[i - 1];
             const date = new Date(m.createdAt);
             const newDay = !prev || new Date(prev.createdAt).toDateString() !== date.toDateString();
+            if (m.system) {
+              // Taladonline speaking to both sides: centred, not anyone's bubble.
+              return (
+                <li key={m.id} className="flex flex-col gap-1.5">
+                  {newDay && <p className="my-2 self-center rounded-full bg-muted px-3 py-1 text-[11px] font-medium text-muted-foreground">{day.format(date)}</p>}
+                  <div className="mx-auto my-2 w-full max-w-md rounded-2xl border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-sm">
+                    <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold">
+                      <ShieldCheck className="size-4" />
+                      Taladonline
+                    </p>
+                    <p className="whitespace-pre-line leading-relaxed">{m.text}</p>
+                  </div>
+                </li>
+              );
+            }
             return (
               <li key={m.id} className="flex flex-col gap-1.5">
                 {newDay && <p className="my-2 self-center rounded-full bg-muted px-3 py-1 text-[11px] font-medium text-muted-foreground">{day.format(date)}</p>}
@@ -277,6 +319,7 @@ export function ShopChat({
                     </span>
                   )}
                   {m.product && <ProductRef product={m.product} locale={locale} />}
+                  {m.location && <LocationCard lat={m.location.lat} lng={m.location.lng} label={dict.locationTitle} open={dict.openMap} />}
                   {m.hasPhoto && (
                     <a href={messagePhotoUrl(initial.id, m.id)} target="_blank" rel="noreferrer">
                       {/* eslint-disable-next-line @next/next/no-img-element -- private photo, streamed through the storefront */}
@@ -339,8 +382,22 @@ export function ShopChat({
             {dict.errors[error]}
           </p>
         )}
-        {(product || photo) && (
+        {(product || photo || place) && (
           <div className="mb-2 flex items-end gap-2">
+            {place && (
+              <div className="relative flex items-center gap-2 rounded-xl bg-muted py-2 pr-8 pl-3 text-sm font-medium">
+                <MapPin className="size-4 shrink-0 text-sale" />
+                {dict.locationReady}
+                <button
+                  type="button"
+                  onClick={() => setPlace(null)}
+                  aria-label={dict.removeLocation}
+                  className="absolute top-1/2 right-1.5 flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-background"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </div>
+            )}
             {product && (
               <div className="relative flex min-w-0 flex-1 items-center gap-2 rounded-xl bg-muted p-2 pr-8">
                 <ProductThumb product={product} />
@@ -393,6 +450,16 @@ export function ShopChat({
           >
             {photo ? <Plus className="size-5" /> : <Camera className="size-5" />}
           </button>
+          <button
+            type="button"
+            onClick={locate}
+            disabled={locating}
+            aria-label={dict.shareLocation}
+            title={dict.shareLocation}
+            className="flex size-11 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-primary-soft hover:text-primary disabled:opacity-60"
+          >
+            {locating ? <LoaderCircle className="size-5 animate-spin" /> : <MapPin className="size-5" />}
+          </button>
           <textarea
             ref={textInput}
             rows={1}
@@ -415,7 +482,7 @@ export function ShopChat({
           />
           <button
             type="submit"
-            disabled={pending || (!text.trim() && !photo && !product)}
+            disabled={pending || (!text.trim() && !photo && !product && !place)}
             aria-label={dict.send}
             className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md shadow-primary/25 transition hover:brightness-110 disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none"
           >

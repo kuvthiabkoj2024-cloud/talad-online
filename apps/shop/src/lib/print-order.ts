@@ -1,4 +1,7 @@
 import { formatPhone, provinceName, type Locale } from '@talad/shared'
+import laoFontUrl from '@fontsource-variable/noto-sans-lao-looped/files/noto-sans-lao-looped-lao-wght-normal.woff2?url'
+import latinFontUrl from '@fontsource-variable/noto-sans-lao-looped/files/noto-sans-lao-looped-latin-wght-normal.woff2?url'
+import latinExtFontUrl from '@fontsource-variable/noto-sans-lao-looped/files/noto-sans-lao-looped-latin-ext-wght-normal.woff2?url'
 import type { Dict } from '@/i18n/en'
 import { code128Svg } from './barcode'
 import { fill, formatDate, formatMoney } from './format'
@@ -24,7 +27,20 @@ function barcode(text: string, opts: { height: number; module?: number }) {
   }
 }
 
-export const FONT = `system-ui, -apple-system, 'Noto Sans Lao', 'Phetsarath OT', 'Lao Sangam MN', 'Segoe UI', sans-serif`
+/** Same font as the app: Noto Sans Lao Looped for Lao and English. */
+export const FONT = `'Noto Sans Lao Looped', sans-serif`
+
+const face = (url: string, range: string) =>
+  `@font-face { font-family: 'Noto Sans Lao Looped'; font-weight: 100 900; font-display: block;
+  src: url('${new URL(url, location.href).href}') format('woff2-variations'); unicode-range: ${range}; }`
+
+/** Printed pages are separate documents, so they declare the font themselves (Lao, Latin and extended Latin parts). */
+export const FONT_FACE = [
+  face(laoFontUrl, 'U+0E81-0EDF, U+200C-200D, U+25CC'),
+  face(latinFontUrl, 'U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2212, U+FEFF, U+FFFD'),
+  // Includes the kip sign (₭).
+  face(latinExtFontUrl, 'U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F, U+20A0-20AB, U+20AD-20C0, U+2113, U+A720-A7FF'),
+].join('\n')
 
 function addressLines(o: ShopOrderDetail, locale: Locale) {
   const a = o.shippingAddress
@@ -66,6 +82,7 @@ export function billHtml(o: ShopOrderDetail, shop: PrintShop, t: Dict, locale: L
   const payStatus = o.payment ? t.orders.paymentStatus[o.payment.status] : ''
   return `<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><title>${esc(p.bill)} ${esc(o.number)}</title>
 <style>
+${FONT_FACE}
 @page { size: A4; margin: 12mm 12mm 14mm; }
 * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 body { margin: 0; font-family: ${FONT}; color: #1a1d1a; font-size: 10.5pt; line-height: 1.45; }
@@ -202,6 +219,7 @@ export function stickerHtml(o: ShopOrderDetail, shop: PrintShop, t: Dict, locale
   const code = o.trackingNumber || o.number
   return `<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><title>${esc(p.sticker)} ${esc(o.number)}</title>
 <style>
+${FONT_FACE}
 @page { size: 100mm 150mm; margin: 0; }
 * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 html, body { margin: 0; }
@@ -307,12 +325,14 @@ export function printHtml(html: string): void {
   doc.open()
   doc.write(html)
   doc.close()
+  // Wait for the Lao font too, or the first print can come out in a fallback font.
+  const fonts = doc.fonts ? doc.fonts.ready.then(() => undefined) : Promise.resolve()
   const images = [...doc.images].map((img) => (img.complete ? Promise.resolve() : new Promise<void>((r) => ((img.onload = () => r()), (img.onerror = () => r())))))
   // Don't wait forever on a slow image. Also let the menu or dialog that started this finish
   // closing first: print() blocks the page, and a dialog frozen mid-close stays on screen with
   // the page unclickable.
   const settled = new Promise((r) => setTimeout(r, UI_SETTLE_MS))
-  void Promise.all([settled, Promise.race([Promise.all(images), new Promise((r) => setTimeout(r, 4000))])]).then(() => {
+  void Promise.all([settled, Promise.race([Promise.all([...images, fonts]), new Promise((r) => setTimeout(r, 4000))])]).then(() => {
     const win = frame.contentWindow!
     win.focus()
     win.print()

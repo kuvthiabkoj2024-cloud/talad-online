@@ -18,7 +18,7 @@ import { useAuth } from '@/auth/context'
 import { PageBody, TopBar } from '@/components/page-header'
 import { useMyShop, useShopBadges, useShopSummary, useUnreadMessages } from '@/hooks/queries'
 import { useI18n } from '@/i18n/context'
-import { storefrontUrl } from '@/lib/format'
+import { fill, formatNumber, storefrontUrl } from '@/lib/format'
 import type { MyShop, ShopStatus } from '@/lib/types'
 import { NAV_GROUPS, type NavItem } from '@/nav'
 import { StatsPage } from '@/pages/stats'
@@ -113,7 +113,7 @@ export function HomePage() {
 }
 
 function ShopIdentity({ shop, storeLink, desktop }: { shop?: MyShop; storeLink?: string; desktop?: boolean }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   return (
     <div className="flex items-center gap-4">
       <span
@@ -131,6 +131,8 @@ function ShopIdentity({ shop, storeLink, desktop }: { shop?: MyShop; storeLink?:
             <p className={cn('mt-0.5 flex items-center gap-1.5 text-sm', desktop ? 'text-muted-foreground' : 'opacity-90')}>
               <span className={cn('size-2 rounded-full', STATUS_DOT[shop.status])} />
               {t.shopStatus[shop.status]}
+              <span aria-hidden>·</span>
+              {fill(t.followers.count, { n: formatNumber(shop.followerCount ?? 0, locale) })}
             </p>
           </>
         ) : (

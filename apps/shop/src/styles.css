@@ -1,6 +1,6 @@
 @import "@talad/ui/globals.css";
 
-/* Seller Center brand on top of the shared (neutral) design system: Taladonline green, Lao glyphs. */
+/* Seller Center brand on top of the shared (neutral) design system: Taladonline green (fonts come from @talad/ui). */
 :root {
   --primary: oklch(0.52 0.13 145);
   --primary-foreground: oklch(0.99 0 0);
@@ -17,7 +17,6 @@
   --sidebar-ring: oklch(1 0 0 / 50%);
   /* Chart series colour; validated per mode (dataviz lightness band + contrast on the card surface). */
   --chart-series: oklch(0.52 0.13 145);
-  --font-sans: 'Geist Variable', 'Noto Sans Lao', sans-serif;
 }
 
 .dark {

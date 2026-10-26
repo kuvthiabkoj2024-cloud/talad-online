@@ -147,6 +147,8 @@ export class AdminShopsService {
         accountNumber: shop.paymentAccountNumber,
         hasQr: shop.paymentQrKey !== null,
       },
+      // The shop's own COD choice; the acceptance date is the record that it took on COD risks.
+      cod: { enabled: shop.codEnabled, termsAcceptedAt: shop.codTermsAcceptedAt },
       ratingAvg: shop.ratingAvg.toNumber(),
       ratingCount: shop.ratingCount,
       verifiedAt: shop.verifiedAt,

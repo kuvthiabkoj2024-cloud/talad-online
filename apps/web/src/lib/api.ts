@@ -62,6 +62,8 @@ export interface ProductDetail extends Omit<ProductCard, "imageUrl" | "shop"> {
   description: string | null;
   stock: number;
   imageUrls: string[];
+  /** The product's short video, shown first in the gallery; null without one. */
+  videoUrl: string | null;
   ratingCount: number;
   /** What the variants differ by (e.g. Colour, then Size), values in the shop's order. */
   options: { name: string; values: string[] }[];
@@ -100,8 +102,9 @@ export function listProducts(query: ProductQuery): Promise<ProductCard[] | null>
   return apiGet<ProductCard[]>(`/products?${params}`);
 }
 
-/** Mirrors `FeedItem` from services/api catalog/products. */
+/** Mirrors `FeedItem` from services/api catalog/products: a shop's product video. */
 export interface FeedItem extends Omit<ProductCard, "shop"> {
+  kind?: "product";
   videoUrl: string;
   shop: { slug: string; name: string; logoUrl: string | null };
   /** Units available (all options together). */
@@ -135,8 +138,28 @@ export interface VideoCommentPage {
   nextCursor: string | null;
 }
 
+/** Mirrors `FeedPostItem`: a customer's own video (no product to buy). */
+export interface FeedPostItem {
+  kind: "post";
+  id: string;
+  videoUrl: string;
+  caption: string;
+  createdAt: string;
+  author: { id: string; name: string; avatarUrl: string | null };
+  stats: PostStats;
+}
+
+export interface PostStats {
+  views: number;
+  likes: number;
+  shares: number;
+}
+
+/** One screen of the feed. */
+export type FeedEntry = FeedItem | FeedPostItem;
+
 export interface FeedPage {
-  items: FeedItem[];
+  items: FeedEntry[];
   nextCursor: string | null;
 }
 

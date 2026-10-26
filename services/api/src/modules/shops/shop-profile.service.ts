@@ -8,15 +8,17 @@ import {
   WEEKDAYS,
   type BusinessHours,
   type SocialLink,
+  parseUrgentDelivery,
+  type UrgentDelivery,
 } from '@talad/shared';
 import { randomUUID } from 'node:crypto';
-import type { Shop } from '../../generated/prisma/client.js';
+import type { Prisma, Shop } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { detectImage } from '../media/image-type.js';
 import { MediaService } from '../media/media.service.js';
 import { filePrefix, storageFolder } from '../media/storage-keys.js';
 import { StorageService } from '../media/storage.service.js';
-import type { ShopProfileDto } from './shop-profile.dto.js';
+import type { ShopProfileDto, UrgentDeliveryDto } from './shop-profile.dto.js';
 
 export type ProfileImage = 'logo' | 'cover' | 'payment-qr';
 
@@ -27,7 +29,7 @@ export interface ShopProfile {
   name: string;
   description: string | null;
   ownerName: string;
-  email: string;
+  email: string | null;
   phone: string;
   address: string | null;
   logoUrl: string | null;
@@ -37,6 +39,10 @@ export interface ShopProfile {
   payment: { bankCode: string | null; accountName: string | null; accountNumber: string | null; hasQr: boolean };
   paymentWindowHrs: number;
   autoConfirmHrs: number;
+  /** Cash on delivery offered, and when the owner last accepted its terms. */
+  cod: { enabled: boolean; termsAcceptedAt: Date | null };
+  /** The shop's own urgent delivery (areas, prices, how fast). */
+  urgentDelivery: UrgentDelivery;
   verifiedAt: Date | null;
 }
 
@@ -74,6 +80,8 @@ export class ShopProfileService {
       },
       paymentWindowHrs: shop.paymentWindowHrs,
       autoConfirmHrs: shop.autoConfirmHrs,
+      cod: { enabled: shop.codEnabled, termsAcceptedAt: shop.codTermsAcceptedAt },
+      urgentDelivery: parseUrgentDelivery(shop.urgentDelivery) ?? { enabled: false, eta: '', zones: [] },
       verifiedAt: shop.verifiedAt,
     };
   }
@@ -90,8 +98,15 @@ export class ShopProfileService {
       throw new BadRequestException({ code: 'INVALID_BANK', message: 'Unknown bank' });
     }
 
+    // Turning COD on means accepting its terms (Taladonline is not responsible for COD
+    // losses); the acceptance time is kept as the record.
+    const turningCodOn = dto.codEnabled === true && !shop.codEnabled;
+    if (turningCodOn && !dto.codTermsAccepted) {
+      throw new BadRequestException({ code: 'COD_TERMS_REQUIRED', message: 'Accept the cash on delivery terms to offer COD' });
+    }
+
     const [email, phoneTaken] = await Promise.all([
-      this.prisma.shop.findFirst({ where: { email: dto.email, NOT: { id: shop.id } }, select: { id: true } }),
+      dto.email ? this.prisma.shop.findFirst({ where: { email: dto.email, NOT: { id: shop.id } }, select: { id: true } }) : null,
       this.prisma.shop.findFirst({ where: { phone, NOT: { id: shop.id } }, select: { id: true } }),
     ]);
     if (email) throw new ConflictException({ code: 'EMAIL_TAKEN', message: 'Another shop uses this email' });
@@ -102,7 +117,7 @@ export class ShopProfileService {
       data: {
         name: dto.name,
         description: dto.description || null,
-        email: dto.email,
+        email: dto.email || null,
         phone,
         address: dto.address,
         businessHours: this.hours(dto.businessHours),
@@ -112,9 +127,21 @@ export class ShopProfileService {
         paymentAccountNumber: accountNumber,
         paymentWindowHrs: dto.paymentWindowHrs,
         autoConfirmHrs: dto.autoConfirmHrs,
+        ...(dto.codEnabled !== undefined && { codEnabled: dto.codEnabled }),
+        ...(turningCodOn && { codTermsAcceptedAt: new Date() }),
+        ...(dto.urgentDelivery && { urgentDelivery: this.urgent(dto.urgentDelivery) as unknown as Prisma.InputJsonValue }),
       },
     });
     return this.get(updated);
+  }
+
+  /** Urgent delivery as stored: tidy zones; it can only be on with an area to deliver to. */
+  private urgent(dto: UrgentDeliveryDto): UrgentDelivery {
+    const parsed = parseUrgentDelivery(dto)!;
+    if (parsed.enabled && parsed.zones.length === 0) {
+      throw new BadRequestException({ code: 'URGENT_ZONE_REQUIRED', message: 'Add at least one area for urgent delivery' });
+    }
+    return parsed;
   }
 
   /** Replaces the logo, cover photo or payment QR; the old file is deleted. */

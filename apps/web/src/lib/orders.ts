@@ -54,6 +54,10 @@ export interface OrderDetail extends Omit<OrderSummary, "shop"> {
   shippingFee: number;
   currency: string;
   trackingNumber: string | null;
+  /** The shop photographed the courier's bill when shipping. */
+  hasShippingBill?: boolean;
+  /** Urgent delivery by the shop itself (its fee is `shippingFee`). */
+  urgentDelivery?: boolean;
   deliveryProvider: string | null;
   paymentDueAt: string | null;
   autoConfirmAt: string | null;

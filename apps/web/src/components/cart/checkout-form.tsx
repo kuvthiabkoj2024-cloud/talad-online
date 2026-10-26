@@ -15,6 +15,7 @@ import {
   CircleAlert,
   CreditCard,
   LoaderCircle,
+  type LucideIcon,
   MapPin,
   MessageSquareText,
   Package,
@@ -24,7 +25,7 @@ import {
   TicketPercent,
   Truck,
   X,
-  type LucideIcon,
+  Zap,
 } from "lucide-react";
 import { ProductImage } from "../product-image";
 import Link from "next/link";
@@ -91,9 +92,9 @@ export function CheckoutForm({
     initialQuote.couponError ? cartErrors[initialQuote.couponError] : null,
   );
   const methods = CHECKOUT_PAYMENT_METHODS.filter((m) => quote.paymentMethods.includes(m));
-  const [payment, setPayment] = useState<CheckoutPaymentMethod>(() =>
-    quote.transferAvailable && methods.includes("BANK_TRANSFER") ? "BANK_TRANSFER" : (methods.find((m) => m !== "BANK_TRANSFER") ?? methods[0] ?? "COD"),
-  );
+  // A method is usable when the platform allows it and every shop in the order takes it.
+  const usable = (m: CheckoutPaymentMethod) => (m === "BANK_TRANSFER" ? quote.transferAvailable : m === "COD" ? quote.codAvailable : true);
+  const [payment, setPayment] = useState<CheckoutPaymentMethod>(() => methods.find(usable) ?? methods[0] ?? "BANK_TRANSFER");
   // Per shop: the uploaded slip's storage key (sent with the order) and its UI state.
   const [slipKeys, setSlipKeys] = useState<Record<string, string>>({});
   const [slips, setSlips] = useState<Record<string, SlipState>>({});
@@ -156,11 +157,12 @@ export function CheckoutForm({
    * one at a time, so quotes come back in click order.
    */
   function requote(
-    change: { courier?: string | null; coupon?: string | null; addressId?: string | null },
+    change: { courier?: string | null; coupon?: string | null; addressId?: string | null; urgent?: string[] },
     steps: { before?: () => Promise<void>; after?: () => void } = {},
   ) {
     const nextAddressId = change.addressId !== undefined ? change.addressId : (address?.id ?? null);
     const couponCode = change.coupon !== undefined ? change.coupon : (quote.coupon?.code ?? null);
+    const urgentShopIds = change.urgent ?? quote.shops.filter((s) => s.urgentSelected).map((s) => s.shop.id);
     setError(null);
     if (change.addressId !== undefined) syncUrl({ address: nextAddressId });
     startRequote(async () => {
@@ -170,6 +172,7 @@ export function CheckoutForm({
         ...((change.courier ?? courierId) && { deliveryProviderId: (change.courier ?? courierId)! }),
         ...(couponCode && { couponCode }),
         ...(nextAddressId && { addressId: nextAddressId }),
+        ...(urgentShopIds.length > 0 && { urgentShopIds }),
       });
       setPendingCourier(null);
       steps.after?.();
@@ -203,6 +206,13 @@ export function CheckoutForm({
           setDesired((d) => (d[item.id] === next ? Object.fromEntries(Object.entries(d).filter(([id]) => id !== item.id)) : d)),
       },
     );
+  }
+
+  /** Standard (courier) or the shop's own urgent delivery, per shop. */
+  function chooseUrgent(shopId: string, urgent: boolean) {
+    const current = quote.shops.filter((s) => s.urgentSelected).map((s) => s.shop.id);
+    const next = urgent ? [...new Set([...current, shopId])] : current.filter((id) => id !== shopId);
+    requote({ urgent: next });
   }
 
   function chooseCourier(id: string) {
@@ -241,6 +251,7 @@ export function CheckoutForm({
         expectedTotal: quote.total,
         ...(quote.delivery.selectedId && { deliveryProviderId: quote.delivery.selectedId }),
         ...(quote.coupon && { couponCode: quote.coupon.code }),
+        ...(quote.shops.some((s) => s.urgentSelected) && { urgentShopIds: quote.shops.filter((s) => s.urgentSelected).map((s) => s.shop.id) }),
         ...(isTransfer && { slips: slipKeys }),
         ...(note.trim() && { note: note.trim() }),
       });
@@ -293,7 +304,7 @@ export function CheckoutForm({
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
         <div className="flex min-w-0 flex-col gap-4">
           {/* Items per shop */}
-          {quote.shops.map(({ shop, items, discount, total }) => (
+          {quote.shops.map(({ shop, items, discount, total, urgent, urgentSelected, shippingFee }) => (
             <Card key={shop.id} flush>
               <div className="flex items-center gap-2 border-b border-border px-4 py-3 text-sm font-semibold">
                 <Store className="size-4 text-primary" />
@@ -330,6 +341,45 @@ export function CheckoutForm({
                   </li>
                 ))}
               </ul>
+              {/* The shop's own urgent delivery, when it covers this address. */}
+              {urgent && (
+                <div role="radiogroup" aria-label={dict.delivery} className="grid grid-cols-2 gap-2 border-t border-border px-4 py-3">
+                  {[false, true].map((isUrgent) => {
+                    const active = urgentSelected === isUrgent;
+                    const Icon = isUrgent ? Zap : Truck;
+                    return (
+                      <button
+                        key={String(isUrgent)}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        disabled={requoting}
+                        onClick={() => !active && chooseUrgent(shop.id, isUrgent)}
+                        className={`flex items-start gap-2 rounded-xl border p-2.5 text-left transition-colors disabled:opacity-60 ${
+                          active ? "border-primary bg-primary-soft ring-1 ring-primary" : "border-border hover:border-primary/50"
+                        }`}
+                      >
+                        <Icon className={`mt-0.5 size-4 shrink-0 ${isUrgent ? "text-sale" : "text-primary"}`} />
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold">{isUrgent ? dict.deliveryUrgent : dict.deliveryStandard}</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {isUrgent ? [formatMoney(urgent.fee, locale), urgent.eta].filter(Boolean).join(" · ") : dict.deliveryStandardHint}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {shippingFee > 0 && (
+                <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-sm">
+                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                    <Zap className="size-4" />
+                    {dict.shippingFee}
+                  </span>
+                  <span className={`font-semibold tabular-nums transition-opacity ${requoting ? "opacity-40" : ""}`}>{formatMoney(shippingFee, locale)}</span>
+                </div>
+              )}
               {discount > 0 && (
                 <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-sm">
                   <span className="flex items-center gap-1.5 text-muted-foreground">
@@ -342,7 +392,7 @@ export function CheckoutForm({
                 </div>
               )}
               {/* Shop total only adds information with several shops or a discount. */}
-              {(quote.shops.length > 1 || discount > 0) && (
+              {(quote.shops.length > 1 || discount > 0 || shippingFee > 0) && (
                 <div className="flex items-center justify-between gap-3 border-t border-border bg-muted/40 px-4 py-2.5 text-sm">
                   <span className="text-muted-foreground">{dict.total}</span>
                   <span className={`font-bold tabular-nums transition-opacity ${requoting ? "opacity-40" : ""}`}>
@@ -387,7 +437,8 @@ export function CheckoutForm({
           </Card>
 
           {/* Delivery service */}
-          {quote.delivery.options.length > 0 && (
+          {/* Couriers only matter for shops not delivering urgently themselves. */}
+          {quote.delivery.options.length > 0 && !quote.shops.every((s) => s.urgentSelected) && (
             <Card>
               <CardTitle icon={Truck} required>
                 {dict.delivery}
@@ -444,7 +495,7 @@ export function CheckoutForm({
               {methods.map((method) => {
                 const Icon = PAYMENT_ICONS[method];
                 const active = payment === method;
-                const disabled = method === "BANK_TRANSFER" && !quote.transferAvailable;
+                const disabled = !usable(method);
                 return (
                   <button
                     key={method}
@@ -472,7 +523,18 @@ export function CheckoutForm({
                 );
               })}
             </div>
-            {!quote.transferAvailable && <p className="mt-2 text-xs text-muted-foreground">{dict.transferUnavailable}</p>}
+            {!methods.some(usable) ? (
+              <p className="mt-2 text-xs text-sale">{dict.noPaymentMethod}</p>
+            ) : (
+              <>
+                {methods.includes("BANK_TRANSFER") && !quote.transferAvailable && (
+                  <p className="mt-2 text-xs text-muted-foreground">{dict.transferUnavailable}</p>
+                )}
+                {methods.includes("COD") && !quote.codAvailable && (
+                  <p className="mt-2 text-xs text-muted-foreground">{dict.codUnavailable}</p>
+                )}
+              </>
+            )}
           </Card>
 
           {/* Manual QR payment: one panel per shop, each needs its slip */}
@@ -678,6 +740,12 @@ function SummaryRows({
             {formatMoney(quote.discountTotal, locale)}
           </dd>
         </div>
+        {quote.shippingTotal > 0 && (
+          <div className="flex justify-between gap-3">
+            <dt className="text-muted-foreground">{dict.shippingFee}</dt>
+            <dd className="tabular-nums">{formatMoney(quote.shippingTotal, locale)}</dd>
+          </div>
+        )}
       </dl>
       <div className="flex items-baseline justify-between border-t border-dashed border-border pt-3">
         <span className="text-sm font-semibold">{dict.total}</span>

@@ -12,6 +12,8 @@ export interface PublicShop {
   productCount: number;
   ratingAvg: number;
   ratingCount: number;
+  /** Customers following the shop. */
+  followerCount: number;
   joinedAt: string;
 }
 

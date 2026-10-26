@@ -207,7 +207,8 @@ model Shop {
   name                 String
   ownerName            String
   /// Business contact details shown to the platform (not used to sign in).
-  email                String     @unique
+  /// Optional; unique when given (several shops may have none).
+  email                String?    @unique
   phone                String     @unique
   status               ShopStatus @default(PENDING)
   rejectionReason      String?
@@ -229,14 +230,24 @@ model Shop {
   paymentBankCode      String?
   paymentAccountName   String?
   paymentAccountNumber String?
+  /// Cash on delivery: each shop opts in after accepting the COD terms (Taladonline takes no
+  /// part in collecting the cash and is not responsible for COD losses).
+  codEnabled           Boolean    @default(false)
+  /// When the owner last accepted those terms (required to turn COD on).
+  codTermsAcceptedAt   DateTime?
+  /// The shop's own urgent delivery: { enabled, eta, zones: [{ province, districts[], fee }] } (@talad/shared UrgentDelivery).
+  urgentDelivery       Json?
   ratingAvg            Decimal    @default(0) @db.Decimal(3, 2)
   ratingCount          Int        @default(0)
+  /// Customers following the shop (denormalized from ShopFollow).
+  followerCount        Int        @default(0)
   verifiedAt           DateTime?
   createdAt            DateTime   @default(now())
   updatedAt            DateTime   @updatedAt
 
   owner         Customer?          @relation("ShopOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   kycDocuments  ShopKycDocument[]
+  followers     ShopFollow[]
   products      Product[]
   orders        ShopOrder[]
   coupons       Coupon[]
@@ -326,6 +337,11 @@ model Customer {
   cartItems         CartItem[]
   orders            Order[]
   wishlist          WishlistItem[]
+  /// Shops this customer follows.
+  follows           ShopFollow[]
+  /// Videos the customer posted to the feed, and the posts they liked.
+  feedPosts         FeedPost[]
+  feedPostLikes     FeedPostLike[]
   reviews           Review[]
   points            PointTransaction[]
   redemptions       CouponRedemption[]
@@ -549,6 +565,10 @@ model ShopOrder {
   total              Decimal     @db.Decimal(14, 2)
   deliveryProviderId String?
   trackingNumber     String?
+  /// Photo of the courier's bill the shop uploads when shipping (private storage key).
+  shippingBillKey    String?
+  /// Delivered by the shop itself as urgent delivery (its fee is `shippingFee`).
+  urgentDelivery     Boolean   @default(false)
   /// Deadline logic (§3.6): buyers may extend each deadline a limited number of times.
   paymentDueAt       DateTime?
   autoConfirmAt      DateTime?
@@ -797,6 +817,51 @@ model Review {
   @@index([target, targetId])
 }
 
+/// A customer's own video in the feed (no product): a moment, an unboxing, a review.
+model FeedPost {
+  id         String   @id @default(uuid(7))
+  customerId String
+  /// Public storage key (c-<customerId>/videos/).
+  videoKey   String
+  caption    String   @default("")
+  /// Hidden by Taladonline (moderation); the author still sees it.
+  isHidden   Boolean  @default(false)
+  viewCount  Int      @default(0)
+  shareCount Int      @default(0)
+  likeCount  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  customer Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  likes    FeedPostLike[]
+
+  @@index([createdAt])
+  @@index([customerId, createdAt])
+}
+
+model FeedPostLike {
+  customerId String
+  postId     String
+  createdAt  DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  post     FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([customerId, postId])
+}
+
+/// A customer following a shop: their updates and products can be favoured in feeds later.
+model ShopFollow {
+  customerId String
+  shopId     String
+  createdAt  DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  shop     Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@id([customerId, shopId])
+  @@index([shopId, createdAt])
+}
+
 model WishlistItem {
   customerId String
   productId  String
@@ -928,7 +993,7 @@ model ShopConversation {
 model ShopMessage {
   id             String   @id @default(uuid(7))
   conversationId String
-  /// "CUSTOMER" | "SHOP" | "BOT" (the shop's auto-reply)
+  /// "CUSTOMER" | "SHOP" | "BOT" (the shop's auto-reply) | "SYSTEM" (a Taladonline notice to both sides)
   sender         String
   text           String   @default("")
   /// Private photo (storage key); served only to the conversation's two sides.
@@ -939,6 +1004,9 @@ model ShopMessage {
   productIds     String[] @default([])
   /// An order card sent in the chat (buy by chat).
   chatOrderId    String?
+  /// A location the sender shared (their current position), e.g. where to deliver.
+  latitude       Float?
+  longitude      Float?
   createdAt      DateTime @default(now())
 
   conversation ShopConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)

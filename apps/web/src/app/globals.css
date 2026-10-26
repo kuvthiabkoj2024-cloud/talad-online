@@ -30,8 +30,8 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-soft: var(--primary-soft);
   --color-sale: var(--sale);
-  /* Latin first, then Lao glyph fallback */
-  --font-sans: var(--font-geist), var(--font-lao), sans-serif;
+  /* Noto Sans Lao Looped for both Lao and English */
+  --font-sans: var(--font-main), sans-serif;
 }
 
 @media (width < 48rem) {

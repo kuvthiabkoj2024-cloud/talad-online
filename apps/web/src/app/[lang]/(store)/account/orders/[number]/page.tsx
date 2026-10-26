@@ -1,17 +1,5 @@
 import { formatMoney, formatPhone, provinceName, SLIP_PAYMENT_METHODS } from "@talad/shared";
-import {
-  ArrowLeft,
-  CircleAlert,
-  CircleX,
-  Clock,
-  CreditCard,
-  MapPin,
-  MessageCircleMore,
-  MessageSquareText,
-  RotateCcw,
-  Store,
-  Truck,
-} from "lucide-react";
+import { ArrowLeft, CircleAlert, CircleX, Clock, CreditCard, MapPin, MessageCircleMore, MessageSquareText, ReceiptText, RotateCcw, Store, Truck, Zap } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -213,13 +201,30 @@ export default async function OrderDetailPage({ params }: Props) {
             <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
               {[address.line, address.village, address.district, provinceName(address.province, locale)].filter(Boolean).join(", ")}
             </p>
-            {(order.deliveryProvider || order.trackingNumber) && (
+            {(order.deliveryProvider || order.trackingNumber || order.hasShippingBill || order.urgentDelivery) && (
               <dl className="mt-3 space-y-1.5 border-t border-border pt-3 text-sm">
+                {order.urgentDelivery && (
+                  <p className="flex items-center gap-1.5 font-semibold text-sale">
+                    <Zap className="size-4" />
+                    {dict.urgentDelivery}
+                  </p>
+                )}
                 {order.deliveryProvider && (
                   <Row label={dict.carrier} value={order.deliveryProvider} />
                 )}
                 {order.trackingNumber && (
                   <Row label={dict.tracking} value={<span className="font-mono">{order.trackingNumber}</span>} />
+                )}
+                {order.hasShippingBill && (
+                  <a
+                    href={`/api/orders/${encodeURIComponent(order.number)}/shipping-bill`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 pt-1 text-sm font-semibold text-primary hover:underline"
+                  >
+                    <ReceiptText className="size-4" />
+                    {dict.shippingBill}
+                  </a>
                 )}
               </dl>
             )}

@@ -47,4 +47,10 @@ export class ShopOrderActionDto {
   @IsString()
   @MaxLength(64)
   trackingNumber?: string;
+
+  /** `ship`: the courier bill photo, from POST /me/shop/orders/:number/bill (required). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  billKey?: string;
 }

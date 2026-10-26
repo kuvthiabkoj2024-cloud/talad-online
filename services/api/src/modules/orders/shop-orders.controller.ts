@@ -1,4 +1,6 @@
-import { Body, Controller, Get, Param, Post, Query, StreamableFile, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { SHOP_PROFILE_RULES } from '@talad/shared';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Shop } from '../../generated/prisma/client.js';
 import { CurrentShop, ShopOwnerGuard } from '../auth/shop-owner.guard.js';
@@ -36,7 +38,20 @@ export class ShopOrdersController {
     return new StreamableFile(file.body, { type: file.contentType, length: file.contentLength, disposition: 'inline' });
   }
 
-  /** Confirm payment, pack, ship, deliver, cancel or handle a return. */
+  /** The courier bill photo for shipping; send the returned key with the `ship` action. */
+  @Post(':number/bill')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: SHOP_PROFILE_RULES.imageMaxBytes, files: 1 } }))
+  uploadBill(@CurrentShop() shop: Shop, @Param('number') number: string, @UploadedFile() file?: Express.Multer.File) {
+    return this.orders.uploadBill(shop, number, file);
+  }
+
+  @Get(':number/bill')
+  async bill(@CurrentShop() shop: Shop, @Param('number') number: string) {
+    const file = await this.orders.bill(shop.id, number);
+    return new StreamableFile(file.body, { type: file.contentType, length: file.contentLength, disposition: 'inline' });
+  }
+
+  /** Ship (with the bill), out of stock, deliver, cancel or handle a return. */
   @Post(':number/actions')
   act(@CurrentShop() shop: Shop, @Param('number') number: string, @Body() dto: ShopOrderActionDto) {
     return this.orders.act(shop, number, dto);

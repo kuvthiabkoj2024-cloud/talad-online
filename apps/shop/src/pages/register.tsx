@@ -48,7 +48,7 @@ interface ShopApplication {
   slug: string
   description: string | null
   ownerName: string
-  email: string
+  email: string | null
   phone: string
   address: string | null
   documents: { id: string; type: KycDocumentType; key: string }[]
@@ -171,7 +171,8 @@ function ApplicationForm({ account, application }: { account: Account; applicati
     if (name.trim().length < SHOP_RULES.nameMin) e.name = 'name'
     if (!SHOP_RULES.slugPattern.test(effectiveSlug) || slugCheck.data?.available === false) e.slug = 'slug'
     if (ownerName.trim().length < 2) e.ownerName = 'ownerName'
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) e.email = 'email'
+    // Email is optional; when given it must look like one.
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) e.email = 'email'
     if (!normalizePhone(phone)) e.phone = 'phone'
     if (address.trim().length < 5) e.address = 'address'
     if (!docs.NATIONAL_ID?.key) e.documents = 'idRequired'
@@ -190,7 +191,7 @@ function ApplicationForm({ account, application }: { account: Account; applicati
         slug: effectiveSlug,
         description: description.trim() || undefined,
         ownerName: ownerName.trim(),
-        email: email.trim(),
+        email: email.trim() || null,
         phone,
         address: address.trim(),
         documents: KYC_DOCUMENT_TYPES.flatMap((type) => (docs[type]?.key ? [{ type, key: docs[type]!.key! }] : [])),
@@ -222,7 +223,7 @@ function ApplicationForm({ account, application }: { account: Account; applicati
 
   const checks = [
     { label: t.register.checkShop, done: name.trim().length >= SHOP_RULES.nameMin && SHOP_RULES.slugPattern.test(effectiveSlug) && slugCheck.data?.available !== false },
-    { label: t.register.checkContact, done: ownerName.trim().length >= 2 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) && !!normalizePhone(phone) },
+    { label: t.register.checkContact, done: ownerName.trim().length >= 2 && (!email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) && !!normalizePhone(phone) },
     { label: t.register.checkAddress, done: address.trim().length >= 5 },
     { label: t.register.checkId, done: !!docs.NATIONAL_ID?.key },
     { label: t.register.checkTerms, done: terms },
@@ -302,7 +303,7 @@ function ApplicationForm({ account, application }: { account: Account; applicati
               <Input id="ownerName" value={ownerName} maxLength={100} onChange={(e) => (setOwnerName(e.target.value), clear('ownerName'))} {...invalid('ownerName')} />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label={t.register.email} htmlFor="email" required error={err('email')}>
+              <Field label={t.register.email} htmlFor="email" hint={t.common.optional} error={err('email')}>
                 <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => (setEmail(e.target.value), clear('email'))} {...invalid('email')} />
               </Field>
               <Field label={t.register.phone} htmlFor="bizPhone" required error={err('phone')}>

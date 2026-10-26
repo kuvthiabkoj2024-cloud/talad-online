@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Truck } from "lucide-react";
+import { ChevronRight, Store, Truck } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { Breadcrumb } from "@/components/breadcrumb";
@@ -30,10 +30,22 @@ async function getProduct({ params }: Props): Promise<ProductDetail> {
 
 export async function generateMetadata(props: Props): Promise<Metadata> {
   const product = await getProduct(props);
+  const { lang, shop, slug } = await props.params;
+  const path = `/${lang}/p/${shop}/${slug}`;
+  // Shared links show this text under the photo; without a description, the shop's name.
+  const description = product.description?.slice(0, 160) || `${product.shop.name} · Taladonline`;
   return {
     title: product.name,
-    description: product.description?.slice(0, 160),
-    openGraph: { images: product.imageUrls.slice(0, 1) },
+    description,
+    alternates: { canonical: path },
+    openGraph: {
+      type: "website",
+      siteName: "Taladonline",
+      url: path,
+      title: product.name,
+      description,
+      images: product.imageUrls.slice(0, 1),
+    },
   };
 }
 
@@ -41,7 +53,7 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
 export default async function ProductPage(props: Props) {
   const product = await getProduct(props);
   const locale = await getLocale();
-  const { product: dict, cart: cartDict, cartErrors, account } = await getDictionary();
+  const { product: dict, cart: cartDict, cartErrors, account, feed } = await getDictionary();
   const { category } = product;
 
   const jsonLd = {
@@ -83,24 +95,35 @@ export default async function ProductPage(props: Props) {
         <div className="flex flex-col gap-4">
           <ProductGallery
             images={product.imageUrls}
+            videoUrl={product.videoUrl}
             alt={product.name}
-            labels={{ image: dict.image, prev: dict.prevImage, next: dict.nextImage }}
+            labels={{
+              image: dict.image,
+              prev: dict.prevImage,
+              next: dict.nextImage,
+              video: dict.video,
+              soundOn: dict.soundOn,
+              soundOff: dict.soundOff,
+            }}
           />
-          <ShareButton title={product.name} labels={{ share: dict.share, copied: dict.copied }} />
+          <ShareButton title={product.name} label={dict.share} dict={{ ...feed, shareTitle: dict.shareTitle }} />
         </div>
 
         <div className="flex min-w-0 flex-col gap-6">
           <div>
+            {/* Looks like a link: shoppers tap it to see the whole shop. */}
             <Link
               href={`/${locale}/s/${product.shop.slug}`}
-              className="text-sm text-muted-foreground hover:text-foreground"
+              className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-primary-soft py-1 pr-2.5 pl-2 text-sm font-semibold text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
             >
-              {product.shop.name}
+              <Store className="size-4 shrink-0" />
+              <span className="truncate">{product.shop.name}</span>
+              <ChevronRight className="size-4 shrink-0" />
             </Link>
             <h1 className="mt-2 text-xl font-bold leading-snug sm:text-2xl">{product.name}</h1>
             {product.soldCount > 0 && (
               <p className="mt-2 text-sm text-muted-foreground">
-                {interpolate(dict.sold, { n: product.soldCount.toLocaleString() })}
+                {interpolate(dict.sold, { n: product.soldCount.toLocaleString("en-US") })}
               </p>
             )}
           </div>

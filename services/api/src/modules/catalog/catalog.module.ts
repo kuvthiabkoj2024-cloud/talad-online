@@ -24,13 +24,15 @@ import { ProductsService } from './products/products.service.js';
 import { ShopProductsController } from './products/shop-products.controller.js';
 import { ShopProductsService } from './products/shop-products.service.js';
 import { UnitsController } from './units.controller.js';
+import { FeedPostsController, MyFeedPostsController } from './videos/feed-posts.controller.js';
+import { FeedPostsService } from './videos/feed-posts.service.js';
 import { VideoEngagementService } from './videos/video-engagement.service.js';
 import { MyVideosController, ShopVideosController, VideosController } from './videos/videos.controller.js';
 
 /** Categories, units, products, variants and moderation (§2.5, §2.6, §3.3). */
 @Module({
   imports: [AuthModule, CmsModule, MediaModule, PromotionsModule, NotificationsModule, OrdersModule],
-  controllers: [ChatController, PhotoSearchController, CategoriesController, UnitsController, ProductsController, ShopProductsController, AdminProductsController, AdminCatalogController, VideosController, MyVideosController, ShopVideosController],
+  controllers: [ChatController, PhotoSearchController, CategoriesController, UnitsController, ProductsController, ShopProductsController, AdminProductsController, AdminCatalogController, VideosController, MyVideosController, ShopVideosController, FeedPostsController, MyFeedPostsController],
   providers: [
     CategoriesService,
     ProductsService,
@@ -44,6 +46,7 @@ import { MyVideosController, ShopVideosController, VideosController } from './vi
     AnthropicService,
     ChatService,
     VideoEngagementService,
+    FeedPostsService,
   ],
   exports: [CategoriesService, ProductsService, PhotoSearchService, AnthropicService],
 })

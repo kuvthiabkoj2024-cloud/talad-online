@@ -44,6 +44,8 @@ interface ShopFacts {
   address: string | null;
   hours: BusinessHours | null;
   transfer: boolean;
+  /** The shop offers cash on delivery (its own choice). */
+  cod: boolean;
   faqs: { question: string; answer: string }[];
 }
 
@@ -153,7 +155,7 @@ export class ShopBotService {
     const shop = await this.prisma.shop.findUniqueOrThrow({
       where: { id: shopId },
       select: {
-        id: true, slug: true, name: true, description: true, address: true, businessHours: true, paymentAccountNumber: true, paymentQrKey: true,
+        id: true, slug: true, name: true, description: true, address: true, businessHours: true, paymentAccountNumber: true, paymentQrKey: true, codEnabled: true,
         faqs: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }], select: { question: true, answer: true } },
       },
     });
@@ -165,6 +167,7 @@ export class ShopBotService {
       address: shop.address,
       hours: shop.businessHours as BusinessHours | null,
       transfer: !!(shop.paymentAccountNumber || shop.paymentQrKey),
+      cod: shop.codEnabled,
       faqs: shop.faqs,
     };
   }
@@ -385,8 +388,8 @@ export class ShopBotService {
 
   private async paymentMethods(shop: ShopFacts, lang: ChatLocale) {
     const { paymentMethods } = await this.cms.publicSettings();
-    // Transfers need the shop's bank account or QR (as at checkout).
-    const usable = paymentMethods.filter((m) => m !== 'BANK_TRANSFER' || shop.transfer);
+    // Transfers need the shop's bank account or QR, COD the shop's own opt-in (as at checkout).
+    const usable = paymentMethods.filter((m) => (m === 'BANK_TRANSFER' ? shop.transfer : m === 'COD' ? shop.cod : true));
     return { names: usable.map((m) => PAYMENT_NAMES[m]?.[lang] ?? m), cod: usable.includes('COD') };
   }
 

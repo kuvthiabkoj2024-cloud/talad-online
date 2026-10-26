@@ -7,9 +7,11 @@ import {
   Heart,
   MessageCircle,
   Play,
+  Plus,
   Share2,
   ShoppingBag,
   Store,
+  Trash2,
   Volume2,
   VolumeX,
 } from "lucide-react";
@@ -17,10 +19,20 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
-import type { FeedItem, VideoStats } from "@/lib/api";
+import type { FeedEntry, FeedItem, FeedPostItem, PostStats, VideoStats } from "@/lib/api";
 import { loadFeed } from "@/lib/feed-actions";
 import { formatCount, formatPriceRange, interpolate, productPath } from "@/lib/format";
-import { favoritedVideos, recordVideoShare, recordVideoView, setVideoFavorite } from "@/lib/video-actions";
+import {
+  deletePost,
+  favoritedVideos,
+  likedPosts,
+  recordPostShare,
+  recordPostView,
+  recordVideoShare,
+  recordVideoView,
+  setPostLike,
+  setVideoFavorite,
+} from "@/lib/video-actions";
 import { useSession } from "../auth/session-provider";
 import { ProductImage } from "../product-image";
 import { BuyNowSheet } from "./buy-now-sheet";
@@ -29,7 +41,10 @@ import { FEED_HEIGHT } from "./feed-height";
 import { ShareSheet } from "./share-sheet";
 
 type Dict = Dictionary["feed"];
-type Sheet = { kind: "comments" | "share" | "buy"; item: FeedItem } | null;
+
+/** A customer's own video (no product), as opposed to a shop's product video. */
+const isPost = (e: FeedEntry): e is FeedPostItem => e.kind === "post";
+type Sheet = { kind: "comments" | "buy"; item: FeedItem } | { kind: "share"; item: FeedEntry } | null;
 
 /** A play counts after this much watching, once per video per visit. */
 const VIEW_AFTER_MS = 2500;
@@ -37,7 +52,8 @@ const VIEWED_KEY = "talad:feed-viewed";
 const EMPTY = new Set<string>();
 
 /**
- * Full-screen vertical video feed: one product video per screen, snap scrolling.
+ * Full-screen vertical video feed: shops' product videos and customers' own videos, one per
+ * screen, snap scrolling.
  * The slide on screen plays (muted until the viewer turns sound on); the next page
  * loads when the viewer is two slides from the end.
  */
@@ -51,7 +67,7 @@ export function FeedView({
   locale: Locale;
   dict: Dict;
   cartErrors: Dictionary["cartErrors"];
-  initialItems: FeedItem[];
+  initialItems: FeedEntry[];
   initialCursor: string | null;
 }) {
   const router = useRouter();
@@ -85,6 +101,21 @@ export function FeedView({
     owner: null,
     ids: new Set(),
   });
+  // Customers' posts: live counters and which ones this viewer liked (per account, like favorites).
+  const [postStats, setPostStats] = useState<Record<string, PostStats>>({});
+  const [likeState, setLikeState] = useState<{ owner: string | null; ids: Set<string> }>({ owner: null, ids: new Set() });
+  const liked = likeState.owner === owner ? likeState.ids : EMPTY;
+  const checkedLikes = useRef<{ owner: string | null; ids: Set<string> }>({ owner: null, ids: new Set() });
+  const postStatsOf = (p: FeedPostItem) => postStats[p.id] ?? p.stats;
+  const bumpPost = useCallback(
+    (p: FeedPostItem, patch: (s: PostStats) => Partial<PostStats>) =>
+      setPostStats((all) => {
+        const cur = all[p.id] ?? p.stats;
+        return { ...all, [p.id]: { ...cur, ...patch(cur) } };
+      }),
+    [],
+  );
+  const loginNext = () => router.push(`/${locale}/login?next=${encodeURIComponent(`/${locale}/feed`)}`);
 
   const statsOf = useCallback((item: FeedItem) => stats[item.id] ?? item.stats, [stats]);
   const bump = useCallback(
@@ -107,11 +138,73 @@ export function FeedView({
     if (!owner) return;
     const checked = checkedFavorites.current;
     if (checked.owner !== owner) checkedFavorites.current = { owner, ids: new Set() };
-    const ids = items.map((i) => i.id).filter((id) => !checkedFavorites.current.ids.has(id));
+    const ids = items
+      .filter((i) => !isPost(i))
+      .map((i) => i.id)
+      .filter((id) => !checkedFavorites.current.ids.has(id));
     if (!ids.length) return;
     ids.forEach((id) => checkedFavorites.current.ids.add(id));
     void favoritedVideos(ids).then((on) => setFavorited((prev) => new Set([...prev, ...on])));
   }, [owner, items, setFavorited]);
+
+  // Same for the posts this viewer liked.
+  useEffect(() => {
+    if (!owner) return;
+    if (checkedLikes.current.owner !== owner) checkedLikes.current = { owner, ids: new Set() };
+    const ids = items.filter(isPost).map((p) => p.id).filter((id) => !checkedLikes.current.ids.has(id));
+    if (!ids.length) return;
+    ids.forEach((id) => checkedLikes.current.ids.add(id));
+    void likedPosts(ids).then((on) =>
+      setLikeState((s) => ({ owner, ids: new Set([...(s.owner === owner ? s.ids : []), ...on]) })),
+    );
+  }, [owner, items]);
+
+  const onPostViewed = useCallback(
+    (p: FeedPostItem) => {
+      let seen: string[] = [];
+      try {
+        seen = JSON.parse(sessionStorage.getItem(VIEWED_KEY) ?? "[]") as string[];
+      } catch {
+        // storage unavailable: still count
+      }
+      if (seen.includes(p.id)) return;
+      try {
+        sessionStorage.setItem(VIEWED_KEY, JSON.stringify([...seen, p.id].slice(-500)));
+      } catch {
+        // ignore
+      }
+      bumpPost(p, (s) => ({ views: s.views + 1 }));
+      void recordPostView(p.id).then((views) => views !== null && bumpPost(p, () => ({ views })));
+    },
+    [bumpPost],
+  );
+
+  async function toggleLike(p: FeedPostItem) {
+    if (!customer) return loginNext();
+    const on = !liked.has(p.id);
+    const apply = (value: boolean) =>
+      setLikeState((s) => {
+        const ids = new Set(s.owner === owner ? s.ids : []);
+        if (value) ids.add(p.id);
+        else ids.delete(p.id);
+        return { owner, ids };
+      });
+    apply(on);
+    bumpPost(p, (s) => ({ likes: Math.max(0, s.likes + (on ? 1 : -1)) }));
+    const res = await setPostLike(p.id, on);
+    if (res.ok) bumpPost(p, () => ({ likes: res.likes }));
+    else {
+      apply(!on);
+      bumpPost(p, (s) => ({ likes: Math.max(0, s.likes + (on ? -1 : 1)) }));
+      if (res.error === "UNAUTHENTICATED") loginNext();
+    }
+  }
+
+  async function removePost(p: FeedPostItem) {
+    if (!window.confirm(dict.deletePostConfirm)) return;
+    const res = await deletePost(p.id);
+    if (res.ok) setItems((all) => all.filter((i) => i.id !== p.id));
+  }
 
   const onViewed = useCallback(
     (item: FeedItem) => {
@@ -201,19 +294,27 @@ export function FeedView({
         </span>
         <h1 className="text-lg font-bold">{dict.empty}</h1>
         <p className="max-w-xs text-sm text-muted-foreground">{dict.emptyBody}</p>
-        <Link
-          href={`/${locale}`}
-          className="mt-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:brightness-110"
-        >
-          {dict.backHome}
-        </Link>
+        <div className="mt-2 flex flex-wrap justify-center gap-2">
+          <Link
+            href={customer ? `/${locale}/feed/new` : `/${locale}/login?next=${encodeURIComponent(`/${locale}/feed/new`)}`}
+            className="flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:brightness-110"
+          >
+            <Plus className="size-4" />
+            {dict.newPost}
+          </Link>
+          <Link href={`/${locale}`} className="rounded-full border border-border px-5 py-2.5 text-sm font-semibold transition hover:bg-muted">
+            {dict.backHome}
+          </Link>
+        </div>
       </div>
     );
   }
 
   const shareUrl =
     sheet && typeof window !== "undefined"
-      ? `${window.location.origin}${productPath(locale, sheet.item.shop.slug, sheet.item.slug)}`
+      ? isPost(sheet.item)
+        ? `${window.location.origin}/${locale}/feed?post=${sheet.item.id}`
+        : `${window.location.origin}${productPath(locale, sheet.item.shop.slug, sheet.item.slug)}`
       : "";
 
   return (
@@ -223,7 +324,27 @@ export function FeedView({
         className={`${FEED_HEIGHT} no-scrollbar snap-y snap-mandatory overflow-y-auto overscroll-contain bg-black`}
       >
         <h1 className="sr-only">{dict.title}</h1>
-        {items.map((item, i) => (
+        {items.map((item, i) =>
+          isPost(item) ? (
+            <PostSlide
+              key={item.id}
+              index={i}
+              post={item}
+              locale={locale}
+              dict={dict}
+              active={i === active}
+              preload={i === active + 1}
+              muted={muted}
+              onToggleMute={() => setMuted((m) => !m)}
+              stats={postStatsOf(item)}
+              liked={liked.has(item.id)}
+              mine={item.author.id === owner}
+              onViewed={() => onPostViewed(item)}
+              onLike={() => void toggleLike(item)}
+              onShare={() => setSheet({ kind: "share", item })}
+              onDelete={() => void removePost(item)}
+            />
+          ) : (
           <FeedSlide
             key={item.id}
             index={i}
@@ -238,15 +359,19 @@ export function FeedView({
             favorited={favorited.has(item.id)}
             onViewed={() => onViewed(item)}
             onFavorite={() => void toggleFavorite(item)}
-            onOpen={(kind) => setSheet({ kind, item })}
+            onOpen={(kind) => setSheet(kind === "share" ? { kind, item } : { kind, item })}
           />
-        ))}
+          ),
+        )}
         {loadFailed && (
           <p role="alert" className="py-6 text-center text-sm text-white/70">
             {dict.loadError}
           </p>
         )}
       </div>
+
+      {/* Post your own video (no product needed). */}
+      <NewPostButton locale={locale} label={dict.newPost} signedIn={!!customer} />
 
       {/* Each sheet mounts when it opens, so it starts fresh and loads live data. */}
       {sheet?.kind === "comments" && (
@@ -267,10 +392,15 @@ export function FeedView({
           open
           onClose={() => setSheet(null)}
           url={shareUrl}
-          title={sheet.item.name}
+          title={isPost(sheet.item) ? sheet.item.caption || sheet.item.author.name : sheet.item.name}
           dict={dict}
           onShared={() => {
             const item = sheet.item;
+            if (isPost(item)) {
+              bumpPost(item, (s) => ({ shares: s.shares + 1 }));
+              void recordPostShare(item.id).then((shares) => shares !== null && bumpPost(item, () => ({ shares })));
+              return;
+            }
             bump(item, (s) => ({ shares: s.shares + 1 }));
             void recordVideoShare(item.id).then((shares) => shares !== null && bump(item, { shares }));
           }}
@@ -514,5 +644,170 @@ function RailButton({
       </span>
       <span className="tabular-nums">{count}</span>
     </button>
+  );
+}
+
+/** Floating "+" over the feed: opens the new post page (sign in first). */
+function NewPostButton({ locale, label, signedIn }: { locale: Locale; label: string; signedIn: boolean }) {
+  const href = `/${locale}/feed/new`;
+  return (
+    <Link
+      href={signedIn ? href : `/${locale}/login?next=${encodeURIComponent(href)}`}
+      aria-label={label}
+      title={label}
+      className="fixed left-3 top-[calc(var(--header-h,4rem)+0.75rem)] z-20 flex h-10 items-center gap-1.5 rounded-full bg-white/90 px-3.5 text-sm font-semibold text-foreground shadow-lg backdrop-blur-sm transition hover:bg-white md:left-[max(0.75rem,calc(50%-14rem))]"
+    >
+      <Plus className="size-4" />
+      <span>{label}</span>
+    </Link>
+  );
+}
+
+/** A customer's own video: author, caption, likes and shares, no product card. */
+function PostSlide({
+  index,
+  post,
+  locale,
+  dict,
+  active,
+  preload,
+  muted,
+  onToggleMute,
+  stats,
+  liked,
+  mine,
+  onViewed,
+  onLike,
+  onShare,
+  onDelete,
+}: {
+  index: number;
+  post: FeedPostItem;
+  locale: Locale;
+  dict: Dict;
+  active: boolean;
+  preload: boolean;
+  muted: boolean;
+  onToggleMute: () => void;
+  stats: PostStats;
+  liked: boolean;
+  mine: boolean;
+  onViewed: () => void;
+  onLike: () => void;
+  onShare: () => void;
+  onDelete: () => void;
+}) {
+  const video = useRef<HTMLVideoElement>(null);
+  const [paused, setPaused] = useState(true);
+  const [landscape, setLandscape] = useState(false);
+
+  useEffect(() => {
+    const v = video.current;
+    if (!v) return;
+    if (active) v.play().catch(() => {});
+    else v.pause();
+  }, [active]);
+
+  useEffect(() => {
+    if (!active || paused) return;
+    const t = setTimeout(onViewed, VIEW_AFTER_MS);
+    return () => clearTimeout(t);
+  }, [active, paused, onViewed]);
+
+  function togglePlay() {
+    const v = video.current;
+    if (!v) return;
+    if (v.paused) v.play().catch(() => {});
+    else v.pause();
+  }
+
+  const initials = post.author.name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
+
+  return (
+    <section data-index={index} aria-label={post.caption || post.author.name} className="relative h-full snap-start snap-always">
+      <div className="relative mx-auto h-full max-w-md overflow-hidden">
+        <video
+          ref={video}
+          src={post.videoUrl}
+          muted={muted}
+          loop
+          playsInline
+          preload={active || preload ? "auto" : "none"}
+          onPlay={() => setPaused(false)}
+          onPause={() => setPaused(true)}
+          onLoadedMetadata={(e) => setLandscape(e.currentTarget.videoWidth > e.currentTarget.videoHeight)}
+          onClick={togglePlay}
+          aria-label={paused ? dict.play : dict.pause}
+          className={`absolute inset-0 size-full cursor-pointer ${landscape ? "object-contain" : "object-cover"}`}
+        />
+
+        {active && paused && (
+          <button
+            type="button"
+            onClick={togglePlay}
+            aria-label={dict.play}
+            className="absolute left-1/2 top-1/2 flex size-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm"
+          >
+            <Play className="ml-1 size-8 fill-current" />
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={onToggleMute}
+          aria-label={muted ? dict.unmute : dict.mute}
+          aria-pressed={!muted}
+          className="absolute right-3 top-3 flex size-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm"
+        >
+          {muted ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
+        </button>
+
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end gap-3 bg-linear-to-t from-black/85 via-black/40 to-transparent px-4 pb-5 pt-24 text-white">
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <p className="flex w-fit items-center gap-2 text-sm font-semibold">
+              <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-xs font-bold text-primary ring-2 ring-white">
+                {post.author.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- social profile picture
+                  <img src={post.author.avatarUrl} alt="" className="size-full object-cover" />
+                ) : (
+                  initials
+                )}
+              </span>
+              {post.author.name}
+            </p>
+            {post.caption && <p className="line-clamp-3 whitespace-pre-line text-sm text-white/90">{post.caption}</p>}
+            <p className="flex items-center gap-1.5 text-xs text-white/75">
+              <Eye className="size-3.5" />
+              {interpolate(dict.views, { n: formatCount(stats.views, locale) })}
+            </p>
+          </div>
+
+          <div className="pointer-events-auto flex shrink-0 flex-col items-center gap-4 pb-1">
+            <RailButton label={liked ? dict.unlike : dict.like} pressed={liked} count={formatCount(stats.likes, locale)} onClick={onLike}>
+              <Heart className={`size-7 ${liked ? "fill-[#ff3b5c] text-[#ff3b5c]" : ""}`} />
+            </RailButton>
+            <RailButton label={dict.share} count={formatCount(stats.shares, locale)} onClick={onShare}>
+              <Share2 className="size-7" />
+            </RailButton>
+            {mine && (
+              <button
+                type="button"
+                onClick={onDelete}
+                aria-label={dict.deletePost}
+                title={dict.deletePost}
+                className="flex size-11 items-center justify-center rounded-full bg-black/25 text-white backdrop-blur-sm active:scale-95"
+              >
+                <Trash2 className="size-5" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }

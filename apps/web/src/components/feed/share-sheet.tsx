@@ -1,12 +1,12 @@
 "use client";
 
-import { Check, Copy, Download, MessageCircle, Phone, Send, Share2 } from "lucide-react";
+import { Check, Copy, Download, ExternalLink, MessageCircle, Phone, Send, Share2, X } from "lucide-react";
 import QRCode from "qrcode";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
-import { BottomSheet } from "../bottom-sheet";
 
-type Dict = Dictionary["feed"];
+/** The texts the sheet needs; the feed passes its own, product and shop pages theirs. */
+export type ShareSheetDict = Pick<Dictionary["feed"], "shareTitle" | "close" | "scanQr" | "saveQr" | "copied" | "copyLink" | "shareMore" | "openLink">;
 
 interface Target {
   name: string;
@@ -50,16 +50,10 @@ const TARGETS: Target[] = [
     icon: <Send className="-ml-0.5 size-6 fill-current" />,
     href: (url, text) => `https://t.me/share/url?url=${e(url)}&text=${e(text)}`,
   },
-  {
-    name: "X",
-    bg: "bg-black",
-    icon: <span className="text-xl font-bold leading-none">𝕏</span>,
-    href: (url, text) => `https://x.com/intent/tweet?url=${e(url)}&text=${e(text)}`,
-  },
 ];
 
 /**
- * Share a feed video: QR code (scan on another phone, or save it to post), the link,
+ * Share a page (a feed video, a product, a shop): QR code (scan on another phone, or save it to post), the link,
  * one-tap buttons for the apps people use in Laos, and the phone's own share sheet.
  * `onShared` fires once per opening, whichever way the viewer shares.
  */
@@ -75,8 +69,8 @@ export function ShareSheet({
   onClose: () => void;
   url: string;
   title: string;
-  dict: Dict;
-  onShared: () => void;
+  dict: ShareSheetDict;
+  onShared?: () => void;
 }) {
   // Mounted fresh each time the sheet opens, so this state starts clean.
   const [qr, setQr] = useState<string | null>(null);
@@ -98,7 +92,7 @@ export function ShareSheet({
   function shared() {
     if (counted) return;
     setCounted(true);
-    onShared();
+    onShared?.();
   }
 
   async function copy() {
@@ -127,11 +121,46 @@ export function ShareSheet({
     }
   }
 
+  // Centred card (same design as the Seller Center's share dialog), on a native <dialog>:
+  // focus trap, Esc and the backdrop come from the browser; tapping the backdrop closes it.
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
+    if (open && !dialog.open) dialog.showModal();
+    if (!open && dialog.open) dialog.close();
+  }, [open]);
+
   return (
-    <BottomSheet open={open} onClose={onClose} title={dict.shareTitle} closeLabel={dict.close}>
-      <div className="mx-auto flex max-w-md flex-col gap-5 pb-2">
+    <dialog
+      ref={ref}
+      onClose={onClose}
+      onClick={(e) => {
+        if (e.target === ref.current) onClose();
+      }}
+      aria-labelledby="share-title"
+      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-border bg-card p-0 text-foreground shadow-2xl backdrop:bg-black/50 backdrop:backdrop-blur-sm"
+    >
+      <div className="flex max-h-[90dvh] flex-col gap-4 overflow-y-auto p-6">
+        <div className="flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <h2 id="share-title" className="text-lg font-bold leading-tight">
+              {dict.shareTitle}
+            </h2>
+            <p className="mt-1 truncate text-sm text-muted-foreground">{title}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={dict.close}
+            className="-mr-2 -mt-1 rounded-full p-2 text-foreground transition-colors hover:bg-muted"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
         <div className="flex flex-col items-center gap-2">
-          <div className="flex size-48 items-center justify-center rounded-2xl border border-border bg-white p-2 shadow-sm">
+          <div className="flex size-44 items-center justify-center rounded-2xl border border-border bg-white p-2 shadow-sm">
             {qr ? (
               // eslint-disable-next-line @next/next/no-img-element -- generated data URL
               <img src={qr} alt={`QR: ${url}`} className="size-full" />
@@ -139,13 +168,13 @@ export function ShareSheet({
               <span className="size-full animate-pulse rounded-xl bg-muted" />
             )}
           </div>
-          <p className="text-sm text-muted-foreground">{dict.scanQr}</p>
+          <p className="text-xs text-muted-foreground">{dict.scanQr}</p>
           {qr && (
             <a
               href={qr}
               download="taladonline-qr.png"
               onClick={shared}
-              className="flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+              className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
             >
               <Download className="size-4" />
               {dict.saveQr}
@@ -153,21 +182,21 @@ export function ShareSheet({
           )}
         </div>
 
-        <div className="flex items-center gap-2 rounded-full border border-border bg-muted/50 p-1 pl-4">
+        <div className="flex min-w-0 items-center gap-2 rounded-full border border-border bg-muted/50 p-1 pl-4">
           <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground" title={url}>
-            {url}
+            {url.replace(/^https?:\/\//, "")}
           </span>
           <button
             type="button"
             onClick={copy}
-            className="flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:brightness-110"
+            className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-primary px-3 text-sm font-medium text-primary-foreground transition hover:brightness-110"
           >
             {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
             {copied ? dict.copied : dict.copyLink}
           </button>
         </div>
 
-        <ul className="grid grid-cols-4 gap-x-2 gap-y-4">
+        <ul className="grid grid-cols-5 gap-2">
           {TARGETS.map((t) => (
             <li key={t.name}>
               <a
@@ -175,31 +204,37 @@ export function ShareSheet({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={shared}
-                className="flex flex-col items-center gap-1.5 text-xs font-medium"
+                className="flex flex-col items-center gap-1.5 text-[11px] font-medium"
               >
-                <span className={`flex size-12 items-center justify-center rounded-full text-white shadow-sm ${t.bg}`}>
+                <span className={`flex size-11 items-center justify-center rounded-full text-white shadow-sm ${t.bg}`}>
                   {t.icon}
                 </span>
                 {t.name}
               </a>
             </li>
           ))}
-          {canNativeShare && (
-            <li>
-              <button
-                type="button"
-                onClick={nativeShare}
-                className="flex w-full flex-col items-center gap-1.5 text-xs font-medium"
-              >
-                <span className="flex size-12 items-center justify-center rounded-full bg-muted text-foreground shadow-sm">
-                  <Share2 className="size-5" />
-                </span>
-                {dict.shareMore}
-              </button>
-            </li>
-          )}
         </ul>
+
+        <div className="grid grid-cols-2 gap-2">
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            className="flex h-10 items-center justify-center gap-2 rounded-lg border border-border text-sm font-medium transition-colors hover:bg-muted"
+          >
+            <ExternalLink className="size-4" />
+            {dict.openLink}
+          </a>
+          <button
+            type="button"
+            onClick={canNativeShare ? nativeShare : copy}
+            className="flex h-10 items-center justify-center gap-2 rounded-lg border border-border text-sm font-medium transition-colors hover:bg-muted"
+          >
+            {canNativeShare ? <Share2 className="size-4" /> : <Copy className="size-4" />}
+            {canNativeShare ? dict.shareMore : dict.copyLink}
+          </button>
+        </div>
       </div>
-    </BottomSheet>
+    </dialog>
   );
 }

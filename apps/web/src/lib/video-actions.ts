@@ -118,3 +118,37 @@ export async function loadBuyOptions(shopSlug: string, slug: string): Promise<Pr
   if (!SLUG.test(shopSlug) || !SLUG.test(slug)) return null;
   return apiGet<ProductDetail>(`/products/${encodeURIComponent(shopSlug)}/${encodeURIComponent(slug)}`);
 }
+
+/* ── Customers' own feed videos ── */
+
+export async function setPostLike(postId: string, on: boolean): Promise<VideoResult<{ liked: boolean; likes: number }>> {
+  if (!isId(postId)) return { ok: false, error: "generic" };
+  const res = await call<{ liked: boolean; likes: number }>(on ? "PUT" : "DELETE", `/me/feed-posts/${postId}/like`, { auth: true });
+  return res.ok ? { ok: true, ...res.data } : res;
+}
+
+/** Which of these posts the signed-in customer liked (empty when signed out). */
+export async function likedPosts(postIds: string[]): Promise<string[]> {
+  const ids = Array.isArray(postIds) ? postIds.filter(isId).slice(0, 50) : [];
+  if (!ids.length || !(await getSessionToken())) return [];
+  const res = await call<{ postIds: string[] }>("GET", `/me/feed-posts/likes?ids=${ids.join(",")}`, { auth: true });
+  return res.ok ? res.data.postIds : [];
+}
+
+export async function recordPostView(postId: string): Promise<number | null> {
+  if (!isId(postId)) return null;
+  const res = await call<{ views: number }>("POST", `/feed-posts/${postId}/views`, { auth: false });
+  return res.ok ? res.data.views : null;
+}
+
+export async function recordPostShare(postId: string): Promise<number | null> {
+  if (!isId(postId)) return null;
+  const res = await call<{ shares: number }>("POST", `/feed-posts/${postId}/shares`, { auth: false });
+  return res.ok ? res.data.shares : null;
+}
+
+/** The author deletes their own post. */
+export async function deletePost(postId: string): Promise<VideoResult<{ data: { ok: true } }>> {
+  if (!isId(postId)) return { ok: false, error: "generic" };
+  return call<{ ok: true }>("DELETE", `/me/feed-posts/${postId}`, { auth: true });
+}

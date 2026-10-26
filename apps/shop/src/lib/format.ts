@@ -19,8 +19,14 @@ export function formatDate(iso: string, locale: Locale, withTime = false): strin
   }).format(new Date(iso))
 }
 
-export function formatNumber(n: number, locale: Locale): string {
-  return new Intl.NumberFormat(TAGS[locale]).format(n)
+/**
+ * Numbers read "2,000,000" in every language and browser: Lao locale data differs between
+ * browsers (some group with dots), so amounts and counts use one fixed style.
+ */
+const NUMBER_TAG = 'en-US'
+
+export function formatNumber(n: number, _locale: Locale): string {
+  return new Intl.NumberFormat(NUMBER_TAG).format(n)
 }
 
 export function localized(text: LocalizedText, locale: Locale): string {

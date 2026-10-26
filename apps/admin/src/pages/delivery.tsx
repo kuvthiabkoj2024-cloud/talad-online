@@ -3,6 +3,7 @@ import { Button } from '@talad/ui/components/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@talad/ui/components/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@talad/ui/components/dialog'
 import { Input } from '@talad/ui/components/input'
+import { MoneyInput } from '@talad/ui/components/money-input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@talad/ui/components/select'
 import { Switch } from '@talad/ui/components/switch'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -284,10 +285,10 @@ function ZoneForm({ courierId, value, onDone }: { courierId: string; value: Part
       </fieldset>
       <div className="grid grid-cols-2 gap-4">
         <Field required id="base" label={t.delivery.baseFee}>
-          <Input id="base" inputMode="numeric" value={baseFee} onChange={(e) => setBaseFee(e.target.value.replace(/[^\d.]/g, ''))} />
+          <MoneyInput id="base" value={baseFee} onValueChange={setBaseFee} />
         </Field>
         <Field required id="kg" label={t.delivery.perKg}>
-          <Input id="kg" inputMode="numeric" value={perKg} onChange={(e) => setPerKg(e.target.value.replace(/[^\d.]/g, ''))} />
+          <MoneyInput id="kg" value={perKg} onValueChange={setPerKg} />
         </Field>
       </div>
       <DialogFooter>

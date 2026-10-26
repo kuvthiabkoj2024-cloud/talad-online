@@ -2,11 +2,12 @@ import { Button } from '@talad/ui/components/button'
 import { Input } from '@talad/ui/components/input'
 import { cn } from '@talad/ui/lib/utils'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bot, Camera, CheckCheck, CircleAlert, ImageIcon, LoaderCircle, Lock, MessagesSquare, Package, Plus, Search, SendHorizontal, ShoppingBag, X } from 'lucide-react'
+import { Bot, Camera, CheckCheck, CircleAlert, ImageIcon, LoaderCircle, Lock, MapPin, MessagesSquare, Package, Plus, Search, SendHorizontal, ShieldCheck, ShoppingBag, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Link, useParams } from 'react-router'
 import { SellerOrderCard, SendOrderDialog } from '@/components/chat-order'
+import { LocationCard } from '@/components/location-card'
 import { TopBar } from '@/components/page-header'
 import { EmptyState, ErrorState, LoadingState } from '@/components/states'
 import { queryKeys } from '@/hooks/queries'
@@ -185,6 +186,10 @@ function ConversationList({ activeId, className }: { activeId?: string; classNam
                             <>
                               <ImageIcon className="size-4 shrink-0" /> {t.messages.photo}
                             </>
+                          ) : c.lastMessage?.location ? (
+                            <>
+                              <MapPin className="size-4 shrink-0" /> {t.messages.location}
+                            </>
                           ) : c.lastMessage?.order ? (
                             <>
                               <ShoppingBag className="size-4 shrink-0" /> {t.messages.orderPreview}
@@ -225,6 +230,9 @@ function Thread({ id }: { id: string }) {
   const thread = useQuery({ queryKey: key, queryFn: () => api<ChatThread>(`${BASE}/${id}`), staleTime: Infinity })
   const [text, setText] = useState('')
   const [photo, setPhoto] = useState<{ file: File; preview: string } | null>(null)
+  /** The shop's current position, ready to send (e.g. where to pick up or meet). */
+  const [place, setPlace] = useState<{ lat: number; lng: number } | null>(null)
+  const [locating, setLocating] = useState(false)
   const [error, setError] = useState<keyof typeof t.messages.errors | null>(null)
   const [loadingOlder, setLoadingOlder] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -317,6 +325,10 @@ function Thread({ id }: { id: string }) {
       const form = new FormData()
       form.set('text', text.trim())
       if (photo) form.set('photo', photo.file)
+      if (place) {
+        form.set('latitude', String(place.lat))
+        form.set('longitude', String(place.lng))
+      }
       return api<ChatMessage>(`${BASE}/${id}/messages`, { method: 'POST', body: form })
     },
     onMutate: () => setError(null),
@@ -326,6 +338,7 @@ function Thread({ id }: { id: string }) {
       if (textInput.current) textInput.current.style.height = 'auto'
       if (photo) URL.revokeObjectURL(photo.preview)
       setPhoto(null)
+      setPlace(null)
       void queryClient.invalidateQueries({ queryKey: [...queryKeys.conversations, 'list'] })
     },
     onError: (e) => {
@@ -335,8 +348,26 @@ function Thread({ id }: { id: string }) {
   })
 
   function submit() {
-    if ((!text.trim() && !photo) || sendMessage.isPending) return
+    if ((!text.trim() && !photo && !place) || sendMessage.isPending) return
     sendMessage.mutate()
+  }
+
+  /** Asks the browser for the current position; it's then sent like a photo. */
+  function locate() {
+    if (!('geolocation' in navigator)) return setError('LOCATION_UNAVAILABLE')
+    setError(null)
+    setLocating(true)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocating(false)
+        setPlace({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+      },
+      (err) => {
+        setLocating(false)
+        setError(err.code === err.PERMISSION_DENIED ? 'LOCATION_DENIED' : 'LOCATION_UNAVAILABLE')
+      },
+      { enableHighAccuracy: true, timeout: 15_000, maximumAge: 60_000 },
+    )
   }
 
   async function attach(file: File | undefined) {
@@ -400,6 +431,27 @@ function Thread({ id }: { id: string }) {
             const first = !sameSide(prev, m)
             const last = !sameSide(m, next)
             const showOrder = m.order && lastOfOrder.get(m.order.id) === m.id
+            if (m.system) {
+              // Taladonline speaking to both sides: centred, not anyone's bubble.
+              return (
+                <li key={m.id} className="mt-4 flex flex-col">
+                  {newDay && (
+                    <p className="mb-3 flex items-center gap-3 text-[11px] font-medium text-muted-foreground">
+                      <span className="h-px flex-1 bg-border" />
+                      <span className="rounded-full bg-card px-3 py-1 shadow-sm ring-1 ring-border">{day.format(date)}</span>
+                      <span className="h-px flex-1 bg-border" />
+                    </p>
+                  )}
+                  <div className="mx-auto w-full max-w-md rounded-2xl border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-sm dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-100">
+                    <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold">
+                      <ShieldCheck className="size-4" />
+                      Taladonline
+                    </p>
+                    <p className="whitespace-pre-line leading-relaxed">{m.text}</p>
+                  </div>
+                </li>
+              )
+            }
             return (
               <li key={m.id} className={cn('flex flex-col', first ? 'mt-4' : 'mt-1')}>
                 {newDay && (
@@ -419,6 +471,7 @@ function Thread({ id }: { id: string }) {
                         {t.messages.autoReply}
                       </Link>
                     )}
+                    {m.location && <LocationCard lat={m.location.lat} lng={m.location.lng} label={t.messages.locationTitle} open={t.messages.openMap} />}
                     {m.product && (
                       <a
                         href={storefrontUrl.product(locale, m.product.shopSlug, m.product.slug)}
@@ -487,6 +540,20 @@ function Thread({ id }: { id: string }) {
             submit()
           }}
         >
+          {place && (
+            <div className="relative m-1.5 mb-1 flex w-fit items-center gap-2 rounded-xl bg-muted py-2 pr-9 pl-3 text-sm font-medium">
+              <MapPin className="size-4 shrink-0 text-red-500" />
+              {t.messages.locationReady}
+              <button
+                type="button"
+                onClick={() => setPlace(null)}
+                aria-label={t.messages.removeLocation}
+                className="absolute top-1/2 right-1.5 flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-background"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          )}
           {photo && (
             <div className="relative m-1.5 mb-1 w-fit">
               <img src={photo.preview} alt="" className="size-20 rounded-xl object-cover ring-1 ring-border" />
@@ -522,6 +589,16 @@ function Thread({ id }: { id: string }) {
             >
               {photo ? <Plus className="size-5" /> : <Camera className="size-5" />}
             </button>
+            <button
+              type="button"
+              onClick={locate}
+              disabled={locating}
+              aria-label={t.messages.shareLocation}
+              title={t.messages.shareLocation}
+              className="flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-brand-soft hover:text-primary disabled:opacity-60"
+            >
+              {locating ? <LoaderCircle className="size-5 animate-spin" /> : <MapPin className="size-5" />}
+            </button>
             <textarea
               ref={textInput}
               rows={1}
@@ -544,7 +621,7 @@ function Thread({ id }: { id: string }) {
             />
             <button
               type="submit"
-              disabled={sendMessage.isPending || (!text.trim() && !photo)}
+              disabled={sendMessage.isPending || (!text.trim() && !photo && !place)}
               aria-label={t.messages.send}
               className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/25 transition hover:brightness-110 disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none"
             >

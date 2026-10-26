@@ -3,6 +3,7 @@ import { Prisma } from '../../../generated/prisma/client.js';
 import { PrismaService } from '../../../prisma/prisma.service.js';
 import { MediaService } from '../../media/media.service.js';
 import { flashPrice, FlashSalePricingService, type FlashDiscount } from '../../promotions/flash-sale-pricing.service.js';
+import { avatarPrefix } from '../../auth/customer-auth.service.js';
 import type { FeedQuery } from './feed.query.js';
 import { productOptions, variantLabel, type ProductOption } from './product-options.js';
 import type { ListProductsQuery } from './list-products.query.js';
@@ -25,6 +26,7 @@ export interface ProductCard {
 }
 
 export interface FeedItem extends Omit<ProductCard, 'shop'> {
+  kind: 'product';
   videoUrl: string;
   shop: { slug: string; name: string; logoUrl: string | null };
   /** Units available (all variants together). */
@@ -33,8 +35,19 @@ export interface FeedItem extends Omit<ProductCard, 'shop'> {
   stats: { views: number; favorites: number; comments: number; shares: number };
 }
 
+/** A customer's own video in the feed (no product to buy). */
+export interface FeedPostItem {
+  kind: 'post';
+  id: string;
+  videoUrl: string;
+  caption: string;
+  createdAt: Date;
+  author: { id: string; name: string; avatarUrl: string | null };
+  stats: { views: number; likes: number; shares: number };
+}
+
 export interface FeedPage {
-  items: FeedItem[];
+  items: (FeedItem | FeedPostItem)[];
   /** Pass back as `cursor` for the next page; null on the last page. */
   nextCursor: string | null;
 }
@@ -56,6 +69,8 @@ export interface ProductDetail extends Omit<ProductCard, 'imageUrl'> {
   description: string | null;
   stock: number;
   imageUrls: string[];
+  /** The product's short video (§2.5), shown first in the gallery; null without one. */
+  videoUrl: string | null;
   ratingCount: number;
   /** What the variants differ by (e.g. Colour, then Size), values in the seller's order. */
   options: ProductOption[];
@@ -171,42 +186,89 @@ export class ProductsService {
     return this.toCards(rows);
   }
 
-  /** Visible products that have a video, newest first, cursor-paged for infinite scroll. */
+  /**
+   * The feed: shops' product videos and customers' own videos, newest first, cursor-paged
+   * for infinite scroll. The cursor is "<ms>.<id>" of the last item; a bare product id (older
+   * clients) still works.
+   */
   async feed(query: FeedQuery): Promise<FeedPage> {
-    const rows = await this.prisma.product.findMany({
-      where: { ...VISIBLE, videoKey: { not: null } },
-      orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
-      take: query.limit + 1,
-      ...(query.cursor && { cursor: { id: query.cursor }, skip: 1 }),
-      select: {
-        ...cardSelect,
-        videoKey: true,
-        stock: true,
-        variants: { select: { price: true, stock: true } },
-        videoViewCount: true,
-        videoShareCount: true,
-        videoCommentCount: true,
-        _count: { select: { wishlistBy: true } },
-        shop: { select: { slug: true, name: true, logoUrl: true } },
-      },
-    });
-    const page = rows.slice(0, query.limit);
-    const discounts = await this.flash.discounts(page.map((r) => r.id));
-    return {
-      items: page.map(({ videoKey, shop, stock, videoViewCount, videoShareCount, videoCommentCount, _count, ...row }) => ({
-        ...this.toCard({ ...row, shop }, discounts.get(row.id)),
-        videoUrl: this.media.publicUrl(videoKey!),
-        shop: {
-          slug: shop.slug,
-          name: shop.name,
-          logoUrl: shop.logoUrl ? this.media.publicUrl(shop.logoUrl) : null,
+    const at = await this.feedCursor(query.cursor);
+    // Strictly after the cursor in (time desc, id desc) order.
+    const before = (field: 'publishedAt' | 'createdAt') =>
+      at ? { OR: [{ [field]: { lt: at.time } }, { [field]: at.time, id: { lt: at.id } }] } : {};
+    const [rows, posts] = await Promise.all([
+      this.prisma.product.findMany({
+        where: { ...VISIBLE, videoKey: { not: null }, ...before('publishedAt') },
+        orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
+        take: query.limit + 1,
+        select: {
+          ...cardSelect,
+          publishedAt: true,
+          videoKey: true,
+          stock: true,
+          variants: { select: { price: true, stock: true } },
+          videoViewCount: true,
+          videoShareCount: true,
+          videoCommentCount: true,
+          _count: { select: { wishlistBy: true } },
+          shop: { select: { slug: true, name: true, logoUrl: true } },
         },
-        stock: row.variants.length ? row.variants.reduce((sum, v) => sum + v.stock, 0) : stock,
-        hasVariants: row.variants.length > 0,
-        stats: { views: videoViewCount, favorites: _count.wishlistBy, comments: videoCommentCount, shares: videoShareCount },
-      })),
-      nextCursor: rows.length > query.limit ? page[page.length - 1].id : null,
+      }),
+      this.prisma.feedPost.findMany({
+        where: { isHidden: false, customer: { isActive: true }, ...before('createdAt') },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: query.limit + 1,
+        include: { customer: { select: { id: true, name: true, avatarUrl: true } } },
+      }),
+    ]);
+    const merged = [
+      ...rows.map((r) => ({ time: r.publishedAt!, id: r.id, product: r, post: undefined })),
+      ...posts.map((p) => ({ time: p.createdAt, id: p.id, product: undefined, post: p })),
+    ].sort((a, b) => b.time.getTime() - a.time.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+    const page = merged.slice(0, query.limit);
+    const discounts = await this.flash.discounts(page.flatMap((e) => (e.product ? [e.product.id] : [])));
+    const last = page.at(-1);
+    return {
+      items: page.map((e): FeedItem | FeedPostItem => {
+        if (e.post) {
+          const { customer: c } = e.post;
+          return {
+            kind: 'post',
+            id: e.post.id,
+            videoUrl: this.media.publicUrl(e.post.videoKey),
+            caption: e.post.caption,
+            createdAt: e.post.createdAt,
+            // Uploaded avatars are private files; only social-login pictures are public links.
+            author: { id: c.id, name: c.name, avatarUrl: c.avatarUrl && !c.avatarUrl.startsWith(avatarPrefix(c.id)) ? c.avatarUrl : null },
+            stats: { views: e.post.viewCount, likes: e.post.likeCount, shares: e.post.shareCount },
+          };
+        }
+        const { videoKey, shop, stock, videoViewCount, videoShareCount, videoCommentCount, _count, publishedAt: _publishedAt, ...row } = e.product!;
+        return {
+          kind: 'product',
+          ...this.toCard({ ...row, shop }, discounts.get(row.id)),
+          videoUrl: this.media.publicUrl(videoKey!),
+          shop: {
+            slug: shop.slug,
+            name: shop.name,
+            logoUrl: shop.logoUrl ? this.media.publicUrl(shop.logoUrl) : null,
+          },
+          stock: row.variants.length ? row.variants.reduce((sum, v) => sum + v.stock, 0) : stock,
+          hasVariants: row.variants.length > 0,
+          stats: { views: videoViewCount, favorites: _count.wishlistBy, comments: videoCommentCount, shares: videoShareCount },
+        };
+      }),
+      nextCursor: merged.length > query.limit && last ? `${last.time.getTime()}.${last.id}` : null,
     };
+  }
+
+  /** Where the previous page ended: "<ms>.<id>", or a bare product id from older clients. */
+  private async feedCursor(cursor?: string): Promise<{ time: Date; id: string } | null> {
+    if (!cursor) return null;
+    const [ms, id] = cursor.split('.');
+    if (id && /^\d+$/.test(ms)) return { time: new Date(Number(ms)), id };
+    const product = await this.prisma.product.findUnique({ where: { id: cursor }, select: { publishedAt: true } });
+    return product?.publishedAt ? { time: product.publishedAt, id: cursor } : null;
   }
 
   /**
@@ -392,6 +454,7 @@ export class ProductsService {
       ratingAvg: product.ratingAvg.toNumber(),
       ratingCount: product.ratingCount,
       imageUrls: product.images.map((i) => this.media.publicUrl(i.key)),
+      videoUrl: product.videoKey ? this.media.publicUrl(product.videoKey) : null,
       variants,
       unit: product.unit,
       category: product.category,

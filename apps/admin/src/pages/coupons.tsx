@@ -2,6 +2,7 @@ import { COUPON_RULES } from '@talad/shared'
 import { Button } from '@talad/ui/components/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@talad/ui/components/dialog'
 import { Input } from '@talad/ui/components/input'
+import { MoneyInput } from '@talad/ui/components/money-input'
 import { Switch } from '@talad/ui/components/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@talad/ui/components/table'
 import { Tabs, TabsList, TabsTrigger } from '@talad/ui/components/tabs'
@@ -195,7 +196,12 @@ function CouponForm({ coupon, onDone }: { coupon: Coupon | null; onDone: () => v
 
   const num = (k: 'value' | 'maxDiscount' | 'minOrderAmount' | 'usageLimit' | 'perCustomer', label: string, required = false) => (
     <Field id={k} label={label} required={required}>
-      <Input id={k} inputMode="numeric" required={required} placeholder={required ? undefined : t.coupons.unlimited} value={form[k]} onChange={(e) => set(k, e.target.value.replace(/[^\d.]/g, ''))} />
+      {/* Kip amounts get thousands separators; percentages and counts stay plain. */}
+      {k === 'maxDiscount' || k === 'minOrderAmount' || (k === 'value' && form.type !== 'PERCENTAGE') ? (
+        <MoneyInput id={k} required={required} placeholder={required ? undefined : t.coupons.unlimited} value={form[k]} onValueChange={(v) => set(k, v)} />
+      ) : (
+        <Input id={k} inputMode="numeric" required={required} placeholder={required ? undefined : t.coupons.unlimited} value={form[k]} onChange={(e) => set(k, e.target.value.replace(/[^\d.]/g, ''))} />
+      )}
     </Field>
   )
 

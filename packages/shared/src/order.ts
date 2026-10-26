@@ -13,8 +13,9 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
 /** Allowed forward transitions; anything not listed is rejected. */
 export const ORDER_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
-  PENDING: ['CONFIRMED', 'CANCELLED'],
-  CONFIRMED: ['PACKED', 'CANCELLED'],
+  // A shop can ship straight from a new order (packing + bill in one step).
+  PENDING: ['CONFIRMED', 'SHIPPED', 'CANCELLED'],
+  CONFIRMED: ['PACKED', 'SHIPPED', 'CANCELLED'],
   PACKED: ['SHIPPED', 'CANCELLED'],
   SHIPPED: ['DELIVERED'],
   DELIVERED: ['COMPLETED', 'RETURN_REQUESTED'],
@@ -84,12 +85,17 @@ export function isShopOrderTab(value: unknown): value is ShopOrderTab {
 /**
  * What a shop can do to an order, from which statuses, and where it leads. `null` keeps
  * the status (rejecting a return escalates it to Taladonline instead).
+ *
+ * A new order has two ways forward: `ship` (pack it and upload the courier's bill, in one
+ * step; for a transfer it also accepts the slip) or `out-of-stock` (cancels it, sets the
+ * stock to 0 and tells both sides in their chat). `confirm` and `pack` remain for older clients.
  */
 export const SHOP_ORDER_ACTIONS = {
   confirm: { from: ['PENDING'], to: 'CONFIRMED' },
   'reject-payment': { from: ['PENDING'], to: 'CANCELLED' },
   pack: { from: ['CONFIRMED'], to: 'PACKED' },
-  ship: { from: ['PACKED'], to: 'SHIPPED' },
+  ship: { from: ['PENDING', 'CONFIRMED', 'PACKED'], to: 'SHIPPED' },
+  'out-of-stock': { from: ['PENDING', 'CONFIRMED', 'PACKED'], to: 'CANCELLED' },
   deliver: { from: ['SHIPPED'], to: 'DELIVERED' },
   cancel: { from: ['PENDING', 'CONFIRMED', 'PACKED'], to: 'CANCELLED' },
   'approve-return': { from: ['RETURN_REQUESTED'], to: 'CANCELLED' },

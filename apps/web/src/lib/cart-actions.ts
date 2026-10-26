@@ -17,6 +17,7 @@ const KNOWN = new Set<CartErrorCode>([
   "NOT_PAYABLE",
   "SLIP_REQUIRED",
   "TRANSFER_UNAVAILABLE",
+  "COD_UNAVAILABLE",
   "INVALID_IMAGE",
   "FILE_TOO_LARGE",
   "OWN_PRODUCT",
@@ -86,6 +87,8 @@ export interface CheckoutSelection {
   deliveryProviderId?: string;
   couponCode?: string;
   addressId?: string;
+  /** Shops whose own urgent delivery the customer chose. */
+  urgentShopIds?: string[];
 }
 
 /** Re-price the checkout after a quantity, courier, coupon or address change. */
@@ -104,6 +107,7 @@ export async function placeOrder(input: {
   addressId: string;
   deliveryProviderId?: string;
   couponCode?: string;
+  urgentShopIds?: string[];
   paymentMethod: CheckoutPaymentMethod;
   expectedTotal: number;
   /** { [shopId]: slipKey } for QR transfers. */

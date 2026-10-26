@@ -306,6 +306,16 @@ export function ShopDetailPage() {
                   <p className="text-muted-foreground">{t.shops.noPayment}</p>
                 )}
                 {s.payment.hasQr && <p className="mt-1 text-xs text-primary">{t.shops.hasQr}</p>}
+                <p className="mt-3 border-t pt-3 text-xs">
+                  <span className="font-medium">{t.shops.cod}: </span>
+                  {s.cod.enabled ? (
+                    <span className="text-primary">
+                      {fill(t.shops.codOn, { date: s.cod.termsAcceptedAt ? formatDate(s.cod.termsAcceptedAt, locale) : '—' })}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">{t.shops.codOff}</span>
+                  )}
+                </p>
               </CardContent>
             </Card>
             {can(admin, 'shops.commission') && (

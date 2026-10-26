@@ -17,7 +17,7 @@ export interface ShopApplication {
   slug: string;
   description: string | null;
   ownerName: string;
-  email: string;
+  email: string | null;
   phone: string;
   address: string | null;
   documents: { id: string; type: KycDocumentType; key: string; createdAt: Date }[];
@@ -191,7 +191,7 @@ export class ShopApplicationService {
     const others = shopId ? { NOT: { id: shopId } } : {};
     const [slug, email, phoneTaken] = await Promise.all([
       this.prisma.shop.findFirst({ where: { slug: dto.slug, ...others }, select: { id: true } }),
-      this.prisma.shop.findFirst({ where: { email: dto.email, ...others }, select: { id: true } }),
+      dto.email ? this.prisma.shop.findFirst({ where: { email: dto.email, ...others }, select: { id: true } }) : null,
       this.prisma.shop.findFirst({ where: { phone, ...others }, select: { id: true } }),
     ]);
     if (slug) throw new ConflictException({ code: 'SLUG_TAKEN', message: 'This shop address is taken' });
@@ -203,7 +203,7 @@ export class ShopApplicationService {
       slug: dto.slug,
       description: dto.description || null,
       ownerName: dto.ownerName,
-      email: dto.email,
+      email: dto.email || null,
       phone,
       address: dto.address,
     };

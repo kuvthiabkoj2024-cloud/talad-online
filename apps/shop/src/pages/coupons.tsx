@@ -13,6 +13,7 @@ import { Button } from '@talad/ui/components/button'
 import { Card, CardContent } from '@talad/ui/components/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@talad/ui/components/dialog'
 import { Input } from '@talad/ui/components/input'
+import { MoneyInput } from '@talad/ui/components/money-input'
 import { Label } from '@talad/ui/components/label'
 import { Switch } from '@talad/ui/components/switch'
 import { Tabs, TabsList, TabsTrigger } from '@talad/ui/components/tabs'
@@ -663,11 +664,11 @@ function CouponFormBody({ coupon, onDone }: { coupon: ShopCoupon | null; onDone:
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <NumberField id="value" required disabled={locked} label={percent ? t.coupons.percentValue : t.coupons.amountValue} value={form.value} onChange={(v) => set('value', v)} error={err('value')} invalid={invalid('value')} />
+        <NumberField id="value" required money={!percent} disabled={locked} label={percent ? t.coupons.percentValue : t.coupons.amountValue} value={form.value} onChange={(v) => set('value', v)} error={err('value')} invalid={invalid('value')} />
         {percent && (
-          <NumberField id="maxDiscount" label={t.coupons.maxDiscount} hint={t.common.optional} value={form.maxDiscount} onChange={(v) => set('maxDiscount', v)} error={err('maxDiscount')} invalid={invalid('maxDiscount')} />
+          <NumberField id="maxDiscount" money label={t.coupons.maxDiscount} hint={t.common.optional} value={form.maxDiscount} onChange={(v) => set('maxDiscount', v)} error={err('maxDiscount')} invalid={invalid('maxDiscount')} />
         )}
-        <NumberField id="minOrder" label={t.coupons.minOrder} hint={t.common.optional} value={form.minOrderAmount} onChange={(v) => set('minOrderAmount', v)} error={err('minOrderAmount')} invalid={invalid('minOrderAmount')} />
+        <NumberField id="minOrder" money label={t.coupons.minOrder} hint={t.common.optional} value={form.minOrderAmount} onChange={(v) => set('minOrderAmount', v)} error={err('minOrderAmount')} invalid={invalid('minOrderAmount')} />
         {!batch && (
           <NumberField id="usageLimit" label={t.coupons.usageLimit} hint={t.common.unlimited} value={form.usageLimit} onChange={(v) => set('usageLimit', v)} error={err('usageLimit')} invalid={invalid('usageLimit')} />
         )}
@@ -717,9 +718,12 @@ function NumberField({
   onChange,
   error,
   invalid,
+  money = false,
 }: {
   id: string
   label: string
+  /** A kip amount: shown as 2,000,000 while typing. */
+  money?: boolean
   required?: boolean
   disabled?: boolean
   hint?: string
@@ -733,7 +737,11 @@ function NumberField({
       <Label htmlFor={id} required={required}>
         {label}
       </Label>
-      <Input id={id} inputMode="numeric" value={value} placeholder={hint} disabled={disabled} onChange={(e) => onChange(e.target.value.replace(/[^\d.]/g, ''))} {...invalid} />
+      {money ? (
+        <MoneyInput id={id} value={value} placeholder={hint} disabled={disabled} onValueChange={onChange} {...invalid} />
+      ) : (
+        <Input id={id} inputMode="numeric" value={value} placeholder={hint} disabled={disabled} onChange={(e) => onChange(e.target.value.replace(/[^\d.]/g, ''))} {...invalid} />
+      )}
       {error}
     </div>
   )

@@ -2,33 +2,42 @@ import {
   BANK_CODES,
   formatPhone,
   LAO_BANKS,
+  PROVINCE_CODES,
+  provinceName,
   SHOP_PROFILE_RULES,
   SHOP_RULES,
   SOCIAL_LINKS,
+  URGENT_RULES,
   WEEKDAYS,
   type BusinessHours,
+  type ProvinceCode,
   type SocialLink,
+  type UrgentDelivery,
+  type UrgentZone,
 } from '@talad/shared'
 import { Button } from '@talad/ui/components/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@talad/ui/components/card'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@talad/ui/components/dialog'
 import { Input } from '@talad/ui/components/input'
+import { MoneyInput } from '@talad/ui/components/money-input'
 import { Label } from '@talad/ui/components/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@talad/ui/components/select'
 import { Switch } from '@talad/ui/components/switch'
 import { Textarea } from '@talad/ui/components/textarea'
 import { cn } from '@talad/ui/lib/utils'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BadgeCheck, ExternalLink, ImagePlus, LoaderCircle, QrCode, Store, Trash2 } from 'lucide-react'
+import { BadgeCheck, Banknote, Copy, ExternalLink, ImagePlus, Link2, LoaderCircle, Plus, QrCode, Share2, ShieldAlert, Store, Trash2, Zap } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { ME_KEY } from '@/auth/context'
 import { PageBody, PageIntro, TopBar } from '@/components/page-header'
+import { ShareDialog } from '@/components/share-dialog'
 import { ErrorState, LoadingState } from '@/components/states'
 import { queryKeys, useShopProfile } from '@/hooks/queries'
 import type { Dict } from '@/i18n/en'
 import { useI18n } from '@/i18n/context'
 import { ApiError, getToken, send, upload } from '@/lib/api'
-import { fill, storefrontUrl } from '@/lib/format'
+import { fill, formatDate, storefrontUrl } from '@/lib/format'
 import type { ShopProfile } from '@/lib/types'
 
 type ErrorKey = keyof Dict['profile']['errors']
@@ -62,7 +71,7 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
   const queryClient = useQueryClient()
   const [name, setName] = useState(p.name)
   const [description, setDescription] = useState(p.description ?? '')
-  const [email, setEmail] = useState(p.email)
+  const [email, setEmail] = useState(p.email ?? '')
   const [phone, setPhone] = useState(formatPhone(p.phone))
   const [address, setAddress] = useState(p.address ?? '')
   const [hours, setHours] = useState<BusinessHours>(p.businessHours)
@@ -72,6 +81,8 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
   const [accountNumber, setAccountNumber] = useState(p.payment.accountNumber ?? '')
   const [paymentWindow, setPaymentWindow] = useState(String(p.paymentWindowHrs))
   const [autoConfirm, setAutoConfirm] = useState(String(p.autoConfirmHrs))
+  const [cod, setCod] = useState(p.cod)
+  const [urgent, setUrgent] = useState<UrgentDelivery>(p.urgentDelivery)
   const { paymentWindowHrs: pw, autoConfirmHrs: ac } = SHOP_PROFILE_RULES
 
   const refresh = (saved: ShopProfile) => {
@@ -80,12 +91,13 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
     void queryClient.invalidateQueries({ queryKey: ME_KEY })
   }
 
+  // `codChange`: the COD switch saves at once (turning it on carries the accepted terms).
   const save = useMutation({
-    mutationFn: () =>
+    mutationFn: (codChange?: { codEnabled: boolean; codTermsAccepted?: boolean }) =>
       send<ShopProfile>('PUT', '/me/shop/profile', {
         name: name.trim(),
         description: description.trim() || undefined,
-        email: email.trim(),
+        email: email.trim() || null,
         phone,
         address: address.trim(),
         businessHours: hours,
@@ -95,10 +107,18 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
         paymentAccountNumber: accountNumber.trim() || null,
         paymentWindowHrs: Number(paymentWindow),
         autoConfirmHrs: Number(autoConfirm),
+        codEnabled: codChange?.codEnabled ?? cod.enabled,
+        urgentDelivery: {
+          ...urgent,
+          eta: urgent.eta.trim(),
+          zones: urgent.zones.map((z) => ({ ...z, districts: z.districts.map((d) => d.trim()).filter(Boolean) })),
+        },
+        codTermsAccepted: codChange?.codTermsAccepted,
       }),
-    onSuccess: (saved) => {
+    onSuccess: (saved, codChange) => {
       refresh(saved)
-      toast.success(t.profile.saved)
+      setCod(saved.cod)
+      toast.success(codChange ? (saved.cod.enabled ? t.cod.turnedOn : t.cod.turnedOff) : t.profile.saved)
     },
     onError: (e) => toast.error(errorText(e, t)),
   })
@@ -120,6 +140,8 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
           )
         }
       />
+
+      <ShopLinkCard url={storefrontUrl.shop(locale, p.slug)} name={p.name} live={approved} />
 
       <form
         id="profile-form"
@@ -169,8 +191,8 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field id="email" label={t.profile.email} required>
-                <Input id="email" type="email" value={email} required onChange={(e) => setEmail(e.target.value)} />
+              <Field id="email" label={t.profile.email} hint={t.common.optional}>
+                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
               </Field>
               <Field id="phone" label={t.profile.phone} required>
                 <Input id="phone" type="tel" value={phone} required onChange={(e) => setPhone(e.target.value)} />
@@ -268,6 +290,15 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
             </div>
           </CardContent>
         </Card>
+
+        <UrgentCard value={urgent} onChange={setUrgent} />
+
+        <CodCard
+          cod={cod}
+          busy={save.isPending}
+          onTurnOn={() => save.mutate({ codEnabled: true, codTermsAccepted: true })}
+          onTurnOff={() => save.mutate({ codEnabled: false })}
+        />
 
         <Card>
           <CardHeader>
@@ -414,5 +445,256 @@ function Field({ id, label, hint, required, children }: { id: string; label: str
       {children}
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
+  )
+}
+
+/** The shop's public link, ready to copy or share (it works once the shop is approved). */
+function ShopLinkCard({ url, name, live }: { url: string; name: string; live: boolean }) {
+  const { t } = useI18n()
+  const [sharing, setSharing] = useState(false)
+  async function copy() {
+    await navigator.clipboard.writeText(url).catch(() => {})
+    toast.success(t.share.copied)
+  }
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-primary">
+          <Link2 className="size-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">{t.share.yourLink}</p>
+          <p className={cn('truncate text-sm', live ? 'text-primary' : 'text-muted-foreground')} title={url}>
+            {url.replace(/^https?:\/\//, '')}
+          </p>
+          {!live && <p className="mt-1 text-xs text-muted-foreground">{t.share.afterApproval}</p>}
+        </div>
+        {live && (
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => void copy()}>
+              <Copy />
+              {t.share.copy}
+            </Button>
+            <Button type="button" size="sm" onClick={() => setSharing(true)}>
+              <Share2 />
+              {t.share.share}
+            </Button>
+            <Button asChild variant="ghost" size="sm">
+              <a href={url} target="_blank" rel="noreferrer">
+                <ExternalLink />
+                {t.share.open}
+              </a>
+            </Button>
+          </div>
+        )}
+      </CardContent>
+      {live && <ShareDialog open={sharing} onOpenChange={setSharing} url={url} title={name} heading={t.share.shopHeading} />}
+    </Card>
+  )
+}
+
+/**
+ * Cash on delivery, the shop's own choice. Turning it on opens the COD terms (Taladonline is
+ * not responsible for COD losses), which must be ticked and accepted first.
+ */
+function CodCard({
+  cod,
+  busy,
+  onTurnOn,
+  onTurnOff,
+}: {
+  cod: ShopProfile['cod']
+  busy: boolean
+  onTurnOn: () => void
+  onTurnOff: () => void
+}) {
+  const { t, locale } = useI18n()
+  const [terms, setTerms] = useState<'accept' | 'read' | null>(null)
+  const [ticked, setTicked] = useState(false)
+  const openTerms = (mode: 'accept' | 'read') => {
+    setTicked(false)
+    setTerms(mode)
+  }
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Banknote className="size-5 text-primary" />
+          {t.cod.title}
+        </CardTitle>
+        <CardDescription>{t.cod.description}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <label className="flex items-center justify-between gap-4 rounded-xl border p-4">
+          <span className="min-w-0">
+            <span className="block text-sm font-medium">{t.cod.toggle}</span>
+            <span className={cn('mt-0.5 block text-xs', cod.enabled ? 'text-primary' : 'text-muted-foreground')}>
+              {cod.enabled && cod.termsAcceptedAt
+                ? fill(t.cod.on, { date: formatDate(cod.termsAcceptedAt, locale) })
+                : t.cod.off}
+            </span>
+          </span>
+          <Switch
+            checked={cod.enabled}
+            disabled={busy}
+            onCheckedChange={(on) => (on ? openTerms('accept') : onTurnOff())}
+          />
+        </label>
+        <button type="button" onClick={() => openTerms('read')} className="self-start text-sm font-medium text-primary hover:underline">
+          {t.cod.readTerms}
+        </button>
+      </CardContent>
+
+      <Dialog open={terms !== null} onOpenChange={(open) => !open && setTerms(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldAlert className="size-5 text-amber-500" />
+              {t.cod.termsTitle}
+            </DialogTitle>
+            <DialogDescription>{t.cod.termsIntro}</DialogDescription>
+          </DialogHeader>
+          <ol className="flex max-h-[50dvh] list-decimal flex-col gap-2.5 overflow-y-auto pl-5 text-sm leading-relaxed">
+            {t.cod.terms.map((line, i) => (
+              // The "not responsible" clause stands out.
+              <li key={i} className={cn(i === 3 && 'font-semibold text-foreground')}>
+                {line}
+              </li>
+            ))}
+          </ol>
+          {terms === 'accept' && (
+            <label className="flex items-start gap-3 rounded-xl border bg-muted/40 p-3 text-sm">
+              <input
+                type="checkbox"
+                checked={ticked}
+                onChange={(e) => setTicked(e.target.checked)}
+                className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]"
+              />
+              {t.cod.accept}
+            </label>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setTerms(null)}>
+              {terms === 'accept' ? t.common.cancel : t.cod.close}
+            </Button>
+            {terms === 'accept' && (
+              <Button
+                type="button"
+                disabled={!ticked || busy}
+                onClick={() => {
+                  setTerms(null)
+                  onTurnOn()
+                }}
+              >
+                {busy && <LoaderCircle className="animate-spin" />}
+                {t.cod.confirm}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  )
+}
+
+/** The shop's own urgent delivery: on/off, how fast, and a price per area it covers. */
+function UrgentCard({ value, onChange }: { value: UrgentDelivery; onChange: (v: UrgentDelivery) => void }) {
+  const { t, locale } = useI18n()
+  const setZone = (i: number, change: Partial<UrgentZone>) =>
+    onChange({ ...value, zones: value.zones.map((z, j) => (j === i ? { ...z, ...change } : z)) })
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Zap className="size-5 text-primary" />
+          {t.urgent.title}
+        </CardTitle>
+        <CardDescription>{t.urgent.description}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <label className="flex items-center justify-between gap-4 rounded-xl border p-4">
+          <span className="text-sm font-medium">{t.urgent.toggle}</span>
+          <Switch
+            checked={value.enabled}
+            onCheckedChange={(enabled) =>
+              onChange({ ...value, enabled, zones: enabled && value.zones.length === 0 ? [{ province: 'VT', districts: [], fee: 20000 }] : value.zones })
+            }
+          />
+        </label>
+        {value.enabled && (
+          <>
+            <Field id="urgent-eta" label={t.urgent.eta} hint={t.urgent.etaHint}>
+              <Input
+                id="urgent-eta"
+                maxLength={URGENT_RULES.etaMax}
+                placeholder={t.urgent.etaPlaceholder}
+                value={value.eta}
+                onChange={(e) => onChange({ ...value, eta: e.target.value })}
+              />
+            </Field>
+            <div className="flex flex-col gap-2">
+              <Label>{t.urgent.zones}</Label>
+              {value.zones.length === 0 && <p className="text-sm text-muted-foreground">{t.urgent.noZones}</p>}
+              <ul className="flex flex-col gap-3">
+                {value.zones.map((z, i) => (
+                  <li key={i} className="grid gap-3 rounded-xl border p-3 sm:grid-cols-[10rem_1fr_8rem_auto] sm:items-end">
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-xs text-muted-foreground">{t.urgent.province}</span>
+                      <Select value={z.province} onValueChange={(province) => setZone(i, { province: province as ProvinceCode })}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PROVINCE_CODES.map((code) => (
+                            <SelectItem key={code} value={code}>
+                              {provinceName(code, locale)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-xs text-muted-foreground">{t.urgent.districts}</span>
+                      <Input
+                        placeholder={t.urgent.districtsPlaceholder}
+                        value={z.districts.join(', ')}
+                        onChange={(e) => setZone(i, { districts: e.target.value.split(',').slice(0, URGENT_RULES.maxDistricts) })}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-xs text-muted-foreground">{t.urgent.fee}</span>
+                      <MoneyInput value={z.fee} onValueChange={(v) => setZone(i, { fee: Math.min(URGENT_RULES.feeMax, Number(v) || 0) })} />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={t.urgent.removeZone}
+                      className="justify-self-end text-muted-foreground hover:text-destructive"
+                      onClick={() => onChange({ ...value, zones: value.zones.filter((_, j) => j !== i) })}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-muted-foreground">{t.urgent.districtsHint}</p>
+              {value.zones.length < URGENT_RULES.maxZones && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="self-start"
+                  onClick={() => onChange({ ...value, zones: [...value.zones, { province: value.zones.at(-1)?.province ?? 'VT', districts: [], fee: value.zones.at(-1)?.fee ?? 20000 }] })}
+                >
+                  <Plus />
+                  {t.urgent.addZone}
+                </Button>
+              )}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   )
 }

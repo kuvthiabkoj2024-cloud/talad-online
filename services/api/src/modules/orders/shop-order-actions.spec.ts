@@ -13,8 +13,9 @@ describe('shop order actions', () => {
     expect(shopOrderActions('CANCELLED')).toEqual([]);
   });
 
-  it('let a paid-and-confirmed order be packed or cancelled, not shipped yet', () => {
-    expect(shopOrderActions('CONFIRMED')).toEqual(['pack', 'cancel']);
+  it('give a new order the two ways forward: ship with the bill, or out of stock', () => {
+    expect(shopOrderActions('CONFIRMED')).toEqual(['pack', 'ship', 'out-of-stock', 'cancel']);
+    expect(shopOrderActions('PENDING')).toEqual(['confirm', 'reject-payment', 'ship', 'out-of-stock', 'cancel']);
   });
 
   it('cover every active status', () => {

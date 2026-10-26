@@ -15,6 +15,33 @@ export async function restoreStock(tx: Prisma.TransactionClient, shopOrderId: st
   }
 }
 
+/**
+ * The shop ran out although the listing still showed stock: what this order asked for is
+ * gone, so it stops being sold until the shop updates the stock.
+ */
+export async function clearStock(tx: Prisma.TransactionClient, shopOrderId: string): Promise<void> {
+  const items = await tx.orderItem.findMany({ where: { shopOrderId }, select: { productId: true, variantId: true } });
+  for (const i of items) {
+    if (i.variantId) await tx.productVariant.update({ where: { id: i.variantId }, data: { stock: 0 } });
+    else await tx.product.update({ where: { id: i.productId }, data: { stock: 0 } });
+  }
+}
+
+/**
+ * A Taladonline message in the shop–customer chat (both sides see it, both get an unread),
+ * creating the conversation if they never chatted.
+ */
+export async function postSystemMessage(tx: Prisma.TransactionClient, shopId: string, customerId: string, text: string): Promise<void> {
+  const now = new Date();
+  const conv = await tx.shopConversation.upsert({
+    where: { shopId_customerId: { shopId, customerId } },
+    create: { shopId, customerId, lastMessageAt: now, customerUnread: 1, shopUnread: 1 },
+    update: { lastMessageAt: now, customerUnread: { increment: 1 }, shopUnread: { increment: 1 } },
+    select: { id: true },
+  });
+  await tx.shopMessage.create({ data: { conversationId: conv.id, sender: 'SYSTEM', text, createdAt: now } });
+}
+
 /** Completed orders count towards each product's "sold" figure. */
 export async function addSold(tx: Prisma.TransactionClient, shopOrderId: string): Promise<void> {
   const items = await tx.orderItem.groupBy({ by: ['productId'], where: { shopOrderId }, _sum: { quantity: true } });

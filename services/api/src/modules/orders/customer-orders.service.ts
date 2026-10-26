@@ -40,6 +40,10 @@ export interface OrderDetail extends Omit<OrderSummary, 'items'> {
   shippingFee: number;
   currency: string;
   trackingNumber: string | null;
+  /** The shop uploaded a photo of the courier's bill when shipping. */
+  hasShippingBill: boolean;
+  /** Urgent delivery by the shop itself (its fee is `shippingFee`). */
+  urgentDelivery: boolean;
   deliveryProvider: string | null;
   paymentDueAt: Date | null;
   autoConfirmAt: Date | null;
@@ -244,6 +248,8 @@ export class CustomerOrdersService {
       currency: o.order.currency,
       itemCount: o.items.length,
       trackingNumber: o.trackingNumber,
+      hasShippingBill: o.shippingBillKey !== null,
+      urgentDelivery: o.urgentDelivery,
       deliveryProvider: o.deliveryProvider?.name ?? null,
       paymentDueAt: o.paymentDueAt,
       autoConfirmAt: o.autoConfirmAt,

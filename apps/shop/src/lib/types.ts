@@ -7,6 +7,7 @@ import type {
   ShopOrderAction,
   ShopOrderTab,
   SocialLink,
+  UrgentDelivery,
 } from '@talad/shared'
 
 export type LocalizedText = Partial<Record<Locale, string>>
@@ -33,10 +34,19 @@ export interface MyShop {
   rejectionReason: string | null
   description: string | null
   logoUrl: string | null
-  email: string
+  email: string | null
   phone: string
   verifiedAt: string | null
+  /** Customers following the shop. */
+  followerCount: number
   createdAt: string
+}
+
+/** Customers following the shop, newest first (Seller Center). */
+export interface FollowerPage {
+  items: { customer: { id: string; name: string; avatarUrl: string | null }; followedAt: string }[]
+  nextCursor: string | null
+  total: number
 }
 
 /** Mirrors `ShopSummary`. */
@@ -209,6 +219,8 @@ export interface ShopOrderSummary {
   payment: { method: PaymentMethod; status: PaymentStatus; hasSlip: boolean } | null
   awaitingConfirmation: boolean
   paymentDueAt: string | null
+  /** Urgent delivery by the shop itself: handle these first. */
+  urgent: boolean
 }
 
 export interface ShopOrderList {
@@ -242,6 +254,10 @@ export interface ShopOrderDetail extends Omit<ShopOrderSummary, 'customer' | 'pa
   shippingAddress: ShippingAddress | null
   deliveryProvider: { id: string; name: string } | null
   trackingNumber: string | null
+  /** A courier bill photo was uploaded when shipping. */
+  hasShippingBill: boolean
+  /** Delivered by the shop itself as urgent delivery (fee in `shippingFee`). */
+  urgentDelivery: boolean
   autoConfirmAt: string | null
   cancelReason: string | null
   payment:
@@ -377,7 +393,7 @@ export interface ShopProfile {
   name: string
   description: string | null
   ownerName: string
-  email: string
+  email: string | null
   phone: string
   address: string | null
   logoUrl: string | null
@@ -387,6 +403,10 @@ export interface ShopProfile {
   payment: { bankCode: string | null; accountName: string | null; accountNumber: string | null; hasQr: boolean }
   paymentWindowHrs: number
   autoConfirmHrs: number
+  /** Cash on delivery offered, and when the owner last accepted its terms. */
+  cod: { enabled: boolean; termsAcceptedAt: string | null }
+  /** The shop's own urgent delivery: areas, a price per area, how fast. */
+  urgentDelivery: UrgentDelivery
   verifiedAt: string | null
 }
 
@@ -405,7 +425,7 @@ export interface AccountSession {
 export interface ConversationSummary {
   id: string
   customer: { name: string }
-  lastMessage: { text: string; photo: boolean; product: boolean; order: boolean; mine: boolean; bot: boolean; createdAt: string } | null
+  lastMessage: { text: string; photo: boolean; product: boolean; order: boolean; location?: boolean; mine: boolean; bot: boolean; system?: boolean; createdAt: string } | null
   lastMessageAt: string
   unread: number
 }
@@ -425,6 +445,10 @@ export interface ChatMessage {
   mine: boolean
   /** The shop's chat bot replied automatically. */
   bot: boolean
+  /** A Taladonline notice to both sides (e.g. an order out of stock). */
+  system?: boolean
+  /** A shared location (e.g. where the customer wants delivery). */
+  location?: { lat: number; lng: number } | null
   text: string
   hasPhoto: boolean
   product: ChatProductRef | null

@@ -104,7 +104,9 @@ export function ProductPurchase({
     setFeedback(null);
     setBusy(mode);
     startTransition(async () => {
-      const res = await addToCart({ productId, variantId, quantity });
+      // The resolved variant, not `variantId`: that one is only set by the single-row picker,
+      // so products with options (size, colour…) would go out without their choice.
+      const res = await addToCart({ productId, variantId: variant?.id ?? null, quantity });
       setBusy(null);
       if (!res.ok) {
         if (res.error === "UNAUTHENTICATED") router.push(`/${locale}/login?next=${encodeURIComponent(pathname)}`);

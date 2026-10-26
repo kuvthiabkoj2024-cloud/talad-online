@@ -148,7 +148,8 @@ export class ChatOrdersService {
       };
     });
     const transferOk = quote.transferAvailable && quote.paymentMethods.includes('BANK_TRANSFER');
-    const paymentMethods = quote.paymentMethods.filter((m) => m !== 'BANK_TRANSFER' || transferOk);
+    // COD only where the shop has turned it on.
+    const paymentMethods = quote.paymentMethods.filter((m) => (m === 'BANK_TRANSFER' ? transferOk : m === 'COD' ? quote.codAvailable : true));
     const paymentMethod = order.paymentMethod && paymentMethods.includes(order.paymentMethod as CheckoutPaymentMethod) ? (order.paymentMethod as CheckoutPaymentMethod) : null;
     const missing: ChatOrderMissing[] = [];
     if (view.some((i) => i.needsOption)) missing.push('OPTION');

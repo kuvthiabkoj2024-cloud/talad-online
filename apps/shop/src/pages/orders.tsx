@@ -1,7 +1,7 @@
 import { isShopOrderTab, SHOP_ORDER_TABS, type OrderStatus, type ShopOrderTab } from '@talad/shared'
 import { cn } from '@talad/ui/lib/utils'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { ChevronRight, ImageOff, ReceiptText, ScanSearch } from 'lucide-react'
+import { ChevronRight, ImageOff, ReceiptText, ScanSearch, Zap } from 'lucide-react'
 import { Link } from 'react-router'
 import { FilterTabs, Pager, SearchBox } from '@/components/list-controls'
 import { PageBody, PageIntro, TopBar } from '@/components/page-header'
@@ -116,6 +116,12 @@ function OrderCard({ order: o }: { order: ShopOrderSummary }) {
           <span className="truncate text-muted-foreground">· {o.customer.name}</span>
         </span>
         <span className="flex items-center gap-2">
+          {o.urgent && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-950 dark:text-red-200">
+              <Zap className="size-3.5" />
+              {t.orders.urgent}
+            </span>
+          )}
           {o.awaitingConfirmation && (
             <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">
               <ScanSearch className="size-3.5" />

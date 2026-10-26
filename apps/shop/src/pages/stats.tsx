@@ -130,7 +130,7 @@ function SalesCard({ s }: { s: ShopStats }) {
   const { t, locale } = useI18n()
   const [metric, setMetric] = useState<Metric>('revenue')
   const [view, setView] = useState<View>('running')
-  const compact = new Intl.NumberFormat(TAGS[locale], { notation: 'compact', maximumFractionDigits: 1 })
+  const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
   const dayLabel = (key: string) => new Intl.DateTimeFormat(TAGS[locale], { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${key}T00:00:00Z`))
   const value = (d: { orders: number; revenue: number }) => (metric === 'revenue' ? d.revenue : d.orders)
   const format = (v: number) => (metric === 'revenue' ? formatMoney(v, locale) : v === 1 ? t.stats.orderCount : fill(t.stats.ordersCount, { n: formatNumber(v, locale) }))

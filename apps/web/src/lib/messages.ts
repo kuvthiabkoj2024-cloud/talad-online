@@ -5,7 +5,7 @@ export interface ConversationSummary {
   id: string;
   shop: { name: string; slug: string; logoUrl: string | null };
   customer: { name: string };
-  lastMessage: { text: string; photo: boolean; product: boolean; order: boolean; mine: boolean; bot: boolean; createdAt: string } | null;
+  lastMessage: { text: string; photo: boolean; product: boolean; order: boolean; location?: boolean; mine: boolean; bot: boolean; system?: boolean; createdAt: string } | null;
   lastMessageAt: string;
   unread: number;
 }
@@ -24,6 +24,10 @@ export interface ShopChatMessage {
   mine: boolean;
   /** The shop's auto-reply (its chat bot). */
   bot: boolean;
+  /** A Taladonline notice to both sides (e.g. an order out of stock). */
+  system?: boolean;
+  /** A shared location (e.g. where to deliver). */
+  location?: { lat: number; lng: number } | null;
   text: string;
   hasPhoto: boolean;
   product: ChatProductRef | null;

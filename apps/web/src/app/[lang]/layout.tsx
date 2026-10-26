@@ -1,13 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Noto_Sans_Lao } from "next/font/google";
+import { Noto_Sans_Lao_Looped } from "next/font/google";
 import { LOCALES } from "@talad/shared";
 import { SessionProvider } from "@/components/auth/session-provider";
 import { LiveUpdates } from "@/components/realtime/live-updates";
 import { getDictionary, getLocale } from "./dictionaries";
 import "../globals.css";
 
-const geist = Geist({ variable: "--font-geist", subsets: ["latin"] });
-const lao = Noto_Sans_Lao({ variable: "--font-lao", subsets: ["lao"] });
+// One font for everything, Lao and English.
+const font = Noto_Sans_Lao_Looped({ variable: "--font-main", subsets: ["lao", "latin"] });
 
 export function generateStaticParams() {
   return LOCALES.map((lang) => ({ lang }));
@@ -16,6 +16,8 @@ export function generateStaticParams() {
 export async function generateMetadata(): Promise<Metadata> {
   const { meta } = await getDictionary();
   return {
+    // Share previews need absolute links (og:url, og:image).
+    metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
     title: { default: meta.title, template: `%s · Taladonline` },
     description: meta.description,
     alternates: {
@@ -44,7 +46,7 @@ export default async function RootLayout({ children }: LayoutProps<"/[lang]">) {
   return (
     <html
       lang={locale}
-      className={`${geist.variable} ${lao.variable} h-full antialiased`}
+      className={`${font.variable} h-full antialiased`}
     >
       {/* Phones: reserve space so a fixed bottom bar (cart, checkout) never covers the footer. */}
       <body className="flex min-h-full flex-col max-lg:has-[[data-bottom-bar]]:pb-24">

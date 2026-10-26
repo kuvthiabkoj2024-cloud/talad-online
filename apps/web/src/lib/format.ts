@@ -14,10 +14,13 @@ const LOCALE_TAGS: Record<Locale, string> = { lo: "lo-LA", en: "en-US" };
 
 /** Short counts for tight spaces: 820 → "820", 1250 → "1.3K". */
 export function formatCount(n: number, locale: Locale): string {
-  return new Intl.NumberFormat(LOCALE_TAGS[locale], {
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(n);
+  // Built by hand, not Intl "compact": Node and browsers disagree for Lao ("1,2 ພັນ" vs
+  // "1.2K"), and these render on the server and again in the browser (hydration).
+  const units = locale === "lo" ? ([[1e6, " ລ້ານ"], [1e3, " ພັນ"]] as const) : ([[1e6, "M"], [1e3, "K"]] as const);
+  for (const [size, unit] of units) {
+    if (Math.abs(n) >= size) return `${Math.floor((n / size) * 10) / 10}${unit}`;
+  }
+  return n.toLocaleString("en-US");
 }
 
 /** Fills `{name}` placeholders in dictionary strings. */

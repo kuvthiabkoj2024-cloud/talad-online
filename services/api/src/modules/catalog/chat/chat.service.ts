@@ -514,7 +514,8 @@ function describeForModel({ cards, quality }: Found, lang: ChatLocale): string {
 }
 
 const PAYMENT_NAMES: Record<string, Record<ChatLocale, string>> = {
-  COD: { en: 'cash on delivery', lo: 'ຈ່າຍປາຍທາງ (ເງິນສົດ)' },
+  // Each shop decides whether it offers COD.
+  COD: { en: 'cash on delivery (at shops that offer it)', lo: 'ຈ່າຍປາຍທາງ (ເງິນສົດ, ສະເພາະຮ້ານທີ່ເປີດໃຫ້)' },
   BANK_TRANSFER: { en: 'bank transfer (QR)', lo: 'ໂອນຜ່ານ QR' },
 };
 

@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { formatMoney, type CheckoutPaymentMethod } from '@talad/shared';
+import { formatMoney, parseUrgentDelivery, urgentFee, type CheckoutPaymentMethod, type UrgentDelivery } from '@talad/shared';
 import { randomInt } from 'node:crypto';
 import type { Env } from '../../config/env.validation.js';
 import { Prisma, type OrderStatus } from '../../generated/prisma/client.js';
@@ -60,6 +60,8 @@ export interface CheckoutSelection {
   couponCode?: string;
   /** Decides which couriers serve the province; defaults to the customer's default address. */
   addressId?: string;
+  /** Shops whose own urgent delivery the customer chose (when they offer it to the address). */
+  urgentShopIds?: string[];
 }
 
 export interface PlaceOrderInput extends CheckoutSelection {
@@ -104,38 +106,57 @@ export class CheckoutService {
     }
 
     const groups = groupByShop(lines);
-    const [transfer, options] = await Promise.all([
+    const [transfer, cod, urgentSettings, address, options] = await Promise.all([
       this.transferInfo(groups.map((g) => g.shop.id)),
+      this.codShops(groups.map((g) => g.shop.id)),
+      this.urgentSettings(groups.map((g) => g.shop.id)),
+      this.address(customerId, selection.addressId),
       this.deliveryOptions(customerId, selection.addressId),
     ]);
+    const wantsUrgent = new Set(selection.urgentShopIds ?? []);
     // Unknown or missing choice falls back to the first courier.
     const courier = options.find((o) => o.id === selection.deliveryProviderId) ?? options[0] ?? null;
 
     const { coupon, couponError, discounts } = await this.applyCoupon(customerId, selection.couponCode, groups);
     const shops = groups.map((g) => {
       const discount = discounts.get(g.shop.id) ?? 0;
+      // The shop's own urgent delivery, when it covers the address (its fee joins the total).
+      const settings = urgentSettings.get(g.shop.id);
+      const fee = address ? urgentFee(settings, address) : null;
+      const urgent = fee !== null ? { fee, eta: settings!.eta } : null;
+      const urgentSelected = urgent !== null && wantsUrgent.has(g.shop.id);
+      const shippingFee = urgentSelected ? urgent.fee : 0;
       return {
         ...g,
         discount,
-        total: g.subtotal - discount,
+        urgent,
+        urgentSelected,
+        shippingFee,
+        total: g.subtotal - discount + shippingFee,
         transfer: transfer.get(g.shop.id) ?? null,
+        /** The shop offers cash on delivery (its own choice, §6). */
+        cod: cod.has(g.shop.id),
       };
     });
     const subtotal = shops.reduce((n, s) => n + s.subtotal, 0);
     const discountTotal = shops.reduce((n, s) => n + s.discount, 0);
+    const shippingTotal = shops.reduce((n, s) => n + s.shippingFee, 0);
     return {
       couponRule: coupon,
       quote: {
         shops,
         subtotal,
         discountTotal,
-        total: subtotal - discountTotal,
+        shippingTotal,
+        total: subtotal - discountTotal + shippingTotal,
         issues,
         delivery: { options, selectedId: courier?.id ?? null },
         coupon: coupon ? { code: coupon.code, shopId: coupon.shopId, discount: discountTotal } : null,
         couponError,
         // QR transfer needs every shop in the order to accept transfers.
         transferAvailable: shops.every((s) => s.transfer !== null),
+        // Likewise COD: every shop in the order must have turned it on.
+        codAvailable: shops.length > 0 && shops.every((s) => s.cod),
         /** Payment methods the platform currently accepts. */
         paymentMethods: (await this.cms.publicSettings()).paymentMethods,
       },
@@ -162,6 +183,9 @@ export class CheckoutService {
       throw new ConflictException({ code: 'PRICE_CHANGED', message: 'Prices changed, please review your order' });
     }
 
+    if (input.paymentMethod === 'COD' && !quote.codAvailable) {
+      throw new BadRequestException({ code: 'COD_UNAVAILABLE', message: 'A shop in this order does not offer cash on delivery' });
+    }
     const isTransfer = input.paymentMethod === 'BANK_TRANSFER';
     if (isTransfer) {
       if (!quote.transferAvailable) {
@@ -229,6 +253,7 @@ export class CheckoutService {
               shippingAddress,
               subtotal: quote.subtotal,
               discountTotal: quote.discountTotal,
+              shippingTotal: quote.shippingTotal,
               grandTotal: quote.total,
               note,
             },
@@ -263,7 +288,10 @@ export class CheckoutService {
                 // Each item at its own rate (shop override, else its category, else the default).
                 commissionAmount: [...fees.values()].reduce((n, f) => n + f, 0),
                 total: group.total,
-                ...(quote.delivery.selectedId && { deliveryProvider: { connect: { id: quote.delivery.selectedId } } }),
+                shippingFee: group.shippingFee,
+                urgentDelivery: group.urgentSelected,
+                // Urgent delivery is the shop's own; other shops go with the chosen courier.
+                ...(!group.urgentSelected && quote.delivery.selectedId && { deliveryProvider: { connect: { id: quote.delivery.selectedId } } }),
                 items: {
                   create: groupLines.map((l) => ({
                     productId: l.productId,
@@ -464,6 +492,30 @@ export class CheckoutService {
         throw new ConflictException({ code: 'COUPON_ALREADY_USED', message: 'You have already used this coupon' });
       }
     }
+  }
+
+  /** Each shop's own urgent delivery settings (shops without any are left out). */
+  private async urgentSettings(shopIds: string[]): Promise<Map<string, UrgentDelivery>> {
+    const shops = await this.prisma.shop.findMany({ where: { id: { in: shopIds } }, select: { id: true, urgentDelivery: true } });
+    return new Map(shops.flatMap((s) => {
+      const parsed = parseUrgentDelivery(s.urgentDelivery);
+      return parsed?.enabled ? [[s.id, parsed] as const] : [];
+    }));
+  }
+
+  /** The delivery address (the chosen one, else the default). */
+  private address(customerId: string, addressId?: string) {
+    return this.prisma.address.findFirst({
+      where: addressId ? { id: addressId, customerId } : { customerId },
+      orderBy: { isDefault: 'desc' },
+      select: { province: true, district: true },
+    });
+  }
+
+  /** Shops (of these) that offer cash on delivery. */
+  private async codShops(shopIds: string[]): Promise<Set<string>> {
+    const shops = await this.prisma.shop.findMany({ where: { id: { in: shopIds }, codEnabled: true }, select: { id: true } });
+    return new Set(shops.map((s) => s.id));
   }
 
   private async transferInfo(shopIds: string[]): Promise<Map<string, ShopTransferInfo>> {

@@ -27,6 +27,13 @@ export const MEDIA_LIMITS = {
   videoMimeTypes: ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-m4v'],
 } as const;
 
+/** Customers' own feed videos (no product). */
+export const FEED_POST_RULES = {
+  captionMax: 300,
+  /** Posts per customer per 24 hours. */
+  perDay: 10,
+} as const;
+
 /** Seller-side product rules, checked by both the Seller Center and the API (§3.3). */
 export const PRODUCT_RULES = {
   nameMax: 200,

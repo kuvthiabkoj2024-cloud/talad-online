@@ -16,6 +16,8 @@ export interface PublicShop {
   productCount: number;
   ratingAvg: number;
   ratingCount: number;
+  /** Customers following the shop. */
+  followerCount: number;
   joinedAt: Date;
 }
 
@@ -50,6 +52,7 @@ export class ShopsService {
         verifiedAt: true,
         ratingAvg: true,
         ratingCount: true,
+        followerCount: true,
         createdAt: true,
         _count: { select: { products: { where: { status: 'PUBLISHED' } } } },
       },
@@ -66,6 +69,7 @@ export class ShopsService {
       productCount: shop._count.products,
       ratingAvg: shop.ratingAvg.toNumber(),
       ratingCount: shop.ratingCount,
+      followerCount: shop.followerCount,
       joinedAt: shop.createdAt,
     };
   }
@@ -85,6 +89,7 @@ export class ShopsService {
         email: true,
         phone: true,
         verifiedAt: true,
+        followerCount: true,
         createdAt: true,
       },
     });

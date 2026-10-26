@@ -6,6 +6,7 @@ import type { Dictionary } from "@/app/[lang]/dictionaries";
 import { listProducts, type ProductDetail } from "@/lib/api";
 import { interpolate } from "@/lib/format";
 import { ProductList } from "../product-grid";
+import { FollowButton } from "../shop/follow-button";
 import { ProductGridSkel } from "../skeletons";
 
 /**
@@ -51,7 +52,8 @@ export function ShopCard({
             </span>
           </span>
         </Link>
-        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+        <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto">
+          <FollowButton shopId={shop.id} size="sm" labels={{ follow: dict.follow, following: dict.following }} />
           <Link href={`/${locale}/messages/new?shop=${shop.slug}${productId ? `&product=${productId}` : ""}`} className={outline}>
             <MessageCircleMore className="size-5" />
             {dict.chatWithShop}

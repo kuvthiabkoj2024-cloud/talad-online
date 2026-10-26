@@ -1,15 +1,28 @@
 import type { Locale } from "@talad/shared";
-import { BadgeCheck, CalendarDays, MessageCircleMore, Package, Star, Store } from "lucide-react";
+import { BadgeCheck, CalendarDays, MessageCircleMore, Package, Star, Store, Users } from "lucide-react";
 import Link from "next/link";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import { formatCount, interpolate } from "@/lib/format";
 import type { PublicShop } from "@/lib/shop";
+import { ShareButton } from "../product/share-button";
+import type { ShareSheetDict } from "../feed/share-sheet";
+import { FollowButton, FollowerCount } from "./follow-button";
 import { ShopDescription } from "./shop-description";
 
 const DATE_LOCALES = { lo: "lo-LA", en: "en-GB" } as const;
 
 /** Shop hero: cover, logo, name, trust signals and description (§3.2). */
-export function ShopHeader({ shop, locale, dict }: { shop: PublicShop; locale: Locale; dict: Dictionary["shop"] }) {
+export function ShopHeader({
+  shop,
+  locale,
+  dict,
+  shareDict,
+}: {
+  shop: PublicShop;
+  locale: Locale;
+  dict: Dictionary["shop"];
+  shareDict: ShareSheetDict;
+}) {
   const joined = new Intl.DateTimeFormat(DATE_LOCALES[locale], { month: "long", year: "numeric" }).format(
     new Date(shop.joinedAt),
   );
@@ -70,19 +83,28 @@ export function ShopHeader({ shop, locale, dict }: { shop: PublicShop; locale: L
               </li>
             )}
             <li className="flex items-center gap-1.5">
+              <Users className="size-4" />
+              <FollowerCount shopId={shop.id} initial={shop.followerCount} label={dict.followers} locale={locale} />
+            </li>
+            <li className="flex items-center gap-1.5">
               <CalendarDays className="size-4" />
               {interpolate(dict.joined, { date: joined })}
             </li>
           </ul>
         </div>
 
-        <Link
-          href={`/${locale}/messages/new?shop=${shop.slug}`}
-          className="flex items-center justify-center gap-1.5 self-stretch rounded-full border border-primary px-5 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary-soft sm:self-end"
-        >
-          <MessageCircleMore className="size-4" />
-          {dict.chat}
-        </Link>
+        {/* Phones: follow and chat share the row, share is an icon. */}
+        <div className="grid grid-cols-[1fr_1fr_auto] gap-2 whitespace-nowrap sm:flex sm:self-end">
+          <FollowButton shopId={shop.id} labels={{ follow: dict.follow, following: dict.following }} />
+          <Link
+            href={`/${locale}/messages/new?shop=${shop.slug}`}
+            className="flex h-11 items-center justify-center gap-1.5 rounded-full border border-primary px-4 text-sm font-semibold text-primary transition-colors hover:bg-primary-soft sm:px-5"
+          >
+            <MessageCircleMore className="size-4" />
+            {dict.chat}
+          </Link>
+          <ShareButton title={shop.name} label={dict.share} dict={shareDict} variant="pill" iconOnlyOnPhones />
+        </div>
       </div>
 
       {shop.description && (

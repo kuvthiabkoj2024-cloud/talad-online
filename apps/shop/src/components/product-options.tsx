@@ -1,6 +1,7 @@
 import { PRODUCT_RULES } from '@talad/shared'
 import { Button } from '@talad/ui/components/button'
 import { Input } from '@talad/ui/components/input'
+import { MoneyInput } from '@talad/ui/components/money-input'
 import { Label } from '@talad/ui/components/label'
 import { cn } from '@talad/ui/lib/utils'
 import { Plus, Trash2, X } from 'lucide-react'
@@ -67,12 +68,11 @@ export function ProductOptionsEditor({
     return (
       <div key={k} className={cn('grid grid-cols-2 items-center gap-2 px-3 py-2 sm:gap-3', showSkus ? 'sm:grid-cols-[minmax(0,1fr)_9rem_7rem_minmax(0,12rem)]' : 'sm:grid-cols-[minmax(0,1fr)_9rem_7rem]')}>
         <span className="col-span-2 truncate text-sm font-medium sm:col-span-1">{label}</span>
-        <Input
+        <MoneyInput
           aria-label={`${t.editor.optionPrice} · ${label}`}
-          inputMode="decimal"
-          placeholder={basePrice || t.editor.optionPriceHint}
+          placeholder={basePrice ? Number(basePrice).toLocaleString('en-US') : t.editor.optionPriceHint}
           value={c.price}
-          onChange={(e) => setCell(values, { price: e.target.value })}
+          onValueChange={(v) => setCell(values, { price: v })}
           aria-invalid={errors[`price-${k}`] ? true : undefined}
           className="h-9"
         />
@@ -133,7 +133,7 @@ export function ProductOptionsEditor({
           </div>
           {rows.length > 1 && (
             <div className="flex flex-wrap items-center gap-2">
-              <Input inputMode="decimal" value={bulkPrice} onChange={(e) => setBulkPrice(e.target.value)} placeholder={t.editor.setAllPrice} aria-label={t.editor.setAllPrice} className="h-8 w-32" />
+              <MoneyInput value={bulkPrice} onValueChange={setBulkPrice} placeholder={t.editor.setAllPrice} aria-label={t.editor.setAllPrice} className="h-8 w-32" />
               <Input inputMode="numeric" value={bulkStock} onChange={(e) => setBulkStock(e.target.value)} placeholder={t.editor.setAllStock} aria-label={t.editor.setAllStock} className="h-8 w-32" />
               <Button type="button" size="sm" variant="outline" disabled={!bulkStock.trim() && !bulkPrice.trim()} onClick={applyBulk}>
                 {t.editor.apply}

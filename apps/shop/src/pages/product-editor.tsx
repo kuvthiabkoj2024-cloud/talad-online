@@ -2,6 +2,7 @@ import { MEDIA_LIMITS, PRODUCT_RULES, type ProductSaveIntent } from '@talad/shar
 import { Button } from '@talad/ui/components/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@talad/ui/components/card'
 import { Input } from '@talad/ui/components/input'
+import { MoneyInput } from '@talad/ui/components/money-input'
 import { Label, RequiredMark } from '@talad/ui/components/label'
 import { Switch } from '@talad/ui/components/switch'
 import { Textarea } from '@talad/ui/components/textarea'
@@ -540,16 +541,10 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <Field label={t.editor.price} htmlFor="price" required error={err('price')}>
-                <Input id="price" inputMode="decimal" value={form.price} onChange={(e) => set('price', e.target.value)} {...field('price')} />
+                <MoneyInput id="price" value={form.price} onValueChange={(v) => set('price', v)} {...field('price')} />
               </Field>
               <Field label={t.editor.compareAt} htmlFor="compareAt" hint={t.editor.compareAtHint} error={err('compareAtPrice')}>
-                <Input
-                  id="compareAt"
-                  inputMode="decimal"
-                  value={form.compareAtPrice}
-                  onChange={(e) => set('compareAtPrice', e.target.value)}
-                  {...field('compareAtPrice')}
-                />
+                <MoneyInput id="compareAt" value={form.compareAtPrice} onValueChange={(v) => set('compareAtPrice', v)} {...field('compareAtPrice')} />
               </Field>
               <Field label={t.editor.sku} htmlFor="sku" required hint={t.editor.skuHint} error={err('sku')}>
                 {/* Type your own code, or tap to make one (8 letters and numbers). */}

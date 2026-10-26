@@ -4,7 +4,16 @@ import { API_URL } from "./api";
 import type { ChatProductRef, ShopChatMessage, ShopThread } from "./messages";
 import { getSessionToken } from "./session";
 
-export type MessageError = "UNAUTHENTICATED" | "INVALID_IMAGE" | "FILE_TOO_LARGE" | "MESSAGE_TOO_LONG" | "EMPTY_MESSAGE" | "generic";
+export type MessageError =
+  | "UNAUTHENTICATED"
+  | "INVALID_IMAGE"
+  | "FILE_TOO_LARGE"
+  | "MESSAGE_TOO_LONG"
+  | "EMPTY_MESSAGE"
+  /** The browser couldn't give a position (permission refused, no GPS, timeout). */
+  | "LOCATION_DENIED"
+  | "LOCATION_UNAVAILABLE"
+  | "generic";
 
 async function call<T>(method: string, path: string, body?: FormData): Promise<{ ok: true; data: T } | { ok: false; error: MessageError }> {
   const token = await getSessionToken();
@@ -40,6 +49,12 @@ export async function sendShopMessage(conversationId: string, form: FormData) {
   if (typeof productId === "string" && productId) body.set("productId", productId);
   const photo = form.get("photo");
   if (photo instanceof File && photo.size > 0) body.set("photo", photo, photo.name || "photo.jpg");
+  const lat = Number(form.get("latitude"));
+  const lng = Number(form.get("longitude"));
+  if (form.has("latitude") && Number.isFinite(lat) && Number.isFinite(lng)) {
+    body.set("latitude", String(lat));
+    body.set("longitude", String(lng));
+  }
   return call<ShopChatMessage>("POST", `/me/conversations/${conversationId}/messages`, body);
 }
 

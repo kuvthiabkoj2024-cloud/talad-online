@@ -15,7 +15,7 @@
     "./hooks/*": "./src/hooks/*.ts"
   },
   "dependencies": {
-    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/noto-sans-lao-looped": "^5.3.0",
     "class-variance-authority": "^0.7.1",
     "cmdk": "^1.1.1",
     "cn": "^0.4.0",

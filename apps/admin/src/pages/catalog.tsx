@@ -5,18 +5,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@talad/ui/components/switch'
 import { cn } from '@talad/ui/lib/utils'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FolderTree, LoaderCircle, Pencil, Plus, Ruler, Trash2 } from 'lucide-react'
+import { ExternalLink, FolderTree, ImageOff, LoaderCircle, Pencil, Plus, Ruler, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { FlagBadge } from '@/components/badges'
 import { ConfirmDialog, type ConfirmOptions } from '@/components/confirm-dialog'
 import { Field } from '@/components/field'
-import { ImageField } from '@/components/image-field'
 import { PageBody, PageIntro, TopBar } from '@/components/page-header'
 import { ErrorState, LoadingState } from '@/components/states'
 import type { Dict } from '@/i18n/en'
 import { useI18n } from '@/i18n/context'
 import { ApiError, api, send } from '@/lib/api'
+import { iconFieldValue, iconUrlFrom, isLucideIcon } from '@/lib/category-icon'
 import { fill, localized } from '@/lib/format'
 import type { Category, Unit } from '@/lib/types'
 
@@ -169,7 +169,7 @@ function CategoryRow({ c, onEdit, onDelete }: { c: Category; onEdit: () => void;
   return (
     <div className="flex items-center gap-3">
       <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted text-muted-foreground">
-        {c.iconUrl ? <img src={c.iconUrl} alt="" className="size-6 object-contain" /> : <FolderTree className="size-4" />}
+        {c.iconUrl ? <img src={c.iconUrl} alt="" className={cn('size-6 object-contain', isLucideIcon(c.iconUrl) && 'dark:invert')} /> : <FolderTree className="size-4" />}
       </span>
       <span className={cn('min-w-0 flex-1', !c.isActive && 'opacity-60')}>
         <span className="block truncate text-sm font-medium">
@@ -191,14 +191,73 @@ function CategoryRow({ c, onEdit, onDelete }: { c: Category; onEdit: () => void;
   )
 }
 
+/** A Lucide icon name (or any image link), with a live preview of what the storefront will show. */
+function IconField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const { t } = useI18n()
+  const url = iconUrlFrom(value)
+  const [failed, setFailed] = useState<string | null>(null)
+  const broken = url !== null && failed === url
+  return (
+    <div className="flex flex-col gap-2">
+      <label htmlFor="icon" className="text-sm font-medium">
+        {t.catalog.icon}
+      </label>
+      <div className="flex items-center gap-3">
+        <span
+          className={cn(
+            'flex size-14 shrink-0 items-center justify-center rounded-lg border bg-muted/50 text-muted-foreground',
+            broken && 'border-destructive/50 text-destructive',
+          )}
+        >
+          {url && !broken ? (
+            <img
+              key={url}
+              src={url}
+              alt=""
+              className={cn('size-8 object-contain', isLucideIcon(url) && 'dark:invert')}
+              onError={() => setFailed(url)}
+            />
+          ) : broken ? (
+            <ImageOff className="size-5" />
+          ) : (
+            <FolderTree className="size-5" />
+          )}
+        </span>
+        <Input
+          id="icon"
+          value={value}
+          maxLength={300}
+          placeholder="utensils-crossed"
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </div>
+      {broken ? (
+        <p className="text-xs text-destructive">{t.catalog.iconNotFound}</p>
+      ) : (
+        <p className="text-xs text-muted-foreground">{t.catalog.iconHint}</p>
+      )}
+      <a
+        href="https://lucide.dev/icons/"
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex w-fit items-center gap-1 text-xs font-medium text-primary hover:underline"
+      >
+        {t.catalog.iconBrowse}
+        <ExternalLink className="size-3" />
+      </a>
+    </div>
+  )
+}
+
 function CategoryForm({ value, roots, onDone }: { value: Partial<Category>; roots: Category[]; onDone: () => void }) {
   const { t, locale } = useI18n()
   const queryClient = useQueryClient()
   const [lo, setLo] = useState(value.name?.lo ?? '')
   const [en, setEn] = useState(value.name?.en ?? '')
   const [parentId, setParentId] = useState(value.parentId ?? '')
-  const [iconUrl, setIconUrl] = useState(value.iconUrl ?? '')
-  const [imageUrl, setImageUrl] = useState(value.imageUrl ?? '')
+  const [icon, setIcon] = useState(iconFieldValue(value.iconUrl))
   const [sortOrder, setSortOrder] = useState(String(value.sortOrder ?? 0))
   const [isActive, setIsActive] = useState(value.isActive ?? true)
   const [rate, setRate] = useState(value.commissionRate != null ? String(value.commissionRate) : '')
@@ -208,8 +267,9 @@ function CategoryForm({ value, roots, onDone }: { value: Partial<Category>; root
       const body = {
         name: { lo, en: en || undefined },
         parentId: parentId || null,
-        iconUrl: iconUrl || null,
-        imageUrl: imageUrl || null,
+        iconUrl: iconUrlFrom(icon),
+        // Not edited here any more (nothing shows it); keep whatever an older version saved.
+        imageUrl: value.imageUrl ?? null,
         sortOrder: Number(sortOrder) || 0,
         isActive,
         commissionRate: rate.trim() === '' ? null : Number(rate),
@@ -266,12 +326,7 @@ function CategoryForm({ value, roots, onDone }: { value: Partial<Category>; root
           <Input id="rate" inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value.replace(/[^\d.]/g, ''))} />
         </Field>
       </div>
-      <Field id="icon" label={t.catalog.icon}>
-        <ImageField value={iconUrl} onChange={setIconUrl} previewClassName="size-16" />
-      </Field>
-      <Field id="image" label={t.catalog.image}>
-        <ImageField value={imageUrl} onChange={setImageUrl} />
-      </Field>
+      <IconField value={icon} onChange={setIcon} />
       <label className="flex items-center gap-2 text-sm">
         <Switch checked={isActive} onCheckedChange={setIsActive} />
         {t.catalog.visible}

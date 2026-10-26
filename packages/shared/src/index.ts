@@ -1,6 +1,7 @@
 export * from './auth.js';
 export * from './address.js';
 export * from './catalog.js';
+export * from './delivery.js';
 export * from './locale.js';
 export * from './notification.js';
 export * from './order.js';

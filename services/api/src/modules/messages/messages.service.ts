@@ -75,14 +75,14 @@ export class MessagesService {
       include: {
         shop: { select: { name: true, slug: true, logoUrl: true } },
         customer: { select: { name: true } },
-        messages: { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 1, select: { sender: true, text: true, imageKey: true, productId: true, chatOrderId: true, createdAt: true } },
+        messages: { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 1, select: { sender: true, text: true, imageKey: true, productId: true, chatOrderId: true, latitude: true, createdAt: true } },
       },
     });
     return rows.map((c) => ({
       id: c.id,
       shop: { name: c.shop.name, slug: c.shop.slug, logoUrl: c.shop.logoUrl ? this.media.publicUrl(c.shop.logoUrl) : null },
       customer: { name: c.customer.name },
-      lastMessage: c.messages[0] ? { ...preview(c.messages[0]), mine: mine(side, c.messages[0].sender), bot: c.messages[0].sender === 'BOT' } : null,
+      lastMessage: c.messages[0] ? { ...preview(c.messages[0]), mine: mine(side, c.messages[0].sender), bot: c.messages[0].sender === 'BOT', system: c.messages[0].sender === 'SYSTEM' } : null,
       lastMessageAt: c.lastMessageAt,
       unread: side.kind === 'customer' ? c.customerUnread : c.shopUnread,
     }));
@@ -126,23 +126,27 @@ export class MessagesService {
         mine: mine(side, m.sender),
         /** The shop's auto-reply. */
         bot: m.sender === 'BOT',
+        /** A Taladonline notice to both sides (e.g. an order out of stock), shown centred. */
+        system: m.sender === 'SYSTEM',
         text: m.text,
         hasPhoto: !!m.imageKey,
         product: m.productId ? (products.get(m.productId) ?? null) : null,
         products: m.productIds.flatMap((pid) => (products.has(pid) ? [products.get(pid)!] : [])),
         /** An order card (buy by chat): the customer completes and places it. */
         order: m.chatOrderId ? (orders.get(m.chatOrderId) ?? null) : null,
+        /** A shared location (e.g. where to deliver). */
+        location: m.latitude !== null && m.longitude !== null ? { lat: m.latitude, lng: m.longitude } : null,
         createdAt: m.createdAt,
       })),
     };
   }
 
-  /** A message from one side: text, a photo and/or a product. The other side's unread count goes up. */
-  async send(side: Side, id: string, input: { text?: string; productId?: string; photo?: Express.Multer.File }) {
+  /** A message from one side: text, a photo, a product and/or a location. The other side's unread count goes up. */
+  async send(side: Side, id: string, input: { text?: string; productId?: string; photo?: Express.Multer.File; location?: { lat: number; lng: number } }) {
     const conv = await this.own(side, id);
     const text = (input.text ?? '').trim();
     if (text.length > MESSAGE_LIMITS.textMax) throw new BadRequestException({ code: 'MESSAGE_TOO_LONG', message: 'Message is too long' });
-    if (!text && !input.photo && !input.productId) throw new BadRequestException({ code: 'EMPTY_MESSAGE', message: 'Type a message or attach a photo' });
+    if (!text && !input.photo && !input.productId && !input.location) throw new BadRequestException({ code: 'EMPTY_MESSAGE', message: 'Type a message or attach a photo' });
     if (input.productId) {
       const ok = await this.prisma.product.count({ where: { id: input.productId, shopId: conv.shopId } });
       if (!ok) throw new BadRequestException({ code: 'INVALID_PRODUCT', message: 'That product isn’t from this shop' });
@@ -157,15 +161,27 @@ export class MessagesService {
     }
     const sender = side.kind === 'customer' ? 'CUSTOMER' : 'SHOP';
     const [message] = await this.prisma.$transaction([
-      this.prisma.shopMessage.create({ data: { conversationId: id, sender, text, imageKey, productId: input.productId ?? null } }),
+      this.prisma.shopMessage.create({
+        data: {
+          conversationId: id,
+          sender,
+          text,
+          imageKey,
+          productId: input.productId ?? null,
+          // About 1 m precision is plenty to find a door.
+          latitude: input.location ? Math.round(input.location.lat * 1e5) / 1e5 : null,
+          longitude: input.location ? Math.round(input.location.lng * 1e5) / 1e5 : null,
+        },
+      }),
       this.prisma.shopConversation.update({
         where: { id },
         data: { lastMessageAt: new Date(), ...(sender === 'CUSTOMER' ? { shopUnread: { increment: 1 } } : { customerUnread: { increment: 1 } }) },
       }),
     ]);
-    await this.announce(conv, sender, text || (imageKey ? '📷' : '🛍'));
+    await this.announce(conv, sender, text || (imageKey ? '📷' : input.location ? '📍' : '🛍'));
     // The shop's bot answers the customer (in the background; it's announced when sent).
-    if (sender === 'CUSTOMER') void this.bot.respond(id, input.photo);
+    // A shared location is for the shop to read, not a question for the bot.
+    if (sender === 'CUSTOMER' && !(input.location && !text && !input.photo)) void this.bot.respond(id, input.photo);
     return (await this.thread(side, id, { after: undefined })).messages.find((m) => m.id === message.id) ?? { id: message.id };
   }
 
@@ -239,13 +255,15 @@ export class MessagesService {
   }
 }
 
-/** Whether `sender` is the viewer's side (the shop's bot counts as the shop). */
-const mine = (side: Side, sender: string) => (side.kind === 'customer' ? sender === 'CUSTOMER' : sender !== 'CUSTOMER');
+/** Whether `sender` is the viewer's side (the shop's bot counts as the shop; Taladonline is neither). */
+const mine = (side: Side, sender: string) =>
+  sender !== 'SYSTEM' && (side.kind === 'customer' ? sender === 'CUSTOMER' : sender !== 'CUSTOMER');
 
 /** One-line summary for conversation lists. */
-function preview(m: { text: string; imageKey: string | null; productId: string | null; chatOrderId: string | null; createdAt: Date }) {
+function preview(m: { text: string; imageKey: string | null; productId: string | null; chatOrderId: string | null; latitude?: number | null; createdAt: Date }) {
   return {
     text: m.text.slice(0, 120),
+    location: m.latitude != null && !m.text && !m.imageKey,
     photo: !!m.imageKey && !m.text,
     product: !!m.productId && !m.text && !m.imageKey,
     order: !!m.chatOrderId && !m.text,

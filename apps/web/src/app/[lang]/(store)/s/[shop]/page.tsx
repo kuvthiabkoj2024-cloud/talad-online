@@ -15,18 +15,29 @@ async function getShop(slug: string): Promise<PublicShop> {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const shop = await getShop((await params).shop);
+  const { lang, shop: slug } = await params;
+  const shop = await getShop(slug);
+  const path = `/${lang}/s/${slug}`;
+  const description = shop.description?.slice(0, 160) || `${shop.name} · Taladonline`;
   return {
     title: shop.name,
-    description: shop.description?.slice(0, 160),
-    openGraph: { images: shop.logoUrl ? [shop.logoUrl] : [] },
+    description,
+    alternates: { canonical: path },
+    openGraph: {
+      type: "website",
+      siteName: "Taladonline",
+      url: path,
+      title: shop.name,
+      description,
+      images: shop.coverUrl ? [shop.coverUrl] : shop.logoUrl ? [shop.logoUrl] : [],
+    },
   };
 }
 
 /** Shop storefront (§3.2): profile, in-shop search, sort and "Load more". */
 export default async function ShopPage({ params, searchParams }: Props) {
   const locale = await getLocale();
-  const { shop: dict, product, auth } = await getDictionary();
+  const { shop: dict, product, auth, feed } = await getDictionary();
   const { shop: slug } = await params;
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q.trim().slice(0, 100) : "";
@@ -39,7 +50,7 @@ export default async function ShopPage({ params, searchParams }: Props) {
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:py-8">
-      <ShopHeader shop={shop} locale={locale} dict={dict} />
+      <ShopHeader shop={shop} locale={locale} dict={dict} shareDict={{ ...feed, shareTitle: dict.shareTitle }} />
       <ShopProducts
         slug={slug}
         locale={locale}

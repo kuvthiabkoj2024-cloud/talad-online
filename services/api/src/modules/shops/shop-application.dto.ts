@@ -12,6 +12,7 @@ import {
   Length,
   Matches,
   MaxLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 
@@ -49,10 +50,13 @@ export class ShopApplicationDto {
   @Length(2, 100)
   ownerName: string;
 
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
+  /** Optional; an empty field means no email. */
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() || null : value))
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
   @IsEmail()
   @MaxLength(200)
-  email: string;
+  email?: string | null;
 
   /** Business phone; normalized server-side. */
   @IsString()

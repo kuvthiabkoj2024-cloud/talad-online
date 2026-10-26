@@ -1,7 +1,7 @@
 import type { Locale } from '@talad/shared'
 import type { Dict } from '@/i18n/en'
 import { fill, formatDate, formatMoney } from './format'
-import { esc, FONT } from './print-order'
+import { esc, FONT, FONT_FACE } from './print-order'
 import type { ShopCoupon } from './types'
 
 /** The shop details printed on coupons. */
@@ -57,6 +57,7 @@ export function couponsHtml(coupons: ShopCoupon[], shop: CouponShop, t: Dict, lo
 
   return `<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><title>${esc(t.coupons.printTitle)}</title>
 <style>
+  ${FONT_FACE}
   @page { size: A4; margin: 10mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }

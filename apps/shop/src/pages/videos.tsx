@@ -121,8 +121,8 @@ function Totals({ totals }: { totals: ShopVideoList['totals'] }) {
   )
 }
 
-function compact(n: number, locale: 'lo' | 'en') {
-  return new Intl.NumberFormat(locale === 'lo' ? 'lo-LA' : 'en-GB', { notation: 'compact', maximumFractionDigits: 1 }).format(n)
+function compact(n: number, _locale: 'lo' | 'en') {
+  return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(n)
 }
 
 function VideoTile({ video: v, onOpen }: { video: ShopVideo; onOpen: () => void }) {

@@ -2,7 +2,8 @@ import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Str
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateIf } from 'class-validator';
 import type { Customer, Shop } from '../../generated/prisma/client.js';
 import { CurrentCustomer, CustomerAuthGuard } from '../auth/customer-auth.guard.js';
 import { CurrentShop, ShopOwnerGuard } from '../auth/shop-owner.guard.js';
@@ -30,6 +31,21 @@ class SendDto {
   @IsOptional()
   @IsUUID('7')
   productId?: string;
+
+  /** A shared location (sent together with `longitude`). Form fields arrive as text. */
+  @ValidateIf((o: SendDto) => o.latitude !== undefined || o.longitude !== undefined)
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  latitude?: number;
+
+  @ValidateIf((o: SendDto) => o.latitude !== undefined || o.longitude !== undefined)
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  longitude?: number;
 }
 
 class ThreadQuery {
@@ -88,7 +104,7 @@ export class CustomerMessagesController {
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @UseInterceptors(uploadPhoto)
   send(@CurrentCustomer() c: Customer, @Param('id', id) conversationId: string, @Body() dto: SendDto, @UploadedFile() photo?: Express.Multer.File) {
-    return this.messages.send(this.side(c), conversationId, { text: dto.text, productId: dto.productId, photo });
+    return this.messages.send(this.side(c), conversationId, { text: dto.text, productId: dto.productId, photo, location: dto.latitude !== undefined && dto.longitude !== undefined ? { lat: dto.latitude, lng: dto.longitude } : undefined });
   }
 
   @Get(':id/products/:productId')
@@ -146,7 +162,7 @@ export class ShopMessagesController {
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @UseInterceptors(uploadPhoto)
   send(@CurrentShop() s: Shop, @Param('id', id) conversationId: string, @Body() dto: SendDto, @UploadedFile() photo?: Express.Multer.File) {
-    return this.messages.send(this.side(s), conversationId, { text: dto.text, productId: dto.productId, photo });
+    return this.messages.send(this.side(s), conversationId, { text: dto.text, productId: dto.productId, photo, location: dto.latitude !== undefined && dto.longitude !== undefined ? { lat: dto.latitude, lng: dto.longitude } : undefined });
   }
 
   /** The shop sends an order card (Facebook-style selling); the customer checks it and places it. */

@@ -32,6 +32,7 @@ import { CurrentCustomer, CustomerAuthGuard } from '../auth/customer-auth.guard.
 import type { StoredObject } from '../media/storage.service.js';
 import { CheckoutService } from './checkout.service.js';
 import { PaymentSlipsService } from './payment-slips.service.js';
+import { ShopOrdersService } from './shop-orders.service.js';
 
 class CheckoutSelectionDto {
   @ArrayMinSize(1)
@@ -48,6 +49,12 @@ class CheckoutSelectionDto {
   @IsString()
   @MaxLength(40)
   couponCode?: string;
+
+  /** Shops whose own urgent delivery the customer chose. */
+  @IsOptional()
+  @ArrayMaxSize(50)
+  @IsUUID('7', { each: true })
+  urgentShopIds?: string[];
 }
 
 class QuoteDto extends CheckoutSelectionDto {
@@ -134,7 +141,16 @@ export class CheckoutController {
 @UseGuards(CustomerAuthGuard)
 @Controller('me/orders/:number')
 export class OrderPaymentController {
-  constructor(private readonly slips: PaymentSlipsService) {}
+  constructor(
+    private readonly slips: PaymentSlipsService,
+    private readonly shopOrders: ShopOrdersService,
+  ) {}
+
+  /** The courier bill photo the shop uploaded when it shipped this order. */
+  @Get('shipping-bill')
+  async shippingBill(@CurrentCustomer() c: Customer, @Param('number') number: string) {
+    return image(await this.shopOrders.bill(null, number, c.id));
+  }
 
   @Get('payment-qr')
   async qr(@CurrentCustomer() c: Customer, @Param('number') number: string) {

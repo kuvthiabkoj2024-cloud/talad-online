@@ -9,8 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@talad/ui/components/textarea'
 import { cn } from '@talad/ui/lib/utils'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, Clock3, ImageOff, LoaderCircle, MapPin, MoreHorizontal, Phone, Printer, ReceiptText, ScanSearch, Tag, TriangleAlert, Truck, UserRound } from 'lucide-react'
-import { useState } from 'react'
+import { ChevronDown, Clock3, ImageOff, LoaderCircle, MapPin, MoreHorizontal, Phone, Printer, ReceiptText, ScanSearch, Tag, TriangleAlert, Truck, UserRound, Zap } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router'
 import { toast } from 'sonner'
 import { PageBody, TopBar } from '@/components/page-header'
@@ -19,13 +19,20 @@ import { OrderStatusBadge } from '@/components/status-badge'
 import { queryKeys, useDeliveryProviders, useMyShop, useShopProfile } from '@/hooks/queries'
 import type { Dict } from '@/i18n/en'
 import { useI18n } from '@/i18n/context'
-import { ApiError, api, getToken, send } from '@/lib/api'
+import { ApiError, api, getToken, send, upload } from '@/lib/api'
 import { fill, formatDate, formatMoney } from '@/lib/format'
 import { billHtml, printHtml, stickerHtml } from '@/lib/print-order'
 import type { ShopOrderDetail } from '@/lib/types'
 
 /** The main next step first; destructive ones last. */
-const PRIMARY: ShopOrderAction[] = ['confirm', 'pack', 'ship', 'deliver', 'approve-return']
+const PRIMARY: ShopOrderAction[] = ['ship', 'deliver', 'approve-return']
+/**
+ * A new order has two ways forward: pack & ship (with the courier's bill) or out of stock.
+ * The older separate confirm and pack steps aren't offered any more.
+ */
+const HIDDEN: ShopOrderAction[] = ['confirm', 'pack']
+/** Stays on the phone action bar next to the main step (it's the other way forward). */
+const ALWAYS_SHOWN: ShopOrderAction[] = ['out-of-stock']
 const NEEDS_REASON: ShopOrderAction[] = ['cancel', 'reject-payment', 'reject-return']
 
 /** One order: what to send where, payment, and the next fulfilment step (§3.6). */
@@ -59,7 +66,9 @@ export function OrderDetailPage() {
     )
   }
   const o = order.data
-  const actions = [...o.actions].sort((a, b) => Number(PRIMARY.includes(b)) - Number(PRIMARY.includes(a)))
+  const actions = o.actions
+    .filter((a) => !HIDDEN.includes(a))
+    .sort((a, b) => Number(PRIMARY.includes(b)) - Number(PRIMARY.includes(a)))
   // A platform coupon is Taladonline's discount: it's paid back to the shop.
   const net = o.total + o.platformDiscount - o.commissionAmount
   // Printed on bills and stickers: the profile has the address, the shop the logo and contacts.
@@ -214,15 +223,19 @@ export function OrderDetailPage() {
                     <Button
                       key={a}
                       variant={PRIMARY.includes(a) ? 'default' : 'outline'}
-                      className={cn('flex-1 md:flex-none', !PRIMARY.includes(a) && 'text-destructive hover:text-destructive max-md:hidden')}
+                      className={cn(
+                        'flex-1 md:flex-none',
+                        !PRIMARY.includes(a) && 'text-destructive hover:text-destructive',
+                        !PRIMARY.includes(a) && !ALWAYS_SHOWN.includes(a) && 'max-md:hidden',
+                      )}
                       onClick={() => setAction(a)}
                     >
                       {a === 'confirm' && o.payment?.method === 'COD' ? t.orders.confirmCod : t.orders.actions[a]}
                     </Button>
                   ))}
                   {/* Phones: secondary actions behind one button to keep the bar tidy. */}
-                  {actions.some((a) => !PRIMARY.includes(a)) && (
-                    <SecondaryMenu actions={actions.filter((a) => !PRIMARY.includes(a))} onPick={setAction} />
+                  {actions.some((a) => !PRIMARY.includes(a) && !ALWAYS_SHOWN.includes(a)) && (
+                    <SecondaryMenu actions={actions.filter((a) => !PRIMARY.includes(a) && !ALWAYS_SHOWN.includes(a))} onPick={setAction} />
                   )}
                 </CardContent>
               </Card>
@@ -270,14 +283,26 @@ export function OrderDetailPage() {
               </CardContent>
             </Card>
 
-            {(o.deliveryProvider || o.trackingNumber || o.autoConfirmAt) && (
+            {(o.deliveryProvider || o.trackingNumber || o.autoConfirmAt || o.hasShippingBill || o.urgentDelivery) && (
               <Card className="gap-3">
                 <CardHeader>
                   <CardTitle className="text-base">{t.orders.delivery}</CardTitle>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-1.5 text-sm">
+                  {o.urgentDelivery && (
+                    <p className="flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700 dark:bg-red-950/40 dark:text-red-200">
+                      <Zap className="size-4 shrink-0" />
+                      {fill(t.orders.urgentBody, { fee: formatMoney(o.shippingFee, locale) })}
+                    </p>
+                  )}
                   {o.deliveryProvider && <Row label={t.orders.courier} value={o.deliveryProvider.name} />}
                   {o.trackingNumber && <Row label={t.orders.tracking} value={<span className="font-mono">{o.trackingNumber}</span>} />}
+                  {o.hasShippingBill && (
+                    <Button variant="outline" size="sm" className="mt-1 self-start" onClick={() => void openPrivate(o.number, 'bill')}>
+                      <ReceiptText />
+                      {t.orders.viewBill}
+                    </Button>
+                  )}
                   {o.status === 'DELIVERED' && o.autoConfirmAt && (
                     <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
                       <Truck className="mt-0.5 size-3.5 shrink-0" />
@@ -317,22 +342,30 @@ function SecondaryMenu({ actions, onPick }: { actions: ShopOrderAction[]; onPick
 }
 
 function ActionDialog({ order, action, onClose }: { order: ShopOrderDetail; action: ShopOrderAction | null; onClose: () => void }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const queryClient = useQueryClient()
   const providers = useDeliveryProviders()
   const [reason, setReason] = useState('')
   const [providerId, setProviderId] = useState(order.deliveryProvider?.id ?? '')
   const [tracking, setTracking] = useState('')
+  const [bill, setBill] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const billPreview = useMemo(() => (bill ? URL.createObjectURL(bill) : null), [bill])
+  useEffect(() => () => void (billPreview && URL.revokeObjectURL(billPreview)), [billPreview])
 
   const run = useMutation({
-    mutationFn: (a: ShopOrderAction) =>
-      send<ShopOrderDetail>('POST', `/me/shop/orders/${encodeURIComponent(order.number)}/actions`, {
+    mutationFn: async (a: ShopOrderAction) => {
+      // Shipping uploads the courier's bill first, then ships with its key.
+      const billKey =
+        a === 'ship' && bill ? (await upload<{ billKey: string }>(`/me/shop/orders/${encodeURIComponent(order.number)}/bill`, bill)).billKey : undefined
+      return send<ShopOrderDetail>('POST', `/me/shop/orders/${encodeURIComponent(order.number)}/actions`, {
         action: a,
         ...(reason.trim() && { reason: reason.trim() }),
         ...(a === 'ship' && providerId && { deliveryProviderId: providerId }),
         ...(a === 'ship' && tracking.trim() && { trackingNumber: tracking.trim() }),
-      }),
+        ...(billKey && { billKey }),
+      })
+    },
     onSuccess: (saved) => {
       queryClient.setQueryData(queryKeys.order(order.number), saved)
       void queryClient.invalidateQueries({ queryKey: queryKeys.orders })
@@ -349,6 +382,7 @@ function ActionDialog({ order, action, onClose }: { order: ShopOrderDetail; acti
   function close() {
     setReason('')
     setTracking('')
+    setBill(null)
     setError(null)
     onClose()
   }
@@ -365,6 +399,7 @@ function ActionDialog({ order, action, onClose }: { order: ShopOrderDetail; acti
           onSubmit={(e) => {
             e.preventDefault()
             if (needsReason && !reason.trim()) return setError(t.orders.reasonRequired)
+            if (action === 'ship' && !bill && !order.urgentDelivery) return setError(t.orders.billRequired)
             run.mutate(action)
           }}
         >
@@ -375,6 +410,39 @@ function ActionDialog({ order, action, onClose }: { order: ShopOrderDetail; acti
 
           {action === 'ship' && (
             <>
+              <div className="flex flex-col gap-1.5">
+                <Label required={!order.urgentDelivery}>
+                  {t.orders.bill}
+                  {order.urgentDelivery && <span className="font-normal text-muted-foreground"> ({t.common.optional})</span>}
+                </Label>
+                <label
+                  className={cn(
+                    'flex cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-xl border-2 border-dashed bg-muted/40 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary',
+                    billPreview ? 'h-48 border-solid p-1' : 'h-32',
+                  )}
+                >
+                  {billPreview ? (
+                    <img src={billPreview} alt={t.orders.bill} className="size-full rounded-lg object-contain" />
+                  ) : (
+                    <>
+                      <ReceiptText className="size-7" />
+                      {t.orders.addBill}
+                    </>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    capture="environment"
+                    className="sr-only"
+                    onChange={(e) => {
+                      setBill(e.target.files?.[0] ?? null)
+                      setError(null)
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
+                <p className="text-xs text-muted-foreground">{billPreview ? t.orders.changeBill : t.orders.billHint}</p>
+              </div>
               <div className="flex flex-col gap-1.5">
                 <Label>{t.orders.courier}</Label>
                 <Select value={providerId} onValueChange={setProviderId}>
@@ -397,6 +465,12 @@ function ActionDialog({ order, action, onClose }: { order: ShopOrderDetail; acti
                 <Input id="tracking" value={tracking} maxLength={64} className="font-mono" onChange={(e) => setTracking(e.target.value)} />
               </div>
             </>
+          )}
+
+          {action === 'out-of-stock' && order.payment && order.payment.method !== 'COD' && (order.payment.status === 'PAID' || order.payment.hasSlip) && (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+              {fill(t.orders.refundNote, { amount: formatMoney(order.total, locale) })}
+            </p>
           )}
 
           {(needsReason || action === 'approve-return') && (
@@ -460,9 +534,12 @@ function formatAddress(a: NonNullable<ShopOrderDetail['shippingAddress']>, local
 }
 
 /** The slip is private: fetch it with the session and open it in a new tab. */
-async function openSlip(number: string) {
+const openSlip = (number: string) => openPrivate(number, 'slip')
+
+/** Payment slips and courier bills are private: fetch with the session, open in a new tab. */
+async function openPrivate(number: string, file: 'slip' | 'bill') {
   const tab = window.open('', '_blank')
-  const res = await fetch(`${import.meta.env.VITE_API_URL}/me/shop/orders/${encodeURIComponent(number)}/slip`, {
+  const res = await fetch(`${import.meta.env.VITE_API_URL}/me/shop/orders/${encodeURIComponent(number)}/${file}`, {
     headers: { Authorization: `Bearer ${getToken()}` },
   })
   if (!res.ok || !tab) return tab?.close()

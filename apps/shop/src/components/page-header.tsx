@@ -2,12 +2,39 @@ import { Button } from '@talad/ui/components/button'
 import { Separator } from '@talad/ui/components/separator'
 import { SidebarTrigger } from '@talad/ui/components/sidebar'
 import { cn } from '@talad/ui/lib/utils'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Share2 } from 'lucide-react'
+import { useState } from 'react'
 import { Link } from 'react-router'
 import { useAuth } from '@/auth/context'
 import { useI18n } from '@/i18n/context'
+import { storefrontUrl } from '@/lib/format'
 import { AccountAvatar, AccountMenu } from './account-menu'
 import { NotificationBell } from './notification-bell'
+import { ShareDialog } from './share-dialog'
+
+/** Opens the share dialog for the shop's storefront page; only once the shop is live. */
+function ShareShopButton() {
+  const { t, locale } = useI18n()
+  const { account } = useAuth()
+  const [open, setOpen] = useState(false)
+  const shop = account?.shop
+  if (!shop || shop.status !== 'APPROVED') return null
+  return (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        className="gap-1.5 px-2 hover:bg-white/15 hover:text-current md:px-3 md:hover:bg-accent"
+        aria-label={t.share.shareShop}
+        onClick={() => setOpen(true)}
+      >
+        <Share2 className="size-5 md:size-4" />
+        <span className="hidden md:inline">{t.share.shareShop}</span>
+      </Button>
+      <ShareDialog open={open} onOpenChange={setOpen} url={storefrontUrl.shop(locale, shop.slug)} title={shop.name} heading={t.share.shopHeading} />
+    </>
+  )
+}
 
 /**
  * Sticky top bar. Phones: brand-coloured, with a back arrow (like a native app) and the
@@ -45,6 +72,7 @@ export function TopBar({
         <span className="w-2 md:hidden" />
       )}
       <h1 className="min-w-0 flex-1 truncate text-lg font-semibold md:text-base">{title}</h1>
+      <ShareShopButton />
       <NotificationBell className="hover:bg-white/15 hover:text-current md:hover:bg-accent" />
       {account && (
         <AccountMenu

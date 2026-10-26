@@ -1,21 +1,28 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import {
   SHOP_ORDER_ACTIONS,
   SHOP_ORDER_TABS,
+  SHOP_PROFILE_RULES,
+  formatMoney,
   shopOrderActions,
   type ShopOrderAction,
   type ShopOrderTab,
 } from '@talad/shared';
 import type { OrderStatus, PaymentMethod, PaymentStatus, Prisma, Shop } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { detectImage } from '../media/image-type.js';
 import { MediaService } from '../media/media.service.js';
+import { filePrefix, storageFolder } from '../media/storage-keys.js';
 import { StorageService } from '../media/storage.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
-import { moveOrder, restoreStock } from './order-transitions.js';
+import { clearStock, moveOrder, postSystemMessage, restoreStock } from './order-transitions.js';
 import { paymentOf } from './payment-slips.service.js';
 import type { ListShopOrdersQuery, ShopOrderActionDto } from './shop-orders.dto.js';
 
 const HOUR = 3_600_000;
+/** Where a shop's courier bills are kept; a bill key sent back must start with this. */
+const billPrefix = (shopId: string) => filePrefix(storageFolder.shopOrders(shopId), 'bill');
 /** Actions that need the seller to say why (shown to the customer). */
 const NEEDS_REASON: ShopOrderAction[] = ['cancel', 'reject-payment', 'reject-return'];
 
@@ -72,6 +79,8 @@ export interface ShopOrderSummary {
   /** Transfer slip uploaded; the shop should check it and confirm. */
   awaitingConfirmation: boolean;
   paymentDueAt: Date | null;
+  /** Urgent delivery by the shop itself: handle these first. */
+  urgent: boolean;
 }
 
 export interface ShopOrderDetail extends ShopOrderSummary {
@@ -86,6 +95,10 @@ export interface ShopOrderDetail extends ShopOrderSummary {
   shippingAddress: unknown;
   deliveryProvider: { id: string; name: string } | null;
   trackingNumber: string | null;
+  /** A courier bill photo was uploaded when shipping. */
+  hasShippingBill: boolean;
+  /** The shop delivers it itself as urgent delivery (fee in `shippingFee`). */
+  urgentDelivery: boolean;
   autoConfirmAt: Date | null;
   cancelReason: string | null;
   payment: (ShopOrderSummary['payment'] & { amount: number; paidAt: Date | null; slipUploadedAt: Date | null }) | null;
@@ -187,6 +200,8 @@ export class ShopOrdersService {
       shippingAddress: row.order.shippingAddress,
       deliveryProvider: row.deliveryProvider,
       trackingNumber: row.trackingNumber,
+      hasShippingBill: row.shippingBillKey !== null,
+      urgentDelivery: row.urgentDelivery,
       autoConfirmAt: row.autoConfirmAt,
       cancelReason: row.cancelReason,
       payment: payment && {
@@ -203,6 +218,28 @@ export class ShopOrdersService {
   }
 
   /** The customer's transfer slip, for the shop to check against its bank. */
+  /** Stores the courier bill photo for `ship`; returns its key. */
+  async uploadBill(shop: Shop, number: string, file: Express.Multer.File | undefined): Promise<{ billKey: string }> {
+    await this.find(shop.id, number);
+    if (!file) throw new BadRequestException({ code: 'BILL_REQUIRED', message: 'No file uploaded' });
+    if (file.size > SHOP_PROFILE_RULES.imageMaxBytes) {
+      throw new BadRequestException({ code: 'FILE_TOO_LARGE', message: 'Image must be 5 MB or smaller' });
+    }
+    const kind = detectImage(file.buffer);
+    if (!kind) throw new BadRequestException({ code: 'INVALID_IMAGE', message: 'Upload a PNG, JPG or WebP image' });
+    const billKey = `${billPrefix(shop.id)}${randomUUID()}.${kind.ext}`;
+    await this.storage.put(billKey, file.buffer, kind.type);
+    return { billKey };
+  }
+
+  /** The courier bill of a shipped order (the shop's, or the customer's own order). */
+  async bill(shopId: string | null, number: string, customerId?: string) {
+    const row = await this.find(shopId, number);
+    if (customerId && row.order.customer.id !== customerId) throw new NotFoundException('Order not found');
+    if (!row.shippingBillKey) throw new NotFoundException('No shipping bill');
+    return this.storage.get(row.shippingBillKey);
+  }
+
   async slip(shopId: string | null, number: string) {
     const row = await this.find(shopId, number);
     const payment = paymentOf(row);
@@ -227,6 +264,14 @@ export class ShopOrdersService {
     const reason = dto.reason?.trim() || null;
     if (NEEDS_REASON.includes(dto.action) && !reason) {
       throw new BadRequestException({ code: 'REASON_REQUIRED', message: 'Tell the customer why' });
+    }
+    // Packing and shipping are one step: the bill photo proves the parcel went out. Urgent
+    // delivery is the shop's own (no courier bill), so a photo is optional there.
+    if (dto.action === 'ship' && dto.billKey && !dto.billKey.startsWith(billPrefix(shop.id))) {
+      throw new BadRequestException({ code: 'BILL_REQUIRED', message: "Upload a photo of the courier's bill" });
+    }
+    if (dto.action === 'ship' && !dto.billKey && !row.urgentDelivery) {
+      throw new BadRequestException({ code: 'BILL_REQUIRED', message: "Upload a photo of the courier's bill" });
     }
     if (dto.action === 'ship' && dto.deliveryProviderId) {
       const provider = await this.prisma.deliveryProvider.findFirst({ where: { id: dto.deliveryProviderId, isActive: true } });
@@ -260,11 +305,35 @@ export class ShopOrdersService {
             'SHIPPED',
             {
               trackingNumber: dto.trackingNumber?.trim() || null,
+              shippingBillKey: dto.billKey ?? null,
               ...(dto.deliveryProviderId && { deliveryProviderId: dto.deliveryProviderId }),
             },
             { ...actor, note: dto.trackingNumber?.trim() || null },
           );
+          // Shipping a transfer that was still "to pay" accepts its slip.
+          if (moved && payment && payment.method !== 'COD' && payment.status !== 'PAID') {
+            await setPayment('PAID', { paidAt: now });
+          }
           break;
+        case 'out-of-stock': {
+          const paidByTransfer = payment !== null && payment.method !== 'COD' && (payment.status === 'PAID' || payment.slipKey !== null);
+          moved = await moveOrder(tx, row.id, row.status, 'CANCELLED', { cancelReason: OUT_OF_STOCK_REASON }, { ...actor, note: OUT_OF_STOCK_REASON });
+          if (!moved) break;
+          await clearStock(tx, row.id);
+          if (payment) await setPayment(paidByTransfer ? 'REFUNDED' : 'FAILED');
+          // Taladonline tells both sides in their chat what happened and what comes next.
+          await postSystemMessage(
+            tx,
+            shop.id,
+            row.order.customer.id,
+            outOfStockMessage({
+              number: row.number,
+              items: row.items.map((i) => i.name),
+              refund: paidByTransfer ? formatMoney(row.total.toNumber(), 'lo') : null,
+            }),
+          );
+          break;
+        }
         case 'deliver':
           moved = await moveOrder(
             tx,
@@ -310,7 +379,7 @@ export class ShopOrdersService {
             imageKey: row.items[0]?.product.images[0]?.key,
           },
           to,
-          to === 'CANCELLED' ? reason : null,
+          to === 'CANCELLED' ? (dto.action === 'out-of-stock' ? OUT_OF_STOCK_REASON : reason) : null,
         );
       }
     });
@@ -344,8 +413,26 @@ export class ShopOrdersService {
       customer: { name: r.order.customer.name },
       shop: r.shop,
       payment: payment && { method: payment.method, status: payment.status, hasSlip: payment.slipKey !== null },
+      urgent: r.urgentDelivery,
       awaitingConfirmation: r.status === 'PENDING' && !!payment?.slipKey && payment.status === 'PENDING',
       paymentDueAt: r.paymentDueAt,
     };
   }
+}
+
+/** Shown to the customer as the cancellation reason. */
+const OUT_OF_STOCK_REASON = 'ສິນຄ້າໝົດ · Out of stock';
+
+/** The chat message both sides get when the shop reports an order out of stock. */
+function outOfStockMessage({ number, items, refund }: { number: string; items: string[]; refund: string | null }): string {
+  const list = items.join(', ');
+  return [
+    `⚠️ ຄຳສັ່ງຊື້ ${number} ຖືກຍົກເລີກ ເພາະສິນຄ້າໝົດ: ${list}.`,
+    `• ລູກຄ້າ: ຂໍອະໄພໃນຄວາມບໍ່ສະດວກ. ${refund ? `ຮ້ານຈະຄືນເງິນ ${refund} ໃຫ້ທ່ານ.` : 'ທ່ານບໍ່ໄດ້ຖືກເກັບເງິນ.'} ທ່ານສາມາດຖາມຮ້ານເລື່ອງສິນຄ້າທົດແທນໃນແຊັດນີ້ໄດ້.`,
+    `• ຮ້ານ: ${refund ? `ກະລຸນາຄືນເງິນ ${refund} ໃຫ້ລູກຄ້າ. ` : ''}ສະຕັອກຂອງສິນຄ້ານີ້ຖືກຕັ້ງເປັນ 0 ແລ້ວ, ອັບເດດສະຕັອກເມື່ອມີເຄື່ອງ.`,
+    '',
+    `⚠️ Order ${number} was cancelled because it is out of stock: ${list}.`,
+    `• Customer: sorry for the trouble. ${refund ? `The shop will refund ${refund} to you.` : 'You were not charged.'} You can ask the shop about an alternative here.`,
+    `• Shop: ${refund ? `please refund ${refund} to the customer. ` : ''}The stock of these items is now 0; update it when they are back.`,
+  ].join('\n');
 }

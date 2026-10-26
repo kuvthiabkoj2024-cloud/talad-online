@@ -12,6 +12,7 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { toast } from 'sonner'
 import { FilterTabs, Pager, SearchBox } from '@/components/list-controls'
+import { FollowersButton } from '@/components/followers-dialog'
 import { PageBody, PageIntro, TopBar } from '@/components/page-header'
 import { EmptyState, ErrorState, LoadingState } from '@/components/states'
 import { OrderStatusBadge } from '@/components/status-badge'
@@ -45,7 +46,7 @@ export function CustomersPage() {
     <>
       <TopBar title={t.customers.title} backTo="/" />
       <PageBody>
-        <PageIntro title={t.customers.title} description={t.customers.description} />
+        <PageIntro title={t.customers.title} description={t.customers.description} actions={<FollowersButton />} />
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <FilterTabs
             tabs={[

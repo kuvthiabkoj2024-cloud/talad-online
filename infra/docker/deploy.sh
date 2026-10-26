@@ -48,7 +48,8 @@ TMP="$(mktemp -d)"
 
 # Reuse one SSH connection for every step below (password asked once, closed on exit).
 SOCKET="/tmp/talad-ssh-$$" # short path: SSH sockets are limited to ~100 characters
-ssh() { command ssh -o ControlMaster=auto -o ControlPath="$SOCKET" -o ControlPersist=yes "$@"; }
+# Keep-alives stop a slow upload's idle-looking link from being dropped by routers.
+ssh() { command ssh -o ControlMaster=auto -o ControlPath="$SOCKET" -o ControlPersist=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=8 "$@"; }
 trap 'command ssh -o ControlPath="$SOCKET" -O exit "$SERVER" 2>/dev/null || true; rm -rf "$TMP"' EXIT
 ssh "$SERVER" true
 
@@ -56,8 +57,14 @@ ssh "$SERVER" true
 ssh "$SERVER" "docker start talad-registry >/dev/null 2>&1 || docker run -d --name talad-registry \
   --restart unless-stopped -p 127.0.0.1:$REGISTRY_PORT:5000 -v talad-registry:/var/lib/registry \
   -e REGISTRY_STORAGE_DELETE_ENABLED=true registry:2 >/dev/null"
-ssh -O forward -L "$TUNNEL_PORT:127.0.0.1:$REGISTRY_PORT" "$SERVER"
-for _ in 1 2 3 4 5 6 7 8 9 10; do crane catalog --insecure "$REGISTRY" >/dev/null 2>&1 && break; sleep 1; done
+# (Re)opens the SSH connection and the tunnel to the registry; safe to call again after a drop.
+tunnel() {
+  ssh "$SERVER" true
+  ssh -O forward -L "$TUNNEL_PORT:127.0.0.1:$REGISTRY_PORT" "$SERVER" 2>/dev/null || true
+  for _ in 1 2 3 4 5 6 7 8 9 10; do crane catalog --insecure "$REGISTRY" >/dev/null 2>&1 && return 0; sleep 1; done
+  return 1
+}
+tunnel
 
 for s in "${SERVICES[@]}"; do
   echo "▶ $s: building for $PLATFORM"
@@ -65,8 +72,15 @@ for s in "${SERVICES[@]}"; do
 
   echo "▶ $s: uploading changed layers to $SERVER"
   docker save "talad/$s" -o "$TMP/$s.tar"
-  crane push --insecure "$TMP/$s.tar" "$REGISTRY/talad/$s:latest" > "$TMP/push.log" 2>&1 \
-    || { cat "$TMP/push.log" >&2; exit 1; }
+  # A dropped connection is retried: layers already on the server are skipped.
+  : > "$TMP/push.log"
+  for attempt in 1 2 3 4 5; do
+    crane push --insecure "$TMP/$s.tar" "$REGISTRY/talad/$s:latest" >> "$TMP/push.log" 2>&1 && break
+    if [ "$attempt" = 5 ]; then cat "$TMP/push.log" >&2; exit 1; fi
+    echo "  connection dropped, retrying ($attempt/4)…"
+    sleep 5
+    tunnel || true
+  done
   echo "  $(grep -c 'pushed blob' "$TMP/push.log" || true) new layer(s) uploaded"
   rm -f "$TMP/$s.tar"
   ssh "$SERVER" "docker pull -q 127.0.0.1:$REGISTRY_PORT/talad/$s:latest >/dev/null \

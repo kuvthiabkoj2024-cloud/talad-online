@@ -60,13 +60,18 @@
     "terms": "ຂໍ້ກຳນົດ ແລະ ເງື່ອນໄຂ",
     "privacy": "ນະໂຍບາຍຄວາມເປັນສ່ວນຕົວ",
     "faq": "ຄຳຖາມທີ່ພົບເລື້ອຍ",
-    "help": "ສູນຊ່ວຍເຫຼືອ",
+    "help": "ການຊ່ວຍເຫຼືອ",
     "sell": "ເປີດຮ້ານກັບ Taladonline",
-    "payments": "ຊ່ອງທາງຊຳລະເງິນ",
-    "delivery": "ຄູ່ຮ່ວມຈັດສົ່ງ",
-    "follow": "ຕິດຕາມພວກເຮົາ",
+    "payments": "ວິທີການຊຳລະເງິນ",
+    "delivery": "ບໍລິການຈັດສົ່ງ",
+    "follow": "ຊ່ອງທາງຕິດຕາມ",
     "getApp": "ດາວໂຫຼດແອັບ",
-    "rights": "ສະຫງວນລິຂະສິດ."
+    "rights": "ສະຫງວນລິຂະສິດ.",
+    "contactUs": "ຕິດຕໍ່ Taladonline",
+    "aboutTaladonline": "ກ່ຽວກັບ Taladonline",
+    "banks": "ທະນາຄານ",
+    "wallets": "E-Wallet",
+    "appSoon": "ແອັບມືຖືຈະມາໄວໆນີ້"
   },
   "product": {
     "home": "ໜ້າຫຼັກ",

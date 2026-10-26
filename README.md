@@ -5,13 +5,13 @@ their business from a Seller Center, and Taladonline staff run the platform from
 console. Product scope lives in [`marketplace-project-scope.md`](marketplace-project-scope.md)
 (code comments cite its sections as `§x.y`).
 
-| App | What it is | Users | Dev URL |
-|---|---|---|---|
-| `apps/web` | Customer storefront (Next.js, Lao / English) | Shoppers | http://localhost:3000 |
-| `apps/shop` | Seller Center (React SPA) | Shop owners | http://localhost:5174 |
-| `apps/admin` | Admin console (React SPA) | Taladonline staff | http://localhost:5173 |
-| `apps/mobile` | Customer app (Expo / React Native) | Shoppers | Expo, http://localhost:8081 on web |
-| `services/api` | REST API for all of the above (NestJS) | — | http://localhost:4000/api/v1 · docs at `/docs` |
+| App            | What it is                                   | Users             | Dev URL                                        |
+| -------------- | -------------------------------------------- | ----------------- | ---------------------------------------------- |
+| `apps/web`     | Customer storefront (Next.js, Lao / English) | Shoppers          | http://localhost:3000                          |
+| `apps/shop`    | Seller Center (React SPA)                    | Shop owners       | http://localhost:5174                          |
+| `apps/admin`   | Admin console (React SPA)                    | Taladonline staff | http://localhost:5173                          |
+| `apps/mobile`  | Customer app (Expo / React Native)           | Shoppers          | Expo, http://localhost:8081 on web             |
+| `services/api` | REST API for all of the above (NestJS)       | —                 | http://localhost:4000/api/v1 · docs at `/docs` |
 
 ---
 
@@ -30,16 +30,16 @@ console. Product scope lives in [`marketplace-project-scope.md`](marketplace-pro
 
 ## Tech stack
 
-| Area | Tools |
-|---|---|
-| Monorepo | pnpm 12 workspaces, Turborepo, Node 24 (`.nvmrc`), TypeScript 6 |
-| API | NestJS 12 (ESM), Prisma 7 + PostgreSQL 18, class-validator, Swagger |
-| Storefront | Next.js 16 (App Router, server actions), Tailwind CSS 4 |
-| Seller Center & admin | Vite 8, React 19, React Router 8, TanStack Query, shadcn/ui |
-| Mobile | Expo SDK 57, expo-router, NativeWind |
-| Media | Bunny Storage + Bunny CDN (images, videos, private files) |
-| AI | Anthropic Claude (shop chat bot, shopping assistant, photo search keywords), local CLIP model (photo search) |
-| Quality | oxlint / ESLint, Vitest, GitHub Actions CI |
+| Area                  | Tools                                                                                                        |
+| --------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Monorepo              | pnpm 12 workspaces, Turborepo, Node 24 (`.nvmrc`), TypeScript 6                                              |
+| API                   | NestJS 12 (ESM), Prisma 7 + PostgreSQL 18, class-validator, Swagger                                          |
+| Storefront            | Next.js 16 (App Router, server actions), Tailwind CSS 4                                                      |
+| Seller Center & admin | Vite 8, React 19, React Router 8, TanStack Query, shadcn/ui                                                  |
+| Mobile                | Expo SDK 57, expo-router, NativeWind                                                                         |
+| Media                 | Bunny Storage + Bunny CDN (images, videos, private files)                                                    |
+| AI                    | Anthropic Claude (shop chat bot, shopping assistant, photo search keywords), local CLIP model (photo search) |
+| Quality               | oxlint / ESLint, Vitest, GitHub Actions CI                                                                   |
 
 ---
 
@@ -202,12 +202,12 @@ in `services/api/.env`. The rest of the app works without it.
 
 ### Seeded accounts
 
-| Where | Account | Password |
-|---|---|---|
-| Admin console | `admin@talad.local` (Super Admin) | `SEED_ADMIN_PASSWORD`, default `ChangeMe123!` |
-| Admin console | `support@talad.local`, `finance@talad.local` | same |
-| Storefront | Demo Customer, phone `020 9999 0000` | SMS code: printed in the API log and shown on screen in development |
-| Seller Center | Demo Shop Owner (owns "Taladonline Demo Shop"), phone `020 8888 0000` | same |
+| Where         | Account                                                               | Password                                                            |
+| ------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Admin console | `admin@talad.local` (Super Admin)                                     | `SEED_ADMIN_PASSWORD`, default `ChangeMe123!`                       |
+| Admin console | `support@talad.local`, `finance@talad.local`                          | same                                                                |
+| Storefront    | Demo Customer, phone `020 9999 0000`                                  | SMS code: printed in the API log and shown on screen in development |
+| Seller Center | Demo Shop Owner (owns "Taladonline Demo Shop"), phone `020 8888 0000` | same                                                                |
 
 ---
 
@@ -215,18 +215,18 @@ in `services/api/.env`. The rest of the app works without it.
 
 Run from the repository root.
 
-| Command | Does |
-|---|---|
-| `pnpm dev` | Every app in watch mode |
-| `pnpm --filter @talad/<web\|shop\|admin\|mobile\|api> dev` | One app |
-| `pnpm lint && pnpm typecheck && pnpm test && pnpm build` | The full check (same as CI) — run before calling work done |
-| `pnpm db:migrate` | Create / apply a migration after editing `schema.prisma` (dev) |
-| `pnpm db:generate` | Regenerate the Prisma client |
-| `pnpm db:seed` | Seed roles, admins, catalog and demo data |
-| `pnpm db:studio` | Browse the database |
-| `pnpm --filter @talad/api db:deploy` | Apply migrations without prompts (production) |
-| `pnpm infra:up` / `pnpm infra:down` | Start / stop local Docker services |
-| `cd apps/mobile && npx expo install <pkg>` | Add a mobile dependency |
+| Command                                                    | Does                                                           |
+| ---------------------------------------------------------- | -------------------------------------------------------------- |
+| `pnpm dev`                                                 | Every app in watch mode                                        |
+| `pnpm --filter @talad/<web\|shop\|admin\|mobile\|api> dev` | One app                                                        |
+| `pnpm lint && pnpm typecheck && pnpm test && pnpm build`   | The full check (same as CI) — run before calling work done     |
+| `pnpm db:migrate`                                          | Create / apply a migration after editing `schema.prisma` (dev) |
+| `pnpm db:generate`                                         | Regenerate the Prisma client                                   |
+| `pnpm db:seed`                                             | Seed roles, admins, catalog and demo data                      |
+| `pnpm db:studio`                                           | Browse the database                                            |
+| `pnpm --filter @talad/api db:deploy`                       | Apply migrations without prompts (production)                  |
+| `pnpm infra:up` / `pnpm infra:down`                        | Start / stop local Docker services                             |
+| `cd apps/mobile && npx expo install <pkg>`                 | Add a mobile dependency                                        |
 
 ---
 
@@ -236,14 +236,14 @@ Run from the repository root. `@talad/shared` is always built first (Turbo handl
 
 ### Without Docker
 
-| Build | Command | Output |
-|---|---|---|
-| Everything | `NODE_ENV=production pnpm build` | all of the below |
-| API | `pnpm turbo run build --filter=@talad/api` | `services/api/dist/` |
-| Storefront | `NODE_ENV=production pnpm turbo run build --filter=@talad/web` | `apps/web/.next/` |
-| Seller Center | `NODE_ENV=production pnpm turbo run build --filter=@talad/shop` | `apps/shop/dist/` |
-| Admin | `NODE_ENV=production pnpm turbo run build --filter=@talad/admin` | `apps/admin/dist/` |
-| Shared package only | `pnpm --filter @talad/shared build` | `packages/shared/dist/` |
+| Build               | Command                                                          | Output                  |
+| ------------------- | ---------------------------------------------------------------- | ----------------------- |
+| Everything          | `NODE_ENV=production pnpm build`                                 | all of the below        |
+| API                 | `pnpm turbo run build --filter=@talad/api`                       | `services/api/dist/`    |
+| Storefront          | `NODE_ENV=production pnpm turbo run build --filter=@talad/web`   | `apps/web/.next/`       |
+| Seller Center       | `NODE_ENV=production pnpm turbo run build --filter=@talad/shop`  | `apps/shop/dist/`       |
+| Admin               | `NODE_ENV=production pnpm turbo run build --filter=@talad/admin` | `apps/admin/dist/`      |
+| Shared package only | `pnpm --filter @talad/shared build`                              | `packages/shared/dist/` |
 
 With `NODE_ENV=production`, the storefront, Seller Center and admin read their
 `.env.production` and bake those URLs into the build.
@@ -316,12 +316,12 @@ $COMPOSE build shop && $COMPOSE up -d shop   # one app; repeat for api, web, adm
 docker image prune -f
 ```
 
-| Image | Target | Runs | Port inside |
-|---|---|---|---|
-| `talad/api` | `api` | `node dist/main.js` | 4000 |
-| `talad/web` | `web` | `next start` | 3000 |
-| `talad/shop` | `shop` | nginx serving the Seller Center | 80 |
-| `talad/admin` | `admin` | nginx serving the admin console | 80 |
+| Image         | Target  | Runs                            | Port inside |
+| ------------- | ------- | ------------------------------- | ----------- |
+| `talad/api`   | `api`   | `node dist/main.js`             | 4000        |
+| `talad/web`   | `web`   | `next start`                    | 3000        |
+| `talad/shop`  | `shop`  | nginx serving the Seller Center | 80          |
+| `talad/admin` | `admin` | nginx serving the admin console | 80          |
 
 Building an image for a server with a different CPU (for example on an Apple Silicon Mac for
 an Intel/AMD server): add `--platform linux/amd64` to `docker build`.
@@ -341,44 +341,44 @@ Every app reads its own env file. The `.env.example` files list every value with
 
 ### API — `services/api/.env`
 
-| Variable | Required | Notes |
-|---|---|---|
-| `NODE_ENV` | | `production` in production: hides `/docs` and stops returning dev sign-in codes |
-| `PORT` | | Default `4000` |
-| `DATABASE_URL` | ✅ | PostgreSQL. Must be a **direct** connection (not a transaction-mode pooler): live updates use `LISTEN` |
-| `REDIS_URL` | ✅ | Validated at start-up |
-| `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | ✅ | Long random strings: `openssl rand -base64 48` |
-| `CORS_ORIGINS` | ✅ | Comma-separated origins of the storefront, Seller Center, admin (and Expo web) |
-| `ADMIN_APP_URL` | | Admin console URL, for password-reset links |
-| `BUNNY_STORAGE_ZONE`, `BUNNY_API_KEY`, `BUNNY_BASE_HOSTNAME`, `BUNNY_CDN_HOST` | for uploads | Storage zone name and password, its region endpoint, and the pull-zone URL |
-| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | optional | Smart chat-bot replies, shopping assistant, photo-search keywords. Without a key the bot uses built-in replies |
-| `IMAGE_SEARCH_ENABLED`, `MODEL_CACHE_DIR` | | Photo search downloads a ~90 MB model once into `MODEL_CACHE_DIR` |
-| `TELBIZ_CLIENT_ID`, `TELBIZ_SECRETKEY` | optional | Telbiz SMS gateway for sign-in codes. Without them, codes are only written to the API log |
-| `GOOGLE_CLIENT_ID`, `APPLE_CLIENT_ID` | optional | Social sign-in audiences (comma-separated for web + mobile) |
-| `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | | The first Super Admin created by the seed |
-| `MEILI_URL`, `MEILI_MASTER_KEY` | optional | Reserved for search; not used yet |
+| Variable                                                                       | Required    | Notes                                                                                                          |
+| ------------------------------------------------------------------------------ | ----------- | -------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`                                                                     |             | `production` in production: hides `/docs` and stops returning dev sign-in codes                                |
+| `PORT`                                                                         |             | Default `4000`                                                                                                 |
+| `DATABASE_URL`                                                                 | ✅          | PostgreSQL. Must be a **direct** connection (not a transaction-mode pooler): live updates use `LISTEN`         |
+| `REDIS_URL`                                                                    | ✅          | Validated at start-up                                                                                          |
+| `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`                                      | ✅          | Long random strings: `openssl rand -base64 48`                                                                 |
+| `CORS_ORIGINS`                                                                 | ✅          | Comma-separated origins of the storefront, Seller Center, admin (and Expo web)                                 |
+| `ADMIN_APP_URL`                                                                |             | Admin console URL, for password-reset links                                                                    |
+| `BUNNY_STORAGE_ZONE`, `BUNNY_API_KEY`, `BUNNY_BASE_HOSTNAME`, `BUNNY_CDN_HOST` | for uploads | Storage zone name and password, its region endpoint, and the pull-zone URL                                     |
+| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`                                         | optional    | Smart chat-bot replies, shopping assistant, photo-search keywords. Without a key the bot uses built-in replies |
+| `IMAGE_SEARCH_ENABLED`, `MODEL_CACHE_DIR`                                      |             | Photo search downloads a ~90 MB model once into `MODEL_CACHE_DIR`                                              |
+| `TELBIZ_CLIENT_ID`, `TELBIZ_SECRETKEY`                                         | optional    | Telbiz SMS gateway for sign-in codes. Without them, codes are only written to the API log                      |
+| `GOOGLE_CLIENT_ID`, `APPLE_CLIENT_ID`                                          | optional    | Social sign-in audiences (comma-separated for web + mobile)                                                    |
+| `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`                                      |             | The first Super Admin created by the seed                                                                      |
+| `MEILI_URL`, `MEILI_MASTER_KEY`                                                | optional    | Reserved for search; not used yet                                                                              |
 
 ### Storefront — `apps/web/.env.local`
 
-| Variable | Notes |
-|---|---|
-| `API_URL` | API base URL used by the Next.js server, e.g. `https://api.taladonline.la/api/v1` |
-| `NEXT_PUBLIC_SHOP_URL` | Seller Center URL ("Sell on Taladonline" links) |
-| `NEXT_PUBLIC_MEDIA_HOST` | Bunny pull-zone hostname (no `https://`), for optimised images |
-| `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `NEXT_PUBLIC_APPLE_CLIENT_ID`, `NEXT_PUBLIC_APPLE_REDIRECT_URI` | Optional social sign-in |
+| Variable                                                                                        | Notes                                                                             |
+| ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `API_URL`                                                                                       | API base URL used by the Next.js server, e.g. `https://api.taladonline.la/api/v1` |
+| `NEXT_PUBLIC_SHOP_URL`                                                                          | Seller Center URL ("Sell on Taladonline" links)                                   |
+| `NEXT_PUBLIC_MEDIA_HOST`                                                                        | Bunny pull-zone hostname (no `https://`), for optimised images                    |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `NEXT_PUBLIC_APPLE_CLIENT_ID`, `NEXT_PUBLIC_APPLE_REDIRECT_URI` | Optional social sign-in                                                           |
 
 ### Seller Center and admin — `apps/shop/.env.local`, `apps/admin/.env.local`
 
-| Variable | Notes |
-|---|---|
-| `VITE_API_URL` | API base URL as the browser reaches it |
-| `VITE_STOREFRONT_URL` | Storefront URL, for "view shop / view product" links |
+| Variable                                          | Notes                                                    |
+| ------------------------------------------------- | -------------------------------------------------------- |
+| `VITE_API_URL`                                    | API base URL as the browser reaches it                   |
+| `VITE_STOREFRONT_URL`                             | Storefront URL, for "view shop / view product" links     |
 | `VITE_DEV_ADMIN_EMAIL`, `VITE_DEV_ADMIN_PASSWORD` | Admin only, development only: pre-fills the sign-in form |
 
 ### Mobile — `apps/mobile/.env`
 
-| Variable | Notes |
-|---|---|
+| Variable              | Notes                                                                          |
+| --------------------- | ------------------------------------------------------------------------------ |
 | `EXPO_PUBLIC_API_URL` | API base URL. On a physical device use your computer's LAN IP, not `localhost` |
 
 `NEXT_PUBLIC_*`, `VITE_*` and `EXPO_PUBLIC_*` values are **baked in at build time**: rebuild the
@@ -448,6 +448,7 @@ The example domains below are placeholders; use your own.
 3. **Bunny.** Create a storage zone (note its password and region endpoint) and a pull zone
    linked to it. Private files share the zone under unguessable names and are only handed
    out through the API. For extra safety, add pull-zone edge rules that block:
+
    - `*/kyc/*` (shop documents)
    - `*/payments/*` (payment slips and refund QR codes)
    - `*/payment-qr-*` (shops' payment QR codes)
@@ -455,6 +456,7 @@ The example domains below are placeholders; use your own.
    - `/m-*` (chat photos)
 
    The folder layout is in `services/api/src/modules/media/storage-keys.ts`.
+
 4. **DNS and TLS** for the storefront, Seller Center, admin and API domains.
 5. **Secrets.** Generate `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` with
    `openssl rand -base64 48`. Pick a strong `SEED_ADMIN_PASSWORD`.
@@ -464,13 +466,13 @@ The example domains below are placeholders; use your own.
 Production settings live in a **`.env.production`** file in each app. Git ignores these files
 (`.gitignore`): copy them to the server yourself, never commit them.
 
-| File | Domain |
-|---|---|
+| File                           | Domain                                                              |
+| ------------------------------ | ------------------------------------------------------------------- |
 | `services/api/.env.production` | api.taladonline.la (read when `NODE_ENV=production`, before `.env`) |
-| `apps/web/.env.production` | taladonline.la and www.taladonline.la |
-| `apps/shop/.env.production` | shop.taladonline.la |
-| `apps/admin/.env.production` | admin.taladonline.la |
-| `apps/mobile/.env.production` | the mobile app's API address |
+| `apps/web/.env.production`     | taladonline.la and www.taladonline.la                               |
+| `apps/shop/.env.production`    | shop.taladonline.la                                                 |
+| `apps/admin/.env.production`   | admin.taladonline.la                                                |
+| `apps/mobile/.env.production`  | the mobile app's API address                                        |
 
 Fill in every `CHANGE_ME` value: database, Redis, and Bunny. The JWT secrets and the first
 admin password are already generated. Then, on the server or in CI, with Node 24 and pnpm 12:
@@ -486,12 +488,12 @@ override `.env.production`, so its `localhost` addresses would be used. Vite app
 
 Outputs:
 
-| App | Output | Run with |
-|---|---|---|
-| API | `services/api/dist/` | `node dist/main.js` (from `services/api`, with its `.env`) |
-| Storefront | `apps/web/.next/` | `pnpm --filter @talad/web start -- -p 3010` (pick a free port) |
-| Seller Center | `apps/shop/dist/` | static files |
-| Admin | `apps/admin/dist/` | static files |
+| App           | Output               | Run with                                                       |
+| ------------- | -------------------- | -------------------------------------------------------------- |
+| API           | `services/api/dist/` | `node dist/main.js` (from `services/api`, with its `.env`)     |
+| Storefront    | `apps/web/.next/`    | `pnpm --filter @talad/web start -- -p 3010` (pick a free port) |
+| Seller Center | `apps/shop/dist/`    | static files                                                   |
+| Admin         | `apps/admin/dist/`   | static files                                                   |
 
 ### 3. Configure and migrate the API
 
@@ -532,23 +534,23 @@ cd apps/web && NODE_ENV=production pnpm start -- -p 3010
 Never use `pnpm dev` on a server: it starts development servers on fixed ports (3000, 5173,
 5174, 8081…) that other apps may already use. Everything is built and run with Docker instead:
 
-| File | What it does |
-|---|---|
-| `infra/docker/Dockerfile` | One image per app: `api`, `web` (Node), `shop`, `admin` (nginx serving the built files) |
+| File                                   | What it does                                                                                  |
+| -------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `infra/docker/Dockerfile`              | One image per app: `api`, `web` (Node), `shop`, `admin` (nginx serving the built files)       |
 | `infra/docker/Dockerfile.dockerignore` | Keeps `node_modules`, `.env`, `.env.local` and the API's `.env.production` out of every image |
-| `infra/docker/nginx-spa.conf` | nginx inside the Seller Center / admin images (app routes, long caching of hashed assets) |
-| `infra/docker/docker-compose.prod.yml` | The whole stack: Postgres, Redis, API, storefront, Seller Center, admin |
+| `infra/docker/nginx-spa.conf`          | nginx inside the Seller Center / admin images (app routes, long caching of hashed assets)     |
+| `infra/docker/docker-compose.prod.yml` | The whole stack: Postgres, Redis, API, storefront, Seller Center, admin                       |
 
 Every container listens on **127.0.0.1 only**, on ports chosen to avoid other apps. The
 server's own nginx handles TLS and sends each domain to its port:
 
-| Domain | Container | Local port |
-|---|---|---|
-| api.taladonline.la | `api` | 127.0.0.1:4000 |
-| taladonline.la, www.taladonline.la | `web` | 127.0.0.1:3010 |
-| shop.taladonline.la | `shop` | 127.0.0.1:8110 |
-| admin.taladonline.la | `admin` | 127.0.0.1:8120 |
-| (backups, admin tools) | `postgres`, `redis` | 127.0.0.1:5433, 127.0.0.1:6380 |
+| Domain                             | Container           | Local port                     |
+| ---------------------------------- | ------------------- | ------------------------------ |
+| api.taladonline.la                 | `api`               | 127.0.0.1:4000                 |
+| taladonline.la, www.taladonline.la | `web`               | 127.0.0.1:3010                 |
+| shop.taladonline.la                | `shop`              | 127.0.0.1:8110                 |
+| admin.taladonline.la               | `admin`             | 127.0.0.1:8120                 |
+| (backups, admin tools)             | `postgres`, `redis` | 127.0.0.1:5433, 127.0.0.1:6380 |
 
 Change a port in `docker-compose.prod.yml` (and in nginx) if it's taken; `ss -tlnp` lists what's
 in use. Inside the stack the API reaches Postgres and Redis by service name. Compose sets
@@ -598,6 +600,7 @@ talad exec postgres pg_dump -U talad talad | gzip > talad-$(date +%F).sql.gz
 ```
 
 Notes:
+
 - **Build-time settings.** The storefront, Seller Center and admin bake their public URLs
   (from their `.env.production`) into the build. Rebuild those images after changing them.
 - **Memory.** Building the API or storefront needs about 2–3 GB of RAM. On a small server,
@@ -714,13 +717,18 @@ it never serves stale pages.
 `.github/workflows/ci.yml` runs `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build` on
 every push to `main` and on pull requests.
 
-
 ## build command:
+
 cd /var/www/talad-online
 docker compose -f infra/docker/docker-compose.prod.yml --env-file infra/docker/.env.prod build
 
 # One image at a time
-docker build -f infra/docker/Dockerfile --target api   -t talad/api   .
-docker build -f infra/docker/Dockerfile --target web   -t talad/web   .
-docker build -f infra/docker/Dockerfile --target shop  -t talad/shop  .
+
+docker build -f infra/docker/Dockerfile --target api -t talad/api .
+docker build -f infra/docker/Dockerfile --target web -t talad/web .
+docker build -f infra/docker/Dockerfile --target shop -t talad/shop .
 docker build -f infra/docker/Dockerfile --target admin -t talad/admin .
+
+# How to build from local in spacial folder:
+
+infra/docker/deploy.sh web

@@ -60,13 +60,18 @@
     "terms": "Terms & Conditions",
     "privacy": "Privacy Policy",
     "faq": "FAQ",
-    "help": "Help center",
+    "help": "Help",
     "sell": "Sell on Taladonline",
     "payments": "Payment methods",
-    "delivery": "Delivery partners",
+    "delivery": "Delivery services",
     "follow": "Follow us",
-    "getApp": "Get the app",
-    "rights": "All rights reserved."
+    "getApp": "Download the app",
+    "rights": "All rights reserved.",
+    "contactUs": "Contact Taladonline",
+    "aboutTaladonline": "About Taladonline",
+    "banks": "Banks",
+    "wallets": "E-Wallet",
+    "appSoon": "The mobile app is coming soon"
   },
   "product": {
     "home": "Home",

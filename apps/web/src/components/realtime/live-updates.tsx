@@ -6,9 +6,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "@/components/auth/session-provider";
 import { connectEventStream } from "@/lib/event-stream";
+import { savePushSubscription } from "@/lib/push-actions";
 import { interpolate } from "@/lib/format";
 import { playNotificationSound, unlockNotificationSound } from "@/lib/notify-sound";
 import { LIVE_MESSAGE_EVENT, LIVE_NOTIFICATION_EVENT } from "@/lib/live-events";
+import { syncPush } from "@/lib/web-push";
 
 interface Toast {
   id: string;
@@ -39,6 +41,8 @@ export function LiveUpdates({ locale, dict }: { locale: Locale; dict: { view: st
   useEffect(() => {
     if (!signedIn) return;
     unlockNotificationSound();
+    // Push was turned on in this browser before: point it at the account signed in now.
+    void syncPush(live.current.locale, savePushSubscription);
     const push = (t: Omit<Toast, "id">) => {
       const id = crypto.randomUUID?.() ?? String(Date.now());
       setToasts((list) => [...list.slice(-2), { ...t, id }]);

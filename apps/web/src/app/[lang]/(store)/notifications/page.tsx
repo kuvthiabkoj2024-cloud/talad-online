@@ -14,6 +14,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageHeading } from "@/components/account/page-heading";
 import { MarkAllReadButton, NotificationRow } from "@/components/notifications/notification-controls";
+import { PushCard } from "@/components/notifications/push-card";
 import { Pagination } from "@/components/pagination";
 import { ProductImage } from "@/components/product-image";
 import {
@@ -124,6 +125,8 @@ export default async function NotificationsPage({ searchParams }: PageProps<"/[l
           />
         }
       />
+
+      <PushCard locale={locale} dict={dict} />
 
       <nav
         aria-label={dict.title}

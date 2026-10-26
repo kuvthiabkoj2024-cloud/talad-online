@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { disablePush } from '@talad/ui/lib/web-push'
 import { api, getToken, send, setToken, setUnauthorizedHandler } from '@/lib/api'
+import { removePushSubscription } from '@/lib/push'
 import type { Account } from '@/lib/types'
 import { AuthContext, ME_KEY } from './context'
 
@@ -38,6 +40,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   )
 
   const signOut = useCallback(async () => {
+    // This browser stops getting the shop's notifications (while the session still works).
+    await disablePush(removePushSubscription)
     await send('POST', '/auth/customer/logout').catch(() => {})
     clear()
   }, [clear])

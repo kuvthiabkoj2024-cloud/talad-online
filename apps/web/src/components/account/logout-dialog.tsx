@@ -6,6 +6,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import { logout } from "@/lib/auth-actions";
+import { removePushSubscription } from "@/lib/push-actions";
+import { disablePush } from "@/lib/web-push";
 import { Modal } from "../auth/modal";
 import { useSession } from "../auth/session-provider";
 
@@ -30,6 +32,8 @@ export function LogoutDialog({
 
   function doLogout() {
     startTransition(async () => {
+      // This browser stops getting the account's notifications (while the session still works).
+      await disablePush(removePushSubscription);
       await logout();
       setCustomer(null);
       onClose();

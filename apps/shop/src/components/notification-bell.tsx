@@ -6,6 +6,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { Bell, CheckCheck, Heart, LoaderCircle, MessageCircle, ReceiptText, Store, Volume2, VolumeX, type LucideIcon } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
+import { PushToggle } from '@/components/push-toggle'
 import { queryKeys } from '@/hooks/queries'
 import { useI18n } from '@/i18n/context'
 import { api, send } from '@/lib/api'
@@ -119,6 +120,7 @@ export function NotificationBell({ className }: { className?: string }) {
             </button>
           )}
         </div>
+        <PushToggle />
       </PopoverContent>
     </Popover>
   )

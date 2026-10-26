@@ -123,6 +123,23 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   APPLE_CLIENT_ID?: string;
+
+  /**
+   * Web Push (browser and PWA notifications). Generate a pair once with
+   * `npx web-push generate-vapid-keys`; unset turns push off. Changing them drops every
+   * browser's subscription.
+   */
+  @IsOptional()
+  @IsString()
+  VAPID_PUBLIC_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  VAPID_PRIVATE_KEY?: string;
+
+  /** Contact for push services, e.g. mailto:support@taladonline.la. */
+  @IsString()
+  VAPID_SUBJECT: string = 'mailto:support@taladonline.la';
 }
 
 export type Env = EnvironmentVariables;

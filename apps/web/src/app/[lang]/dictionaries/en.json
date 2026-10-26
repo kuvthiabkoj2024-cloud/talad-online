@@ -613,7 +613,15 @@
     "yesterday": "Yesterday",
     "earlier": "Earlier",
     "justNow": "Just now",
-    "unread": "Unread"
+    "unread": "Unread",
+    "pushTitle": "Get notifications on this device",
+    "pushBody": "Know right away when an order is updated or a shop replies, even with the site closed.",
+    "pushTurnOn": "Turn on notifications",
+    "pushEnabled": "Notifications are on for this device",
+    "pushTurnOff": "Turn off",
+    "pushDenied": "Notifications are blocked. Allow them in your browser's site settings.",
+    "pushInstall": "On iPhone and iPad, add Taladonline to your Home Screen first to get notifications.",
+    "pushFailed": "Couldn't turn them on. Please try again."
   },
   "catalog": {
     "allCategories": "All categories",

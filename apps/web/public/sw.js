@@ -9,6 +9,7 @@
  *   `next dev` serves changing files under the same names, and a phone that installed this
  *   worker from a production build must not keep running old code against a dev server.
  * - API calls, Server Actions and RSC requests pass straight through.
+ * - Web Push notifications are shown here (bottom of the file).
  *
  * Bump VERSION when this file's caching rules change.
  */
@@ -90,3 +91,48 @@ async function trim(cache, max) {
   const keys = await cache.keys();
   await Promise.all(keys.slice(0, Math.max(0, keys.length - max)).map((k) => cache.delete(k)));
 }
+
+/*
+ * Web Push (services/api notifications/push.service.ts): orders, activity and chat messages
+ * as system notifications, also when no tab is open. Payload: { title, body, url, tag }.
+ */
+self.addEventListener("push", (event) => {
+  let data;
+  try {
+    data = event.data ? event.data.json() : null;
+  } catch {
+    data = null;
+  }
+  if (!data || !data.title) return;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((tabs) => {
+      // The app is open in front: it already shows its own pop-up and chime. Safari, though,
+      // ends a subscription whose pushes show nothing, so there it always shows one.
+      const safari = /Safari/.test(navigator.userAgent) && !/Chrome|Chromium|Edg|Firefox/.test(navigator.userAgent);
+      if (!safari && tabs.some((t) => t.focused)) return;
+      return self.registration.showNotification(data.title, {
+        body: data.body,
+        tag: data.tag,
+        renotify: Boolean(data.tag),
+        icon: "/icons/icon-192.png",
+        badge: "/icons/icon-192.png",
+        data: { url: data.url || "/" },
+      });
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = new URL(event.notification.data?.url || "/", self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (tabs) => {
+      const tab = tabs.find((t) => new URL(t.url).origin === self.location.origin);
+      if (tab) {
+        await tab.focus();
+        return tab.navigate(url).catch(() => self.clients.openWindow(url));
+      }
+      return self.clients.openWindow(url);
+    }),
+  );
+});

@@ -256,6 +256,7 @@ model Shop {
   customerNotes ShopCustomerNote[]
   /// Private conversations with customers (Seller Center → Messages).
   conversations ShopConversation[]
+  pushSubscriptions PushSubscription[]
   /// Questions and answers the shop's chat bot replies with (Seller Center → Chat Bot).
   faqs          ShopFaq[]
   chatOrders    ChatOrder[]
@@ -353,6 +354,7 @@ model Customer {
   shopConversations ShopConversation[]
   chatOrders        ChatOrder[]
   videoComments     VideoComment[]
+  pushSubscriptions PushSubscription[]
 }
 
 model Address {
@@ -915,6 +917,27 @@ model Notification {
   @@index([customerId, readAt])
   @@index([shopId, readAt])
   @@index([adminId, readAt])
+}
+
+/// A browser (desktop or installed PWA) that gets Web Push notifications. The storefront
+/// subscribes for a customer, the Seller Center for a shop; one row per browser endpoint.
+model PushSubscription {
+  id         String   @id @default(uuid(7))
+  endpoint   String   @unique
+  p256dh     String
+  auth       String
+  /// Language the notifications are written in (the app's language when it subscribed).
+  locale     String   @default("lo")
+  customerId String?
+  shopId     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  shop     Shop?     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([shopId])
 }
 
 // ─── CMS & settings (§2.8, §2.11) ───────────────────────────────────────────

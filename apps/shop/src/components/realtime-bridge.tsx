@@ -1,6 +1,7 @@
 import type { RealtimeEvent } from '@talad/shared'
 import { connectEventStream } from '@talad/ui/lib/event-stream'
 import { playNotificationSound, unlockNotificationSound } from '@talad/ui/lib/notify-sound'
+import { syncPush } from '@talad/ui/lib/web-push'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
@@ -10,6 +11,7 @@ import { queryKeys } from '@/hooks/queries'
 import { useI18n } from '@/i18n/context'
 import { getToken } from '@/lib/api'
 import { fill } from '@/lib/format'
+import { savePushSubscription } from '@/lib/push'
 import { MESSAGE_EVENT, notificationText } from '@/lib/realtime'
 
 /**
@@ -30,6 +32,8 @@ export function RealtimeBridge() {
 
   useEffect(() => {
     unlockNotificationSound()
+    // Push was turned on in this browser before: point it at the shop signed in now.
+    void syncPush(live.current.locale, savePushSubscription)
     const refreshInbox = () => void queryClient.invalidateQueries({ queryKey: queryKeys.notifications })
     return connectEventStream<RealtimeEvent>({
       url: `${import.meta.env.VITE_API_URL}/me/shop/events`,

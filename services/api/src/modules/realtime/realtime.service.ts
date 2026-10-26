@@ -2,6 +2,7 @@ import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@ne
 import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
 import type { RealtimeEvent } from '@talad/shared';
+import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import type { Env } from '../../config/env.validation.js';
 import type { Prisma } from '../../generated/prisma/client.js';
@@ -17,6 +18,8 @@ export type Audience = `customer:${string}` | `shop:${string}` | `admin:${string
 
 type Db = Pick<Prisma.TransactionClient, '$executeRaw'>;
 type Listener = (event: RealtimeEvent) => void;
+/** Runs once per event, on the instance that published it, after its transaction committed. */
+export type CommittedHook = (to: Audience[], event: RealtimeEvent) => void;
 
 /**
  * Real-time events to signed-in apps over Server-Sent Events.
@@ -29,6 +32,9 @@ type Listener = (event: RealtimeEvent) => void;
 export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RealtimeService.name);
   private readonly listeners = new Map<Audience, Set<Listener>>();
+  private readonly committedHooks = new Set<CommittedHook>();
+  /** Tags this process's events, so only it runs the committed hooks (not every instance). */
+  private readonly origin = randomUUID();
   private client: pg.Client | null = null;
   private stopped = false;
   private retryMs = 1000;
@@ -49,12 +55,21 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    * being written in one, so the event only goes out if it commits.
    */
   async emit(db: Db, to: Audience | Audience[], event: RealtimeEvent): Promise<void> {
-    const payload = JSON.stringify({ to: Array.isArray(to) ? to : [to], event });
+    const payload = JSON.stringify({ to: Array.isArray(to) ? to : [to], event, origin: this.origin });
     if (Buffer.byteLength(payload) > MAX_PAYLOAD) {
       this.logger.warn(`Realtime event too large (${Buffer.byteLength(payload)} bytes), not sent`);
       return;
     }
     await db.$executeRaw`SELECT pg_notify(${CHANNEL}, ${payload})`;
+  }
+
+  /**
+   * Calls `hook` for every event this instance publishes, once it is committed (Web Push
+   * sends from here, so a rolled-back order never buzzes a phone).
+   */
+  onCommitted(hook: CommittedHook): () => void {
+    this.committedHooks.add(hook);
+    return () => this.committedHooks.delete(hook);
   }
 
   /** Keeps `res` open as an event stream for `audiences` until the client disconnects. */
@@ -94,13 +109,14 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   }
 
   private dispatch(raw: string) {
-    let msg: { to: Audience[]; event: RealtimeEvent };
+    let msg: { to: Audience[]; event: RealtimeEvent; origin?: string };
     try {
-      msg = JSON.parse(raw) as { to: Audience[]; event: RealtimeEvent };
+      msg = JSON.parse(raw) as { to: Audience[]; event: RealtimeEvent; origin?: string };
     } catch {
       return;
     }
     for (const a of msg.to) for (const fn of this.listeners.get(a) ?? []) fn(msg.event);
+    if (msg.origin === this.origin) for (const hook of this.committedHooks) hook(msg.to, msg.event);
   }
 
   /** One dedicated connection that LISTENs; reconnects with backoff if it drops. */

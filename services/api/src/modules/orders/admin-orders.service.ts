@@ -1,15 +1,19 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { SHOP_PROFILE_RULES } from '@talad/shared';
+import { randomUUID } from 'node:crypto';
 import type { AdminUser, DisputeStatus, PayoutStatus, Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { detectImage } from '../media/image-type.js';
+import { filePrefix, storageFolder } from '../media/storage-keys.js';
 import { StorageService } from '../media/storage.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
-import { addSold, awardPoints, moveOrder, restoreStock } from './order-transitions.js';
+import { addSold, moveOrder, restoreStock, returnPoints } from './order-transitions.js';
 import { shopNet } from './checkout-pricing.js';
 import { paymentOf } from './payment-slips.service.js';
 
 export type DisputeDecision = 'review' | 'refund' | 'reject';
-export type PayoutAction = 'processing' | 'paid' | 'failed';
+export type PayoutAction = 'paid' | 'failed';
 
 const num = (d: Prisma.Decimal | null | undefined) => d?.toNumber() ?? 0;
 const pages = (total: number, pageSize: number) => Math.max(1, Math.ceil(total / pageSize));
@@ -116,9 +120,13 @@ export class AdminOrdersService {
         });
         if (so.status !== 'CANCELLED' && (await moveOrder(tx, so.id, so.status, 'CANCELLED', { cancelReason: resolution }, { ...actor, note: resolution }))) {
           await restoreStock(tx, so.id);
+          await returnPoints(tx, so.id);
         }
+        // A paid transfer joins Refunds (Taladonline sends the money and marks it done there).
         const payment = paymentOf(so);
-        if (payment) await tx.payment.update({ where: { id: payment.id }, data: { status: 'REFUNDED' } });
+        if (payment && !(payment.method !== 'COD' && payment.status === 'PAID')) {
+          await tx.payment.update({ where: { id: payment.id }, data: { status: 'REFUNDED' } });
+        }
         await this.notifications.notifyOrder(tx, target, 'CANCELLED', resolution);
       } else {
         await tx.dispute.update({
@@ -126,8 +134,8 @@ export class AdminOrdersService {
           data: { status: 'RESOLVED_REJECTED', resolution, resolvedById: admin.id, resolvedAt: new Date() },
         });
         if (so.status === 'RETURN_REQUESTED' && (await moveOrder(tx, so.id, 'RETURN_REQUESTED', 'COMPLETED', {}, { ...actor, note: resolution }))) {
+          // The customer asked to return it rather than confirming it: no loyalty points.
           await addSold(tx, so.id);
-          await awardPoints(tx, so.id);
         }
         await this.notifications.notifyOrder(tx, target, 'COMPLETED', null);
       }
@@ -146,8 +154,13 @@ export class AdminOrdersService {
 
   // ─── Payouts ───────────────────────────────────────────────────────────────
 
-  async payouts(filter: { status?: PayoutStatus; shopId?: string; page: number; pageSize: number }) {
-    const where: Prisma.PayoutWhereInput = { ...(filter.status && { status: filter.status }), ...(filter.shopId && { shopId: filter.shopId }) };
+  async payouts(filter: { status?: PayoutStatus; shopId?: string; q?: string; page: number; pageSize: number }) {
+    const q = filter.q?.trim();
+    const where: Prisma.PayoutWhereInput = {
+      ...(filter.status && { status: filter.status }),
+      ...(filter.shopId && { shopId: filter.shopId }),
+      ...(q && { shop: { name: { contains: q, mode: 'insensitive' } } }),
+    };
     const [rows, total, byStatus, unsettled] = await Promise.all([
       this.prisma.payout.findMany({
         where,
@@ -161,8 +174,9 @@ export class AdminOrdersService {
       }),
       this.prisma.payout.count({ where }),
       this.prisma.payout.groupBy({ by: ['status'], _count: { _all: true }, _sum: { netAmount: true } }),
+      // The same orders a payout run would settle (COD money is the shop's already).
       this.prisma.shopOrder.aggregate({
-        where: { status: 'COMPLETED', payoutId: null },
+        where: { status: 'COMPLETED', payoutId: null, payments: { none: { method: 'COD' } } },
         _count: { _all: true },
         _sum: { total: true, commissionAmount: true, platformDiscount: true },
       }),
@@ -196,40 +210,57 @@ export class AdminOrdersService {
     };
   }
 
-  /** One scheduled payout per shop for its completed orders not yet paid out. */
-  async generatePayouts(admin: AdminUser, ip?: string): Promise<{ created: number }> {
+  /**
+   * One payout per shop for its completed orders not yet paid out, so each shop gets a single
+   * transfer however many orders it had. A shop that already has one waiting (scheduled, not
+   * sent) gets the new orders added to it instead of a second payout. Cash on delivery is left
+   * out: the shop already has that money and transfers the commission itself monthly.
+   */
+  async generatePayouts(admin: AdminUser, ip?: string): Promise<{ created: number; updated: number }> {
     const cutoff = new Date();
     const orders = await this.prisma.shopOrder.findMany({
-      where: { status: 'COMPLETED', payoutId: null, updatedAt: { lte: cutoff } },
+      where: { status: 'COMPLETED', payoutId: null, updatedAt: { lte: cutoff }, payments: { none: { method: 'COD' } } },
       select: { id: true, shopId: true, total: true, platformDiscount: true, commissionAmount: true, createdAt: true },
     });
     const byShop = new Map<string, typeof orders>();
     for (const o of orders) byShop.set(o.shopId, [...(byShop.get(o.shopId) ?? []), o]);
 
     let created = 0;
+    let updated = 0;
     for (const [shopId, list] of byShop) {
       // What customers paid plus platform coupons Taladonline pays back (shopNet = gross − commission).
       const gross = list.reduce((s, o) => s + num(o.total) + num(o.platformDiscount), 0);
       const commission = list.reduce((s, o) => s + num(o.commissionAmount), 0);
-      await this.prisma.$transaction(async (tx) => {
-        const payout = await tx.payout.create({
-          data: {
-            shopId,
-            periodStart: new Date(Math.min(...list.map((o) => o.createdAt.getTime()))),
-            periodEnd: cutoff,
-            grossAmount: gross,
-            commissionAmount: commission,
-            netAmount: gross - commission,
-            status: 'SCHEDULED',
-          },
-        });
+      const merged = await this.prisma.$transaction(async (tx) => {
+        const periodStart = new Date(Math.min(...list.map((o) => o.createdAt.getTime())));
+        const open = await tx.payout.findFirst({ where: { shopId, status: 'SCHEDULED' }, orderBy: { createdAt: 'desc' } });
+        const payout = open
+          ? await tx.payout.update({
+              where: { id: open.id },
+              data: {
+                periodStart: periodStart < open.periodStart ? periodStart : open.periodStart,
+                periodEnd: cutoff,
+                grossAmount: { increment: gross },
+                commissionAmount: { increment: commission },
+                netAmount: { increment: gross - commission },
+              },
+            })
+          : await tx.payout.create({
+              data: { shopId, periodStart, periodEnd: cutoff, grossAmount: gross, commissionAmount: commission, netAmount: gross - commission, status: 'SCHEDULED' },
+            });
         // Only orders still unclaimed (a concurrent run can't settle them twice).
-        await tx.shopOrder.updateMany({ where: { id: { in: list.map((o) => o.id) }, payoutId: null }, data: { payoutId: payout.id } });
-        await this.audit.log({ adminId: admin.id, action: 'payout.create', entityType: 'Payout', entityId: payout.id, changes: { shopId, orders: list.length, net: gross - commission }, ip }, tx);
+        const claimed = await tx.shopOrder.updateMany({ where: { id: { in: list.map((o) => o.id) }, payoutId: null }, data: { payoutId: payout.id } });
+        if (claimed.count !== list.length) throw new ConflictException({ code: 'PAYOUTS_CHANGED', message: 'Another payout run just settled some of these orders' });
+        await this.audit.log(
+          { adminId: admin.id, action: open ? 'payout.add' : 'payout.create', entityType: 'Payout', entityId: payout.id, changes: { shopId, orders: list.length, net: gross - commission }, ip },
+          tx,
+        );
+        return open !== null;
       });
-      created++;
+      if (merged) updated++;
+      else created++;
     }
-    return { created };
+    return { created, updated };
   }
 
   /** One payout with where to send it (bank account, QR) and the orders it settles. */
@@ -260,6 +291,7 @@ export class AdminOrdersService {
       status: p.status,
       paidAt: p.paidAt,
       reference: p.reference,
+      hasSlip: p.slipKey !== null,
       createdAt: p.createdAt,
       orders: p.orders.map((o) => {
         const total = num(o.total);
@@ -287,20 +319,51 @@ export class AdminOrdersService {
     return this.storage.get(p.shop.paymentQrKey);
   }
 
+  /**
+   * Taladonline's transfer slip for a payout still open (multipart `file`); a new one replaces
+   * the last. Uploaded before marking it paid.
+   */
+  async uploadPayoutSlip(admin: AdminUser, id: string, file: Express.Multer.File | undefined) {
+    if (!file) throw new BadRequestException({ code: 'SLIP_REQUIRED', message: 'No file uploaded' });
+    if (file.size > SHOP_PROFILE_RULES.imageMaxBytes) throw new BadRequestException({ code: 'FILE_TOO_LARGE', message: 'Image must be 5 MB or smaller' });
+    const kind = detectImage(file.buffer);
+    if (!kind) throw new BadRequestException({ code: 'INVALID_IMAGE', message: 'Upload a PNG, JPG or WebP image' });
+    const payout = await this.prisma.payout.findUnique({ where: { id }, select: { shopId: true, status: true, slipKey: true } });
+    if (!payout) throw new NotFoundException('Payout not found');
+    if (payout.status === 'PAID' || payout.status === 'FAILED') {
+      throw new ConflictException({ code: 'INVALID_TRANSITION', message: 'This payout is already settled' });
+    }
+    const key = `${filePrefix(storageFolder.shopPayouts(payout.shopId), 'payout-slip')}${randomUUID()}.${kind.ext}`;
+    await this.storage.put(key, file.buffer, kind.type);
+    await this.prisma.payout.update({ where: { id }, data: { slipKey: key } });
+    if (payout.slipKey) await this.storage.remove(payout.slipKey).catch(() => {});
+    await this.audit.log({ adminId: admin.id, action: 'payout.slip', entityType: 'Payout', entityId: id });
+    return { id, hasSlip: true };
+  }
+
+  async payoutSlip(id: string) {
+    const p = await this.prisma.payout.findUnique({ where: { id }, select: { slipKey: true } });
+    if (!p?.slipKey) throw new NotFoundException('No transfer slip');
+    return this.storage.get(p.slipKey);
+  }
+
   async updatePayout(admin: AdminUser, id: string, action: PayoutAction, reference: string | null, ip?: string) {
     const payout = await this.prisma.payout.findUnique({ where: { id }, include: { shop: { select: { ownerId: true } } } });
     if (!payout) throw new NotFoundException('Payout not found');
+    // PROCESSING is legacy (no longer set): those payouts can still be closed.
     const allowed: Record<PayoutAction, PayoutStatus[]> = {
-      processing: ['SCHEDULED'],
       paid: ['SCHEDULED', 'PROCESSING'],
       failed: ['SCHEDULED', 'PROCESSING'],
     };
     if (!allowed[action].includes(payout.status)) {
       throw new ConflictException({ code: 'INVALID_TRANSITION', message: 'This payout is already settled' });
     }
-    if (action === 'paid' && !reference) throw new BadRequestException({ code: 'REFERENCE_REQUIRED', message: 'Enter the bank transfer reference' });
+    // Proof of the transfer: a photo of the slip is required; the reference is optional.
+    if (action === 'paid' && !payout.slipKey) {
+      throw new BadRequestException({ code: 'SLIP_REQUIRED', message: 'Upload the transfer slip first' });
+    }
 
-    const status: PayoutStatus = action === 'processing' ? 'PROCESSING' : action === 'paid' ? 'PAID' : 'FAILED';
+    const status: PayoutStatus = action === 'paid' ? 'PAID' : 'FAILED';
     await this.prisma.$transaction(async (tx) => {
       await tx.payout.update({
         where: { id },
@@ -311,8 +374,8 @@ export class AdminOrdersService {
       if (action === 'paid' && payout.shop.ownerId) {
         const amount = `₭${num(payout.netAmount).toLocaleString('en-US')}`;
         await this.notifications.send(tx, payout.shop.ownerId, 'SYSTEM', {
-          lo: { title: 'ໂອນເງິນໃຫ້ຮ້ານແລ້ວ', body: `Taladonline ໂອນ ${amount} ເຂົ້າບັນຊີຂອງທ່ານແລ້ວ (ອ້າງອີງ ${reference}).` },
-          en: { title: 'Payout sent', body: `Taladonline paid ${amount} to your account (ref. ${reference}).` },
+          lo: { title: 'ໂອນເງິນໃຫ້ຮ້ານແລ້ວ', body: `Taladonline ໂອນ ${amount} ເຂົ້າບັນຊີຂອງທ່ານແລ້ວ${reference ? ` (ອ້າງອີງ ${reference})` : ''}.${payout.slipKey ? ' ເບິ່ງສະລິບໄດ້ໃນໜ້າການເງິນ.' : ''}` },
+          en: { title: 'Payout sent', body: `Taladonline paid ${amount} to your account${reference ? ` (ref. ${reference})` : ''}.${payout.slipKey ? ' See the slip in Finance.' : ''}` },
         }, { link: '/finance' });
       }
       await this.audit.log({ adminId: admin.id, action: `payout.${action}`, entityType: 'Payout', entityId: id, changes: { from: payout.status, to: status, reference }, ip }, tx);

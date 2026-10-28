@@ -3,7 +3,7 @@ import { Prisma } from '../../../generated/prisma/client.js';
 import { PrismaService } from '../../../prisma/prisma.service.js';
 import { MediaService } from '../../media/media.service.js';
 import { flashPrice, FlashSalePricingService, type FlashDiscount } from '../../promotions/flash-sale-pricing.service.js';
-import { avatarPrefix } from '../../auth/customer-auth.service.js';
+import { feedPostInclude, toFeedPost } from '../videos/feed-posts.service.js';
 import type { FeedQuery } from './feed.query.js';
 import { productOptions, variantLabel, type ProductOption } from './product-options.js';
 import type { ListProductsQuery } from './list-products.query.js';
@@ -28,7 +28,7 @@ export interface ProductCard {
 export interface FeedItem extends Omit<ProductCard, 'shop'> {
   kind: 'product';
   videoUrl: string;
-  shop: { slug: string; name: string; logoUrl: string | null };
+  shop: { id: string; slug: string; name: string; logoUrl: string | null };
   /** Units available (all variants together). */
   stock: number;
   hasVariants: boolean;
@@ -43,7 +43,7 @@ export interface FeedPostItem {
   caption: string;
   createdAt: Date;
   author: { id: string; name: string; avatarUrl: string | null };
-  stats: { views: number; likes: number; shares: number };
+  stats: { views: number; likes: number; comments: number; shares: number };
 }
 
 export interface FeedPage {
@@ -105,6 +105,20 @@ const cardSelect = {
 } satisfies Prisma.ProductSelect;
 
 type CardRow = Prisma.ProductGetPayload<{ select: typeof cardSelect }>;
+
+/** A product video in the feed: the card plus its stock, numbers and shop. */
+const feedSelect = {
+  ...cardSelect,
+  publishedAt: true,
+  videoKey: true,
+  stock: true,
+  variants: { select: { price: true, stock: true } },
+  videoViewCount: true,
+  videoShareCount: true,
+  videoCommentCount: true,
+  _count: { select: { wishlistBy: true } },
+  shop: { select: { id: true, slug: true, name: true, logoUrl: true } },
+} satisfies Prisma.ProductSelect;
 
 export const SHOP_PRODUCT_SORTS = ['popular', 'new', 'price_asc', 'price_desc'] as const;
 export type ShopProductSort = (typeof SHOP_PRODUCT_SORTS)[number];
@@ -201,24 +215,13 @@ export class ProductsService {
         where: { ...VISIBLE, videoKey: { not: null }, ...before('publishedAt') },
         orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
         take: query.limit + 1,
-        select: {
-          ...cardSelect,
-          publishedAt: true,
-          videoKey: true,
-          stock: true,
-          variants: { select: { price: true, stock: true } },
-          videoViewCount: true,
-          videoShareCount: true,
-          videoCommentCount: true,
-          _count: { select: { wishlistBy: true } },
-          shop: { select: { slug: true, name: true, logoUrl: true } },
-        },
+        select: feedSelect,
       }),
       this.prisma.feedPost.findMany({
         where: { isHidden: false, customer: { isActive: true }, ...before('createdAt') },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: query.limit + 1,
-        include: { customer: { select: { id: true, name: true, avatarUrl: true } } },
+        include: feedPostInclude,
       }),
     ]);
     const merged = [
@@ -230,35 +233,35 @@ export class ProductsService {
     const last = page.at(-1);
     return {
       items: page.map((e): FeedItem | FeedPostItem => {
-        if (e.post) {
-          const { customer: c } = e.post;
-          return {
-            kind: 'post',
-            id: e.post.id,
-            videoUrl: this.media.publicUrl(e.post.videoKey),
-            caption: e.post.caption,
-            createdAt: e.post.createdAt,
-            // Uploaded avatars are private files; only social-login pictures are public links.
-            author: { id: c.id, name: c.name, avatarUrl: c.avatarUrl && !c.avatarUrl.startsWith(avatarPrefix(c.id)) ? c.avatarUrl : null },
-            stats: { views: e.post.viewCount, likes: e.post.likeCount, shares: e.post.shareCount },
-          };
-        }
-        const { videoKey, shop, stock, videoViewCount, videoShareCount, videoCommentCount, _count, publishedAt: _publishedAt, ...row } = e.product!;
-        return {
-          kind: 'product',
-          ...this.toCard({ ...row, shop }, discounts.get(row.id)),
-          videoUrl: this.media.publicUrl(videoKey!),
-          shop: {
-            slug: shop.slug,
-            name: shop.name,
-            logoUrl: shop.logoUrl ? this.media.publicUrl(shop.logoUrl) : null,
-          },
-          stock: row.variants.length ? row.variants.reduce((sum, v) => sum + v.stock, 0) : stock,
-          hasVariants: row.variants.length > 0,
-          stats: { views: videoViewCount, favorites: _count.wishlistBy, comments: videoCommentCount, shares: videoShareCount },
-        };
+        if (e.post) return toFeedPost(this.media, e.post);
+        return this.toFeedItem(e.product!, discounts.get(e.product!.id));
       }),
       nextCursor: merged.length > query.limit && last ? `${last.time.getTime()}.${last.id}` : null,
+    };
+  }
+
+  /** One product video, for a link to it (a notification, a share): the feed opens on it. */
+  async feedVideo(productId: string): Promise<FeedItem> {
+    const row = await this.prisma.product.findFirst({ where: { id: productId, ...VISIBLE, videoKey: { not: null } }, select: feedSelect });
+    if (!row) throw new NotFoundException({ code: 'VIDEO_NOT_FOUND', message: 'Video not found' });
+    return this.toFeedItem(row, (await this.flash.discounts([row.id])).get(row.id));
+  }
+
+  private toFeedItem(product: Prisma.ProductGetPayload<{ select: typeof feedSelect }>, discount?: FlashDiscount): FeedItem {
+    const { videoKey, shop, stock, videoViewCount, videoShareCount, videoCommentCount, _count, publishedAt: _publishedAt, ...row } = product;
+    return {
+      kind: 'product',
+      ...this.toCard({ ...row, shop }, discount),
+      videoUrl: this.media.publicUrl(videoKey!),
+      shop: {
+        id: shop.id,
+        slug: shop.slug,
+        name: shop.name,
+        logoUrl: shop.logoUrl ? this.media.publicUrl(shop.logoUrl) : null,
+      },
+      stock: row.variants.length ? row.variants.reduce((sum, v) => sum + v.stock, 0) : stock,
+      hasVariants: row.variants.length > 0,
+      stats: { views: videoViewCount, favorites: _count.wishlistBy, comments: videoCommentCount, shares: videoShareCount },
     };
   }
 

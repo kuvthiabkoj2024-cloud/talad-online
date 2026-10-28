@@ -72,7 +72,8 @@ export class ShopApplicationService {
       email: shop.email,
       phone: shop.phone,
       address: shop.address,
-      documents: shop.kycDocuments.map((d) => ({ id: d.id, type: d.type, key: d.fileKey, createdAt: d.createdAt })),
+      // A tax certificate is no longer asked for (old ones were moved to OTHER).
+      documents: shop.kycDocuments.map((d) => ({ id: d.id, type: d.type === 'TAX_CERTIFICATE' ? 'OTHER' : d.type, key: d.fileKey, createdAt: d.createdAt })),
       createdAt: shop.createdAt,
       updatedAt: shop.updatedAt,
     };
@@ -180,6 +181,9 @@ export class ShopApplicationService {
 
     if (!dto.documents.some((d) => d.type === 'NATIONAL_ID')) {
       throw new BadRequestException({ code: 'ID_REQUIRED', message: 'Add the owner’s ID card or passport' });
+    }
+    if (!dto.documents.some((d) => d.type === 'ID_SELFIE')) {
+      throw new BadRequestException({ code: 'SELFIE_REQUIRED', message: 'Add a photo of the owner holding the ID card or passport' });
     }
     const keys = dto.documents.map((d) => d.key);
     const own = kycPrefix(customerId);

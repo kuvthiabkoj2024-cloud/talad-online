@@ -128,6 +128,11 @@ export class ShopProfileDto {
   @IsBoolean()
   codTermsAccepted?: boolean;
 
+  /** Let customers collect orders at the shop's address; left out, the current choice stays. */
+  @IsOptional()
+  @IsBoolean()
+  pickupEnabled?: boolean;
+
   /** The shop's own urgent delivery; left out, the current settings stay. */
   @IsOptional()
   @ValidateNested()

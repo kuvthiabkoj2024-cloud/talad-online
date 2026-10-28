@@ -1,6 +1,6 @@
 "use server";
 
-import { API_URL, apiGet, type ProductDetail, type VideoComment, type VideoCommentPage } from "./api";
+import { API_URL, apiGet, type CommentTarget, type ProductDetail, type VideoComment, type VideoCommentPage } from "./api";
 import { getSessionToken } from "./session";
 
 /** Feed-video engagement (views, shares, comments, favorites) and the Buy now options. */
@@ -55,31 +55,34 @@ export async function recordVideoShare(productId: string): Promise<number | null
   return res.ok ? res.data.shares : null;
 }
 
-export async function loadVideoComments(productId: string, cursor?: string): Promise<VideoCommentPage | null> {
-  if (!isId(productId) || (cursor !== undefined && !isId(cursor))) return null;
-  return apiGet<VideoCommentPage>(`/products/${productId}/video/comments${cursor ? `?cursor=${cursor}` : ""}`);
+const validTarget = (t: CommentTarget) => (t?.kind === "product" || t?.kind === "post") && isId(t.id);
+/** Where a video's comments are read (product video or customer post). */
+const commentsPath = (t: CommentTarget) => (t.kind === "product" ? `/products/${t.id}/video/comments` : `/feed-posts/${t.id}/comments`);
+
+export async function loadVideoComments(target: CommentTarget, cursor?: string): Promise<VideoCommentPage | null> {
+  if (!validTarget(target) || (cursor !== undefined && !isId(cursor))) return null;
+  return apiGet<VideoCommentPage>(`${commentsPath(target)}${cursor ? `?cursor=${cursor}` : ""}`);
 }
 
 export async function loadVideoReplies(
-  productId: string,
+  target: CommentTarget,
   commentId: string,
   cursor?: string,
 ): Promise<VideoCommentPage | null> {
-  if (!isId(productId) || !isId(commentId) || (cursor !== undefined && !isId(cursor))) return null;
-  return apiGet<VideoCommentPage>(
-    `/products/${productId}/video/comments/${commentId}/replies${cursor ? `?cursor=${cursor}` : ""}`,
-  );
+  if (!validTarget(target) || !isId(commentId) || (cursor !== undefined && !isId(cursor))) return null;
+  return apiGet<VideoCommentPage>(`${commentsPath(target)}/${commentId}/replies${cursor ? `?cursor=${cursor}` : ""}`);
 }
 
 export async function postVideoComment(
-  productId: string,
+  target: CommentTarget,
   body: string,
   parentId?: string,
 ): Promise<VideoResult<{ comment: VideoComment }>> {
-  if (!isId(productId) || (parentId !== undefined && !isId(parentId)) || typeof body !== "string") {
+  if (!validTarget(target) || (parentId !== undefined && !isId(parentId)) || typeof body !== "string") {
     return { ok: false, error: "generic" };
   }
-  const res = await call<VideoComment>("POST", `/me/videos/${productId}/comments`, {
+  const path = target.kind === "product" ? `/me/videos/${target.id}/comments` : `/me/feed-posts/${target.id}/comments`;
+  const res = await call<VideoComment>("POST", path, {
     auth: true,
     body: { body, ...(parentId && { parentId }) },
   });

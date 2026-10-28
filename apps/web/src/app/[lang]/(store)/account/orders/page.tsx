@@ -136,7 +136,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/[lang]/ac
                   </span>
                   <OrderStatusBadge
                     status={order.status}
-                    label={order.awaitingConfirmation ? checkoutDict.verifying : dict.orderStatus[order.status]}
+                    label={order.awaitingConfirmation ? checkoutDict.verifying : order.paymentCheck === "rejected" ? checkoutDict.slipRejectedTitle : dict.orderStatus[order.status]}
                   />
                 </div>
 

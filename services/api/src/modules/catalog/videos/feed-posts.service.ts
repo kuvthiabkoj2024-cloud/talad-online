@@ -2,14 +2,36 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundEx
 import { FEED_POST_RULES, MEDIA_LIMITS } from '@talad/shared';
 import { randomUUID } from 'node:crypto';
 import { open } from 'node:fs/promises';
+import type { Prisma } from '../../../generated/prisma/client.js';
 import { PrismaService } from '../../../prisma/prisma.service.js';
 import { avatarPrefix } from '../../auth/customer-auth.service.js';
 import { MediaService } from '../../media/media.service.js';
+import { NotificationsService } from '../../notifications/notifications.service.js';
 import type { FeedPostItem } from '../products/products.service.js';
 import { filePrefix, storageFolder } from '../../media/storage-keys.js';
 import { StorageService } from '../../media/storage.service.js';
 import { discardTempFile } from '../../media/temp-file-storage.js';
 import { detectVideo } from '../../media/video-type.js';
+
+export const feedPostInclude = { customer: { select: { id: true, name: true, avatarUrl: true } } } as const;
+type PostRow = Prisma.FeedPostGetPayload<{ include: typeof feedPostInclude }>;
+
+/** Uploaded avatars are private files; only social-login pictures are public links. */
+export const publicAvatar = (c: { id: string; avatarUrl: string | null }) => (c.avatarUrl && !c.avatarUrl.startsWith(avatarPrefix(c.id)) ? c.avatarUrl : null);
+
+/** A customer's post as the feed (and their profile) shows it. */
+export function toFeedPost(media: MediaService, p: PostRow): FeedPostItem {
+  const c = p.customer;
+  return {
+    kind: 'post',
+    id: p.id,
+    videoUrl: media.publicUrl(p.videoKey),
+    caption: p.caption,
+    createdAt: p.createdAt,
+    author: { id: c.id, name: c.name, avatarUrl: publicAvatar(c) },
+    stats: { views: p.viewCount, likes: p.likeCount, comments: p.commentCount, shares: p.shareCount },
+  };
+}
 
 /** A caption without control characters or runs of blank lines. */
 const cleanCaption = (raw: string | undefined) =>
@@ -32,25 +54,17 @@ export class FeedPostsService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly media: MediaService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** One post, for a shared link (the feed opens on it). */
   async one(postId: string): Promise<FeedPostItem> {
     const p = await this.prisma.feedPost.findFirst({
       where: { id: postId, isHidden: false, customer: { isActive: true } },
-      include: { customer: { select: { id: true, name: true, avatarUrl: true } } },
+      include: feedPostInclude,
     });
     if (!p) throw new NotFoundException({ code: 'POST_NOT_FOUND', message: 'Post not found' });
-    const c = p.customer;
-    return {
-      kind: 'post',
-      id: p.id,
-      videoUrl: this.media.publicUrl(p.videoKey),
-      caption: p.caption,
-      createdAt: p.createdAt,
-      author: { id: c.id, name: c.name, avatarUrl: c.avatarUrl && !c.avatarUrl.startsWith(avatarPrefix(c.id)) ? c.avatarUrl : null },
-      stats: { views: p.viewCount, likes: p.likeCount, shares: p.shareCount },
-    };
+    return toFeedPost(this.media, p);
   }
 
   /** Stores the video (streamed from multer's temp file) and publishes the post. */
@@ -85,7 +99,7 @@ export class FeedPostsService {
   }
 
   async setLike(customerId: string, postId: string, like: boolean): Promise<{ liked: boolean; likes: number }> {
-    await this.visible(postId);
+    const { customerId: authorId } = await this.visible(postId);
     const likes = await this.prisma.$transaction(async (tx) => {
       const changed = like
         ? (await tx.feedPostLike.createMany({ data: [{ customerId, postId }], skipDuplicates: true })).count
@@ -93,6 +107,14 @@ export class FeedPostsService {
       const post = changed
         ? await tx.feedPost.update({ where: { id: postId }, data: { likeCount: { increment: like ? 1 : -1 } }, select: { likeCount: true } })
         : await tx.feedPost.findUniqueOrThrow({ where: { id: postId }, select: { likeCount: true } });
+      // Only a new like is announced (tapping like again doesn't notify twice).
+      if (like && changed && authorId !== customerId) {
+        const who = (await tx.customer.findUnique({ where: { id: customerId }, select: { name: true } }))?.name || '—';
+        await this.notifications.send(tx, authorId, 'SYSTEM', {
+          lo: { title: `${who} ມັກວິດີໂອຂອງທ່ານ`, body: '❤️' },
+          en: { title: `${who} liked your video`, body: '❤️' },
+        }, { link: `/feed?post=${postId}` });
+      }
       return Math.max(0, post.likeCount);
     });
     return { liked: like, likes };
@@ -117,7 +139,8 @@ export class FeedPostsService {
   }
 
   private async visible(postId: string) {
-    const post = await this.prisma.feedPost.findFirst({ where: { id: postId, isHidden: false }, select: { id: true } });
+    const post = await this.prisma.feedPost.findFirst({ where: { id: postId, isHidden: false }, select: { customerId: true } });
     if (!post) throw new NotFoundException({ code: 'POST_NOT_FOUND', message: 'Post not found' });
+    return post;
   }
 }

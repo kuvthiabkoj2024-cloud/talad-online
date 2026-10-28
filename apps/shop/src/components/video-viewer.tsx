@@ -62,7 +62,20 @@ function Avatar({ name, src, className }: { name: string; src: string | null; cl
  * them, the action rail (likes, comments, shares, views), and a side panel (a bottom sheet on
  * phones) with the comments — answered as the shop — and who liked the video.
  */
-export function VideoViewer({ videos, index, onIndex, onClose }: { videos: ShopVideo[]; index: number; onIndex: (i: number) => void; onClose: () => void }) {
+export function VideoViewer({
+  videos,
+  index,
+  onIndex,
+  onClose,
+  openComments = false,
+}: {
+  videos: ShopVideo[]
+  index: number
+  onIndex: (i: number) => void
+  onClose: () => void
+  /** Opened from a notification about a comment: start with the comments showing. */
+  openComments?: boolean
+}) {
   const { t, locale } = useI18n()
   const v = t.videos.viewer
   const video = videos[index]
@@ -71,7 +84,7 @@ export function VideoViewer({ videos, index, onIndex, onClose }: { videos: ShopV
   const [paused, setPaused] = useState(false)
   const [tab, setTab] = useState<Tab>('comments')
   // Phones: the panel is a sheet opened from the rail. Desktop: always beside the video.
-  const [sheet, setSheet] = useState(false)
+  const [sheet, setSheet] = useState(openComments)
   const player = useRef<HTMLVideoElement>(null)
   const lastWheel = useRef(0)
   const touchY = useRef(0)

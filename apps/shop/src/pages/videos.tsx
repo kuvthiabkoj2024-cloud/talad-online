@@ -28,6 +28,13 @@ export function VideosPage() {
   const { params, set, page } = useUrlParams()
   const tab = params.get('tab') === 'without' ? 'without' : 'with'
   const [playing, setPlaying] = useState<number | null>(null)
+  // `?video=<productId>` (a notification about a like or comment): open that video by itself.
+  const linked = params.get('video')
+  const linkedVideo = useQuery({
+    queryKey: [...queryKeys.videos, 'one', linked],
+    queryFn: () => api<ShopVideoList>(`/me/shop/videos?productId=${linked}&pageSize=1`),
+    enabled: !!linked,
+  })
 
   const videos = useQuery({
     queryKey: [...queryKeys.videos, 'list', page],
@@ -90,6 +97,15 @@ export function VideosPage() {
         )}
       </PageBody>
       {playing !== null && videos.data && <VideoViewer videos={videos.data.items} index={playing} onIndex={setPlaying} onClose={() => setPlaying(null)} />}
+      {linked && linkedVideo.data?.items.length ? (
+        <VideoViewer
+          videos={linkedVideo.data.items}
+          index={0}
+          onIndex={() => {}}
+          onClose={() => set({ video: undefined, comment: undefined })}
+          openComments={!!params.get('comment')}
+        />
+      ) : null}
     </>
   )
 }

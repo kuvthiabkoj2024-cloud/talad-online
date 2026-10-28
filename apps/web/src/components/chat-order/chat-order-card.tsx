@@ -291,11 +291,11 @@ export function ChatOrderCard({ orderId, summary, locale, dicts }: { orderId: st
           </Row>
           {view.paymentMethod === "BANK_TRANSFER" && view.transfer && (
             <PaymentPanel
-              title={view.shop.name}
-              qrSrc={view.transfer.hasQr ? `/api/shop-qr/${view.shop.id}` : null}
+              title={dicts.checkout.payTaladonline}
+              qrSrc={view.transfer.hasQr ? "/api/payment-qr" : null}
               amount={formatMoney(view.total, locale)}
               transfer={view.transfer}
-              slip={view.slipAttached && !slip.preview ? { ...emptySlip, attached: true } : slip}
+              slips={view.slipAttached && !slip.preview ? [{ ...emptySlip, attached: true }] : slip.preview ? [slip] : []}
               onPickSlip={(file) => void pickSlip(file)}
               dict={dicts.checkout}
               bare

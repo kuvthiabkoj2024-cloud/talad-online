@@ -1,6 +1,6 @@
 "use server";
 
-import type { CheckoutPaymentMethod } from "@talad/shared";
+import { MAX_PAYMENT_SLIPS, type CheckoutPaymentMethod } from "@talad/shared";
 import { API_URL } from "./api";
 import type { CartErrorCode, CartResult, CheckoutQuote, PlacedOrder } from "./cart";
 import { getSessionToken } from "./session";
@@ -89,6 +89,10 @@ export interface CheckoutSelection {
   addressId?: string;
   /** Shops whose own urgent delivery the customer chose. */
   urgentShopIds?: string[];
+  /** Shops the customer will collect from in person. */
+  pickupShopIds?: string[];
+  /** Spend loyalty points (as many as the balance and total allow). */
+  usePoints?: boolean;
 }
 
 /** Re-price the checkout after a quantity, courier, coupon or address change. */
@@ -108,25 +112,27 @@ export async function placeOrder(input: {
   deliveryProviderId?: string;
   couponCode?: string;
   urgentShopIds?: string[];
+  pickupShopIds?: string[];
+  usePoints?: boolean;
   paymentMethod: CheckoutPaymentMethod;
   expectedTotal: number;
-  /** { [shopId]: slipKey } for QR transfers. */
-  slips?: Record<string, string>;
+  /** BANK_TRANSFER: 1–3 slip keys for the whole order (one transfer to Taladonline). */
+  slipKeys?: string[];
   note?: string;
 }): Promise<CartResult<{ order: PlacedOrder }>> {
   const res = await send<PlacedOrder>("POST", "/me/checkout", input);
   return res.ok ? { ok: true, order: res.data } : res;
 }
 
-/** Development only: stands in for a payment gateway callback. */
-export async function simulatePayment(shopOrderNumber: string): Promise<CartResult> {
-  const res = await send("POST", `/me/checkout/simulate-payment/${encodeURIComponent(shopOrderNumber)}`);
-  return res.ok ? { ok: true } : res;
-}
-
 /** "I received it": completes a delivered order now (interim — returns come later). */
 export async function receiveOrder(shopOrderNumber: string): Promise<CartResult> {
   const res = await send("POST", `/me/orders/${encodeURIComponent(shopOrderNumber)}/receive`);
+  return res.ok ? { ok: true } : res;
+}
+
+/** Cancels an unpaid transfer whose slips were rejected (every shop in that checkout). */
+export async function cancelOrder(shopOrderNumber: string): Promise<CartResult> {
+  const res = await send("POST", `/me/orders/${encodeURIComponent(shopOrderNumber)}/cancel`);
   return res.ok ? { ok: true } : res;
 }
 
@@ -140,12 +146,12 @@ export async function uploadCheckoutSlip(form: FormData): Promise<CartResult<{ s
   return res.ok ? { ok: true, slipKey: res.data.slipKey } : res;
 }
 
-/** Pay later / replace a slip on an order still awaiting payment. */
-export async function attachOrderSlip(orderNumber: string, form: FormData): Promise<CartResult> {
-  const slip = form.get("slip");
-  if (!(slip instanceof File) || slip.size === 0) return { ok: false, error: "INVALID_IMAGE" };
+/** `slips` in the form data: 1–3 new slips for an order still waiting for payment (e.g. after a rejection). */
+export async function attachOrderSlips(orderNumber: string, form: FormData): Promise<CartResult> {
+  const files = form.getAll("slips").filter((f): f is File => f instanceof File && f.size > 0);
+  if (!files.length || files.length > MAX_PAYMENT_SLIPS) return { ok: false, error: "INVALID_IMAGE" };
   const upload = new FormData();
-  upload.set("file", slip);
-  const res = await send("POST", `/me/orders/${encodeURIComponent(orderNumber)}/payment-slip`, upload);
+  for (const f of files) upload.append("files", f);
+  const res = await send("POST", `/me/orders/${encodeURIComponent(orderNumber)}/payment-slips`, upload);
   return res.ok ? { ok: true } : res;
 }

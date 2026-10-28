@@ -1,9 +1,10 @@
 import { Button } from '@talad/ui/components/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@talad/ui/components/card'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@talad/ui/components/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@talad/ui/components/table'
 import { cn } from '@talad/ui/lib/utils'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { Download, LoaderCircle, Wallet } from 'lucide-react'
+import { Download, LoaderCircle, ReceiptText, Wallet } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { FilterTabs } from '@/components/list-controls'
@@ -165,7 +166,8 @@ export function FinancePage() {
                             <span className="block">
                               {formatDate(p.periodStart, locale)} – {formatDate(p.periodEnd, locale)}
                             </span>
-                            {p.reference && <span className="font-mono text-xs text-muted-foreground">{fill(t.finance.reference, { ref: p.reference })}</span>}
+                            {p.reference && <span className="block font-mono text-xs text-muted-foreground">{fill(t.finance.reference, { ref: p.reference })}</span>}
+                            {p.hasSlip && <PayoutSlip id={p.id} />}
                           </TableCell>
                           <TableCell className="text-right tabular-nums">{formatMoney(p.gross, locale)}</TableCell>
                           <TableCell className="hidden text-right text-muted-foreground tabular-nums sm:table-cell">−{formatMoney(p.commission, locale)}</TableCell>
@@ -204,5 +206,42 @@ function Kpi({ label, value, hint, className }: { label: string; value: string; 
       </CardHeader>
       {hint && <CardContent className="text-xs text-muted-foreground">{hint}</CardContent>}
     </Card>
+  )
+}
+
+/** Taladonline's transfer slip for a payout, fetched (with the session) only when opened. */
+function PayoutSlip({ id }: { id: string }) {
+  const { t } = useI18n()
+  const [open, setOpen] = useState(false)
+  const slip = useQuery({
+    queryKey: ['shop', 'payout-slip', id],
+    enabled: open,
+    staleTime: Infinity,
+    queryFn: async () => {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/me/shop/finance/payouts/${id}/slip`, { headers: { Authorization: `Bearer ${getToken()}` } })
+      if (!res.ok) throw new Error(String(res.status))
+      return URL.createObjectURL(await res.blob())
+    },
+  })
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} className="mt-0.5 flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+        <ReceiptText className="size-3.5" />
+        {t.finance.viewSlip}
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t.finance.slip}</DialogTitle>
+            <DialogDescription className="sr-only">{t.finance.slip}</DialogDescription>
+          </DialogHeader>
+          {slip.data ? (
+            <img src={slip.data} alt={t.finance.slip} className="max-h-[75svh] w-full rounded-lg object-contain" />
+          ) : (
+            <LoaderCircle className="mx-auto my-16 size-6 animate-spin text-muted-foreground" />
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

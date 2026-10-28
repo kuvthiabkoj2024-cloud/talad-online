@@ -64,18 +64,33 @@ describe('allocateDiscount', () => {
   });
 });
 
+const pct = (value: number) => ({ type: 'PERCENT' as const, value });
+const fixed = (value: number) => ({ type: 'FIXED' as const, value });
+
 describe('itemCommissions', () => {
   it('uses each item\'s own rate', () => {
-    const c = itemCommissions([{ id: 'a', lineTotal: 100_000, rate: 5 }, { id: 'b', lineTotal: 50_000, rate: 10 }], 0);
+    const c = itemCommissions([{ id: 'a', lineTotal: 100_000, quantity: 1, commission: pct(5) }, { id: 'b', lineTotal: 50_000, quantity: 2, commission: pct(10) }], 0);
     expect(c.get('a')).toBe(5_000);
     expect(c.get('b')).toBe(5_000);
   });
 
   it('charges on what an item sold for after its share of a shop coupon', () => {
     // ₭30,000 off split 2:1 → a pays on ₭80,000, b on ₭40,000.
-    const c = itemCommissions([{ id: 'a', lineTotal: 100_000, rate: 5 }, { id: 'b', lineTotal: 50_000, rate: 10 }], 30_000);
+    const c = itemCommissions([{ id: 'a', lineTotal: 100_000, quantity: 1, commission: pct(5) }, { id: 'b', lineTotal: 50_000, quantity: 2, commission: pct(10) }], 30_000);
     expect(c.get('a')).toBe(4_000);
     expect(c.get('b')).toBe(4_000);
+  });
+
+  it('charges a fixed amount per unit, never more than the line', () => {
+    const c = itemCommissions(
+      [
+        { id: 'a', lineTotal: 9_000_000, quantity: 3, commission: fixed(50_000) },
+        { id: 'b', lineTotal: 20_000, quantity: 1, commission: fixed(50_000) },
+      ],
+      0,
+    );
+    expect(c.get('a')).toBe(150_000);
+    expect(c.get('b')).toBe(20_000);
   });
 });
 

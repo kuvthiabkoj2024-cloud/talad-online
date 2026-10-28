@@ -1,6 +1,8 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { AdminUser, Prisma, ShopStatus } from '../../generated/prisma/client.js';
+import { commissionOf, type Commission } from '@talad/shared';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { commissionData } from '../catalog/commission/commission.js';
 import { AuditService } from '../audit/audit.service.js';
 import { MediaService } from '../media/media.service.js';
 import { StorageService } from '../media/storage.service.js';
@@ -82,6 +84,7 @@ export class AdminShopsService {
           status: true,
           logoUrl: true,
           commissionRate: true,
+          commissionFixed: true,
           ratingAvg: true,
           createdAt: true,
           updatedAt: true,
@@ -97,10 +100,10 @@ export class AdminShopsService {
       counts.all += g._count._all;
     }
     return {
-      items: rows.map((s) => ({
+      items: rows.map(({ commissionRate, commissionFixed, ...s }) => ({
         ...s,
         logoUrl: s.logoUrl ? this.media.publicUrl(s.logoUrl) : null,
-        commissionRate: s.commissionRate?.toNumber() ?? null,
+        commission: commissionOf(commissionRate?.toNumber(), commissionFixed?.toNumber()),
         ratingAvg: s.ratingAvg.toNumber(),
       })),
       page: filter.page,
@@ -139,7 +142,7 @@ export class AdminShopsService {
       address: shop.address,
       logoUrl: shop.logoUrl ? this.media.publicUrl(shop.logoUrl) : null,
       coverUrl: shop.coverUrl ? this.media.publicUrl(shop.coverUrl) : null,
-      commissionRate: shop.commissionRate?.toNumber() ?? null,
+      commission: commissionOf(shop.commissionRate?.toNumber(), shop.commissionFixed?.toNumber()),
       platformCommissionRate: typeof defaultRate?.value === 'number' ? defaultRate.value : 5,
       payment: {
         bankCode: shop.paymentBankCode,
@@ -162,6 +165,12 @@ export class AdminShopsService {
       completedRevenue: (revenue._sum.total?.toNumber() ?? 0) + (revenue._sum.platformDiscount?.toNumber() ?? 0),
       commissionEarned: revenue._sum.commissionAmount?.toNumber() ?? 0,
     };
+  }
+
+  async paymentQr(shopId: string) {
+    const shop = await this.prisma.shop.findUnique({ where: { id: shopId }, select: { paymentQrKey: true } });
+    if (!shop?.paymentQrKey) throw new NotFoundException('No payment QR');
+    return this.storage.get(shop.paymentQrKey);
   }
 
   async document(shopId: string, docId: string) {
@@ -210,17 +219,17 @@ export class AdminShopsService {
     return this.detail(id);
   }
 
-  /** Per-shop commission override; null = platform default (§2.3). */
-  async setCommission(admin: AdminUser, id: string, rate: number | null, ip?: string) {
-    const shop = await this.prisma.shop.findUnique({ where: { id }, select: { commissionRate: true } });
+  /** Per-shop commission (a percent or a fixed amount per unit); null = platform default (§2.3). */
+  async setCommission(admin: AdminUser, id: string, commission: Commission | null, ip?: string) {
+    const shop = await this.prisma.shop.findUnique({ where: { id }, select: { commissionRate: true, commissionFixed: true } });
     if (!shop) throw new NotFoundException('Shop not found');
-    await this.prisma.shop.update({ where: { id }, data: { commissionRate: rate } });
+    await this.prisma.shop.update({ where: { id }, data: commissionData(commission) });
     await this.audit.log({
       adminId: admin.id,
       action: 'shop.commission',
       entityType: 'Shop',
       entityId: id,
-      changes: { from: shop.commissionRate?.toNumber() ?? null, to: rate },
+      changes: { from: commissionOf(shop.commissionRate?.toNumber(), shop.commissionFixed?.toNumber()), to: commission },
       ip,
     });
     return this.detail(id);

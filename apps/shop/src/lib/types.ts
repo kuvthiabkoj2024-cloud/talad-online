@@ -1,5 +1,6 @@
 import type {
   BusinessHours,
+  Commission,
   Locale,
   OrderStatus,
   PaymentMethod,
@@ -221,6 +222,8 @@ export interface ShopOrderSummary {
   paymentDueAt: string | null
   /** Urgent delivery by the shop itself: handle these first. */
   urgent: boolean
+  /** The customer collects it at the shop (no courier, no bill). */
+  pickup: boolean
 }
 
 export interface ShopOrderList {
@@ -345,6 +348,8 @@ export interface ShopFinance {
     status: 'SCHEDULED' | 'PROCESSING' | 'PAID' | 'FAILED'
     paidAt: string | null
     reference: string | null
+    /** Taladonline's transfer slip (GET /me/shop/finance/payouts/:id/slip). */
+    hasSlip: boolean
   }[]
 }
 
@@ -407,6 +412,8 @@ export interface ShopProfile {
   cod: { enabled: boolean; termsAcceptedAt: string | null }
   /** The shop's own urgent delivery: areas, a price per area, how fast. */
   urgentDelivery: UrgentDelivery
+  /** Customers may collect their orders at the shop's address. */
+  pickupEnabled: boolean
   verifiedAt: string | null
 }
 
@@ -521,4 +528,37 @@ export interface InboxPage {
   items: InboxNotification[]
   unread: number
   nextCursor: string | null
+}
+
+/** A month of cash-on-delivery sales and the commission owed to Taladonline (`GET /me/shop/cod`). */
+export interface CodMonth {
+  month: string
+  from: string
+  to: string
+  orders: number
+  sales: number
+  commission: number
+  /** commission ÷ sales, percent */
+  rate: number
+  /** Taladonline-funded discounts (coupons, points) on these orders: off what the shop owes. */
+  credit: number
+  /** commission − credit; negative = Taladonline owes the shop. */
+  toTransfer: number
+  inProgress: { orders: number; sales: number }
+  items: { number: string; completedAt: string; customer: string; sales: number; commission: number }[]
+  account: { bankCode: string | null; accountName: string | null; accountNumber: string | null; hasQr: boolean } | null
+}
+
+/** Taladonline's commission on one product and the shop's latest request for its own (§2.3). */
+export interface ProductCommission {
+  current: { commission: Commission; source: 'PRODUCT' | 'CATEGORY' | 'SHOP' | 'DEFAULT' }
+  request: {
+    id: string
+    requested: Commission
+    reason: string | null
+    status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
+    reviewNote: string | null
+    reviewedAt: string | null
+    createdAt: string
+  } | null
 }

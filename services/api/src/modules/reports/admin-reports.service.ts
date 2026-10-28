@@ -72,7 +72,7 @@ export class AdminReportsService {
 
   /** What needs staff attention right now (§2.2 alerts). */
   async alerts() {
-    const [pendingShops, pendingProducts, openDisputes, lowStock, scheduled, unsettled] = await Promise.all([
+    const [pendingShops, pendingProducts, openDisputes, lowStock, scheduled, unsettled, paymentsToCheck, refundsDue, commissionRequests] = await Promise.all([
       this.prisma.shop.count({ where: { status: 'PENDING' } }),
       this.prisma.product.count({ where: { status: 'PENDING' } }),
       this.prisma.dispute.count({ where: { status: { in: ['OPEN', 'IN_REVIEW'] } } }),
@@ -80,7 +80,12 @@ export class AdminReportsService {
         SELECT COUNT(*)::int AS n FROM "Product" p
         WHERE p.status = 'PUBLISHED' AND COALESCE((SELECT SUM(v.stock) FROM "ProductVariant" v WHERE v."productId" = p.id), p.stock) <= p."lowStockThreshold"`,
       this.prisma.payout.aggregate({ where: { status: { in: ['SCHEDULED', 'PROCESSING'] } }, _count: { _all: true }, _sum: { netAmount: true } }),
-      this.prisma.shopOrder.count({ where: { status: 'COMPLETED', payoutId: null } }),
+      // Completed orders a payout will settle (cash on delivery is the shop's already).
+      this.prisma.shopOrder.count({ where: { status: 'COMPLETED', payoutId: null, payments: { none: { method: 'COD' } } } }),
+      // Transfers waiting for a check, and paid orders cancelled that still need a refund.
+      this.prisma.order.count({ where: { shopOrders: { some: { status: 'PENDING' } }, slips: { some: { status: 'PENDING' } } } }),
+      this.prisma.shopOrder.count({ where: { status: 'CANCELLED', payments: { some: { method: { not: 'COD' }, status: 'PAID', amount: { gt: 0 } } } } }),
+      this.prisma.commissionRequest.count({ where: { status: 'PENDING' } }),
     ]);
     return {
       pendingShops,
@@ -89,6 +94,10 @@ export class AdminReportsService {
       lowStock: lowStock[0]?.n ?? 0,
       payoutsDue: { count: scheduled._count._all, net: num(scheduled._sum.netAmount) },
       unsettledOrders: unsettled,
+      paymentsToCheck,
+      refundsDue,
+      /** Shops' product commission requests waiting for a decision. */
+      commissionRequests,
     };
   }
 

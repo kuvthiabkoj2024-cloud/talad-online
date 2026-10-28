@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service.js';
 import { AnthropicService } from '../ai/anthropic.service.js';
 import { ProductsService } from '../catalog/products/products.service.js';
 import { ShopBotService, type BotTurn } from './bot/shop-bot.service.js';
+import { PlatformAccountService } from '../orders/platform-account.service.js';
 
 export const CHATBOT_LIMITS = { faqs: 50, questionMax: 200, answerMax: 1000, previewMax: 1000 } as const;
 
@@ -14,11 +15,12 @@ export class ChatbotService {
     private readonly bot: ShopBotService,
     private readonly products: ProductsService,
     private readonly claude: AnthropicService,
+    private readonly account: PlatformAccountService,
   ) {}
 
   async overview(shopId: string) {
     const [shop, faqs, published] = await Promise.all([
-      this.prisma.shop.findUniqueOrThrow({ where: { id: shopId }, select: { address: true, businessHours: true, paymentAccountNumber: true, paymentQrKey: true, description: true } }),
+      this.prisma.shop.findUniqueOrThrow({ where: { id: shopId }, select: { address: true, businessHours: true, description: true } }),
       this.faqs(shopId),
       this.prisma.product.count({ where: { shopId, status: 'PUBLISHED' } }),
     ]);
@@ -29,7 +31,8 @@ export class ChatbotService {
         products: published,
         hours: Object.keys(hours).length > 0,
         address: !!shop.address,
-        transfer: !!(shop.paymentAccountNumber || shop.paymentQrKey),
+        // Customers pay by transfer to Taladonline's account (set up by the admins).
+        transfer: (await this.account.available()) !== null,
         description: !!shop.description,
       },
       faqs,

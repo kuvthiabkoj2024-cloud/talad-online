@@ -3,14 +3,13 @@ import { Button } from '@talad/ui/components/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@talad/ui/components/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@talad/ui/components/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@talad/ui/components/dropdown-menu'
-import { Input } from '@talad/ui/components/input'
 import { Label } from '@talad/ui/components/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@talad/ui/components/select'
 import { Textarea } from '@talad/ui/components/textarea'
 import { cn } from '@talad/ui/lib/utils'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, Clock3, ImageOff, LoaderCircle, MapPin, MoreHorizontal, Phone, Printer, ReceiptText, ScanSearch, Tag, TriangleAlert, Truck, UserRound, Zap } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { Camera, Check, ChevronDown, CircleCheckBig, Clock3, ImageOff, Images, LoaderCircle, MapPin, MoreHorizontal, PackageCheck, Phone, Printer, ReceiptText, Tag, TriangleAlert, Store, Truck, UserRound, Zap } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router'
 import { toast } from 'sonner'
 import { PageBody, TopBar } from '@/components/page-header'
@@ -25,15 +24,15 @@ import { billHtml, printHtml, stickerHtml } from '@/lib/print-order'
 import type { ShopOrderDetail } from '@/lib/types'
 
 /** The main next step first; destructive ones last. */
-const PRIMARY: ShopOrderAction[] = ['ship', 'deliver', 'approve-return']
+const PRIMARY: ShopOrderAction[] = ['ship', 'approve-return']
 /**
- * A new order has two ways forward: pack & ship (with the courier's bill) or out of stock.
- * The older separate confirm and pack steps aren't offered any more.
+ * A paid order has two ways forward: pack & ship (with the courier's bill) or out of stock.
+ * The older separate pack step isn't offered any more.
  */
-const HIDDEN: ShopOrderAction[] = ['confirm', 'pack']
+const HIDDEN: ShopOrderAction[] = ['pack']
 /** Stays on the phone action bar next to the main step (it's the other way forward). */
 const ALWAYS_SHOWN: ShopOrderAction[] = ['out-of-stock']
-const NEEDS_REASON: ShopOrderAction[] = ['cancel', 'reject-payment', 'reject-return']
+const NEEDS_REASON: ShopOrderAction[] = ['cancel', 'reject-return']
 
 /** One order: what to send where, payment, and the next fulfilment step (§3.6). */
 export function OrderDetailPage() {
@@ -69,6 +68,15 @@ export function OrderDetailPage() {
   const actions = o.actions
     .filter((a) => !HIDDEN.includes(a))
     .sort((a, b) => Number(PRIMARY.includes(b)) - Number(PRIMARY.includes(a)))
+  // The shop's next step, shown on top of the timeline (a rejected return waits on Taladonline).
+  const next =
+    o.status === 'CONFIRMED' || o.status === 'PACKED'
+      ? t.orders.next.ship
+      : o.status === 'SHIPPED' || o.status === 'DELIVERED'
+        ? t.orders.next.confirm
+        : o.status === 'RETURN_REQUESTED' && !o.dispute
+          ? t.orders.next.return
+          : null
   // A platform coupon is Taladonline's discount: it's paid back to the shop.
   const net = o.total + o.platformDiscount - o.commissionAmount
   // Printed on bills and stickers: the profile has the address, the shop the logo and contacts.
@@ -121,11 +129,8 @@ export function OrderDetailPage() {
           </DropdownMenu>
         </div>
 
-        {o.awaitingConfirmation && (
-          <Notice tone="warn" icon={ScanSearch}>
-            {t.orders.slipNotice}
-          </Notice>
-        )}
+        {o.status !== 'CANCELLED' && o.status !== 'PENDING' && <OrderSteps order={o} />}
+
         {o.cancelReason && o.status === 'CANCELLED' && (
           <Notice tone="muted" icon={TriangleAlert}>
             {fill(t.orders.cancelReason, { reason: o.cancelReason })}
@@ -200,14 +205,28 @@ export function OrderDetailPage() {
               </CardHeader>
               <CardContent>
                 <ol className="relative flex flex-col gap-4 border-l pl-5">
+                  {/* What the shop does next (amber, in progress) above what already happened (green). */}
+                  {next && (
+                    <li className="relative">
+                      <span aria-hidden className="absolute top-0 -left-[30px] flex size-5 items-center justify-center rounded-full bg-amber-400 text-white ring-4 ring-card">
+                        <LoaderCircle className="size-3 animate-[spin_2s_linear_infinite]" strokeWidth={3} />
+                      </span>
+                      <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">{next}</p>
+                      {(o.status === 'SHIPPED' || o.status === 'DELIVERED') && o.autoConfirmAt && (
+                        <p className="text-xs text-muted-foreground">{fill(t.orders.autoConfirm, { date: formatDate(o.autoConfirmAt, locale) })}</p>
+                      )}
+                    </li>
+                  )}
                   {[...o.history].reverse().map((h, i) => (
                     <li key={i} className="relative">
-                      <span className={cn('absolute top-1.5 -left-[25px] size-2.5 rounded-full ring-4 ring-card', i === 0 ? 'bg-primary' : 'bg-muted-foreground/40')} />
-                      <p className="text-sm font-medium">{t.orders.status[h.status]}</p>
+                      <span aria-hidden className="absolute top-0 -left-[30px] flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground ring-4 ring-card">
+                        <Check className="size-3" strokeWidth={3.5} />
+                      </span>
+                      <p className="text-sm font-medium">{h.status === 'PENDING' ? t.orders.placedStep : t.orders.status[h.status]}</p>
                       <p className="text-xs text-muted-foreground">
                         {formatDate(h.at, locale, true)} · {t.orders.actors[h.actor ?? 'SYSTEM']}
                       </p>
-                      {h.note && <p className="mt-0.5 text-sm text-muted-foreground">{h.note}</p>}
+                      {h.note && <p className="mt-0.5 text-sm text-muted-foreground">{noteText(h.note, t.orders.notes)}</p>}
                     </li>
                   ))}
                 </ol>
@@ -230,7 +249,7 @@ export function OrderDetailPage() {
                       )}
                       onClick={() => setAction(a)}
                     >
-                      {a === 'confirm' && o.payment?.method === 'COD' ? t.orders.confirmCod : t.orders.actions[a]}
+                      {a === 'ship' && o.pickup ? t.orders.readyForPickup : t.orders.actions[a]}
                     </Button>
                   ))}
                   {/* Phones: secondary actions behind one button to keep the bar tidy. */}
@@ -250,12 +269,6 @@ export function OrderDetailPage() {
                   <>
                     <Row label={t.orders.methods[o.payment.method]} value={t.orders.paymentStatus[o.payment.status]} />
                     {o.payment.paidAt && <p className="text-xs text-muted-foreground">{fill(t.orders.paidAt, { date: formatDate(o.payment.paidAt, locale, true) })}</p>}
-                    {o.payment.hasSlip && (
-                      <Button variant="outline" size="sm" className="mt-1 self-start" onClick={() => void openSlip(o.number)}>
-                        <ScanSearch />
-                        {t.orders.viewSlip}
-                      </Button>
-                    )}
                   </>
                 )}
                 {o.status === 'PENDING' && o.paymentDueAt && (
@@ -283,7 +296,7 @@ export function OrderDetailPage() {
               </CardContent>
             </Card>
 
-            {(o.deliveryProvider || o.trackingNumber || o.autoConfirmAt || o.hasShippingBill || o.urgentDelivery) && (
+            {(o.deliveryProvider || o.trackingNumber || o.autoConfirmAt || o.hasShippingBill || o.urgentDelivery || o.pickup) && (
               <Card className="gap-3">
                 <CardHeader>
                   <CardTitle className="text-base">{t.orders.delivery}</CardTitle>
@@ -295,15 +308,16 @@ export function OrderDetailPage() {
                       {fill(t.orders.urgentBody, { fee: formatMoney(o.shippingFee, locale) })}
                     </p>
                   )}
+                  {o.pickup && (
+                    <p className="flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-2 text-sm font-medium text-primary">
+                      <Store className="size-4 shrink-0" />
+                      {t.orders.pickupBody}
+                    </p>
+                  )}
                   {o.deliveryProvider && <Row label={t.orders.courier} value={o.deliveryProvider.name} />}
                   {o.trackingNumber && <Row label={t.orders.tracking} value={<span className="font-mono">{o.trackingNumber}</span>} />}
-                  {o.hasShippingBill && (
-                    <Button variant="outline" size="sm" className="mt-1 self-start" onClick={() => void openPrivate(o.number, 'bill')}>
-                      <ReceiptText />
-                      {t.orders.viewBill}
-                    </Button>
-                  )}
-                  {o.status === 'DELIVERED' && o.autoConfirmAt && (
+                  {o.hasShippingBill && <ShippingBill number={o.number} label={t.orders.viewBill} />}
+                  {(o.status === 'SHIPPED' || o.status === 'DELIVERED') && o.autoConfirmAt && (
                     <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
                       <Truck className="mt-0.5 size-3.5 shrink-0" />
                       {fill(t.orders.autoConfirm, { date: formatDate(o.autoConfirmAt, locale) })}
@@ -347,7 +361,8 @@ function ActionDialog({ order, action, onClose }: { order: ShopOrderDetail; acti
   const providers = useDeliveryProviders()
   const [reason, setReason] = useState('')
   const [providerId, setProviderId] = useState(order.deliveryProvider?.id ?? '')
-  const [tracking, setTracking] = useState('')
+  const cameraInput = useRef<HTMLInputElement>(null)
+  const galleryInput = useRef<HTMLInputElement>(null)
   const [bill, setBill] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
   const billPreview = useMemo(() => (bill ? URL.createObjectURL(bill) : null), [bill])
@@ -362,7 +377,6 @@ function ActionDialog({ order, action, onClose }: { order: ShopOrderDetail; acti
         action: a,
         ...(reason.trim() && { reason: reason.trim() }),
         ...(a === 'ship' && providerId && { deliveryProviderId: providerId }),
-        ...(a === 'ship' && tracking.trim() && { trackingNumber: tracking.trim() }),
         ...(billKey && { billKey }),
       })
     },
@@ -379,9 +393,14 @@ function ActionDialog({ order, action, onClose }: { order: ShopOrderDetail; acti
     },
   })
 
+  function pickBill(e: React.ChangeEvent<HTMLInputElement>) {
+    setBill(e.target.files?.[0] ?? null)
+    setError(null)
+    e.target.value = ''
+  }
+
   function close() {
     setReason('')
-    setTracking('')
     setBill(null)
     setError(null)
     onClose()
@@ -390,6 +409,8 @@ function ActionDialog({ order, action, onClose }: { order: ShopOrderDetail; acti
   if (!action) return null
   const needsReason = NEEDS_REASON.includes(action)
   const destructive = !PRIMARY.includes(action)
+  const pickupReady = action === 'ship' && order.pickup
+  const shipLabel = pickupReady ? t.orders.readyForPickup : t.orders.actions[action]
 
   return (
     <Dialog open onOpenChange={(open) => !open && close()}>
@@ -399,48 +420,46 @@ function ActionDialog({ order, action, onClose }: { order: ShopOrderDetail; acti
           onSubmit={(e) => {
             e.preventDefault()
             if (needsReason && !reason.trim()) return setError(t.orders.reasonRequired)
-            if (action === 'ship' && !bill && !order.urgentDelivery) return setError(t.orders.billRequired)
+            if (action === 'ship' && !bill && !order.urgentDelivery && !order.pickup) return setError(t.orders.billRequired)
             run.mutate(action)
           }}
         >
           <DialogHeader>
-            <DialogTitle>{action === 'confirm' && order.payment?.method === 'COD' ? t.orders.confirmCod : t.orders.actions[action]}</DialogTitle>
-            <DialogDescription>{t.orders.confirmBody[action]}</DialogDescription>
+            <DialogTitle>{shipLabel}</DialogTitle>
+            <DialogDescription>{pickupReady ? t.orders.readyForPickupBody : t.orders.confirmBody[action]}</DialogDescription>
           </DialogHeader>
 
-          {action === 'ship' && (
+          {/* Pickup has no parcel: no courier or bill to add. */}
+          {action === 'ship' && !order.pickup && (
             <>
               <div className="flex flex-col gap-1.5">
                 <Label required={!order.urgentDelivery}>
                   {t.orders.bill}
                   {order.urgentDelivery && <span className="font-normal text-muted-foreground"> ({t.common.optional})</span>}
                 </Label>
-                <label
-                  className={cn(
-                    'flex cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-xl border-2 border-dashed bg-muted/40 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary',
-                    billPreview ? 'h-48 border-solid p-1' : 'h-32',
-                  )}
-                >
-                  {billPreview ? (
+                {billPreview ? (
+                  <div className="h-48 overflow-hidden rounded-xl border bg-muted/40 p-1">
                     <img src={billPreview} alt={t.orders.bill} className="size-full rounded-lg object-contain" />
-                  ) : (
-                    <>
-                      <ReceiptText className="size-7" />
-                      {t.orders.addBill}
-                    </>
-                  )}
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    capture="environment"
-                    className="sr-only"
-                    onChange={(e) => {
-                      setBill(e.target.files?.[0] ?? null)
-                      setError(null)
-                      e.target.value = ''
-                    }}
-                  />
-                </label>
+                  </div>
+                ) : (
+                  <div className="flex h-24 flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed bg-muted/40 text-sm text-muted-foreground">
+                    <ReceiptText className="size-7" />
+                    {t.orders.addBill}
+                  </div>
+                )}
+                {/* Phones: take the photo now, or pick one already in the gallery. */}
+                <div className="grid grid-cols-2 gap-2">
+                  <Button type="button" variant="outline" onClick={() => cameraInput.current?.click()}>
+                    <Camera />
+                    {t.orders.takePhoto}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => galleryInput.current?.click()}>
+                    <Images />
+                    {t.orders.fromGallery}
+                  </Button>
+                </div>
+                <input ref={cameraInput} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only" onChange={pickBill} />
+                <input ref={galleryInput} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={pickBill} />
                 <p className="text-xs text-muted-foreground">{billPreview ? t.orders.changeBill : t.orders.billHint}</p>
               </div>
               <div className="flex flex-col gap-1.5">
@@ -458,16 +477,10 @@ function ActionDialog({ order, action, onClose }: { order: ShopOrderDetail; acti
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="tracking">
-                  {t.orders.tracking} <span className="font-normal text-muted-foreground">({t.common.optional})</span>
-                </Label>
-                <Input id="tracking" value={tracking} maxLength={64} className="font-mono" onChange={(e) => setTracking(e.target.value)} />
-              </div>
             </>
           )}
 
-          {action === 'out-of-stock' && order.payment && order.payment.method !== 'COD' && (order.payment.status === 'PAID' || order.payment.hasSlip) && (
+          {(action === 'out-of-stock' || action === 'cancel') && order.payment && order.payment.method !== 'COD' && order.payment.status === 'PAID' && (
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
               {fill(t.orders.refundNote, { amount: formatMoney(order.total, locale) })}
             </p>
@@ -495,7 +508,7 @@ function ActionDialog({ order, action, onClose }: { order: ShopOrderDetail; acti
             </Button>
             <Button type="submit" variant={destructive ? 'destructive' : 'default'} disabled={run.isPending}>
               {run.isPending && <LoaderCircle className="animate-spin" />}
-              {action === 'confirm' && order.payment?.method === 'COD' ? t.orders.confirmCod : t.orders.actions[action]}
+              {shipLabel}
             </Button>
           </DialogFooter>
         </form>
@@ -533,15 +546,123 @@ function formatAddress(a: NonNullable<ShopOrderDetail['shippingAddress']>, local
   return [a.line, a.village, a.district, provinceName(a.province, locale)].filter(Boolean).join(', ')
 }
 
-/** The slip is private: fetch it with the session and open it in a new tab. */
-const openSlip = (number: string) => openPrivate(number, 'slip')
+/** System notes are stored in English; show them in the Seller Center's language when we know them. */
+function noteText(note: string, notes: Record<string, string>): string {
+  if (note.startsWith('Payment slip rejected: ')) return fill(notes.slipRejected, { reason: note.slice(23) })
+  if (note.startsWith('Escalated: ')) return fill(notes.escalated, { reason: note.slice(11) })
+  return notes[note] ?? note
+}
 
-/** Payment slips and courier bills are private: fetch with the session, open in a new tab. */
-async function openPrivate(number: string, file: 'slip' | 'bill') {
-  const tab = window.open('', '_blank')
-  const res = await fetch(`${import.meta.env.VITE_API_URL}/me/shop/orders/${encodeURIComponent(number)}/${file}`, {
-    headers: { Authorization: `Bearer ${getToken()}` },
+const STEP_ICONS = [PackageCheck, Truck, CircleCheckBig]
+
+/**
+ * Where the order is for the shop: received (paid, or cash on delivery) → delivered (shipped
+ * with the courier's bill) → completed (the customer confirmed, or AUTO_COMPLETE_DAYS passed).
+ * Steps reached are a green check; the next one is amber, in progress.
+ */
+function OrderSteps({ order: o }: { order: ShopOrderDetail }) {
+  const { t, locale } = useI18n()
+  // `waiting`: said while that step is the one in progress ("to ship", not "delivered").
+  const steps: { label: string; waiting: string; statuses: string[] }[] = [
+    { label: t.orders.steps.received, waiting: t.orders.steps.received, statuses: ['CONFIRMED', 'PACKED'] },
+    {
+      label: o.pickup ? t.orders.readyForPickup : t.orders.steps.delivered,
+      waiting: o.pickup ? t.orders.steps.toPrepare : t.orders.steps.toShip,
+      statuses: ['SHIPPED', 'DELIVERED', 'RETURN_REQUESTED'],
+    },
+    { label: t.orders.steps.completed, waiting: t.orders.steps.toConfirm, statuses: ['COMPLETED'] },
+  ]
+  const reached = steps.findIndex((s) => s.statuses.includes(o.status))
+  // When each step was reached (the latest history entry into it).
+  const at = (i: number) => [...o.history].reverse().find((h) => steps[i].statuses.includes(h.status))?.at
+  return (
+    <Card className="py-4">
+      <CardContent className="px-4">
+        <ol className="grid grid-cols-3">
+          {steps.map((step, i) => {
+            // Reached: green check. Next: amber, in progress. A return request waits on Taladonline.
+            const done = i <= reached
+            const progressing = i === reached + 1 && o.status !== 'RETURN_REQUESTED'
+            const Icon = STEP_ICONS[i]
+            const when = done ? at(i) : undefined
+            return (
+              <li key={step.label} className="relative flex flex-col items-center gap-1.5 text-center">
+                {i > 0 && (
+                  <span aria-hidden className={cn('absolute right-1/2 top-4 h-0.5 w-full -translate-y-1/2', done ? 'bg-primary' : progressing ? 'bg-amber-400' : 'bg-border')} />
+                )}
+                <span
+                  className={cn(
+                    'relative z-10 flex size-8 items-center justify-center rounded-full ring-4 ring-card',
+                    done ? 'bg-primary text-primary-foreground' : progressing ? 'bg-amber-400 text-white' : 'bg-muted text-muted-foreground/60',
+                  )}
+                >
+                  {done ? (
+                    <Check className="size-4" strokeWidth={3} />
+                  ) : progressing ? (
+                    <LoaderCircle className="size-4 animate-[spin_2s_linear_infinite]" strokeWidth={2.5} />
+                  ) : (
+                    <Icon className="size-4" />
+                  )}
+                </span>
+                <span className={cn('text-xs sm:text-sm', done ? 'font-medium' : progressing ? 'font-semibold text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>
+                  {progressing ? step.waiting : step.label}
+                </span>
+                {when && <span className="text-[11px] text-muted-foreground">{formatDate(when, locale)}</span>}
+              </li>
+            )
+          })}
+        </ol>
+      </CardContent>
+    </Card>
+  )
+}
+
+/**
+ * The courier bill photo uploaded when shipping: a thumbnail on the order, full size in a
+ * pop-up. It's private, so it's fetched with the session.
+ */
+function ShippingBill({ number, label }: { number: string; label: string }) {
+  const [open, setOpen] = useState(false)
+  const bill = useQuery({
+    queryKey: [...queryKeys.orders, number, 'bill'],
+    staleTime: Infinity,
+    queryFn: async () => {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/me/shop/orders/${encodeURIComponent(number)}/bill`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!res.ok) throw new Error(String(res.status))
+      return URL.createObjectURL(await res.blob())
+    },
   })
-  if (!res.ok || !tab) return tab?.close()
-  tab.location.href = URL.createObjectURL(await res.blob())
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-1 flex items-center gap-3 rounded-lg p-1.5 text-left ring-1 ring-border transition hover:bg-muted hover:ring-primary/40"
+      >
+        <span className="flex h-20 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
+          {bill.isPending ? (
+            <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
+          ) : bill.data ? (
+            <img src={bill.data} alt="" className="size-full object-cover" />
+          ) : (
+            <ImageOff className="size-4 text-muted-foreground" />
+          )}
+        </span>
+        <span className="flex items-center gap-1.5 font-medium text-primary">
+          <ReceiptText className="size-4" />
+          {label}
+        </span>
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{label}</DialogTitle>
+          </DialogHeader>
+          {bill.data && <img src={bill.data} alt={label} className="max-h-[75vh] w-full rounded-lg object-contain" />}
+        </DialogContent>
+      </Dialog>
+    </>
+  )
 }

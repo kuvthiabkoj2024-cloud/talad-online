@@ -4,7 +4,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { OrderStatusBadge } from "@/components/account/order-status-badge";
-import { SimulatePaymentButton } from "@/components/cart/simulate-payment-button";
 import { interpolate } from "@/lib/format";
 import type { OrderDetail } from "@/lib/orders";
 import { requireCustomer } from "@/lib/require-customer";
@@ -80,9 +79,6 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps<"/
               </span>
               <ChevronRight className="size-4 text-muted-foreground" />
             </Link>
-            {o.payment?.status === "PENDING" && o.payment.method !== "COD" && (
-              <SimulatePaymentButton orderNumber={o.number} label={dict.simulatePayment} />
-            )}
           </li>
         ))}
       </ul>

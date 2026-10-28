@@ -83,6 +83,7 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
   const [autoConfirm, setAutoConfirm] = useState(String(p.autoConfirmHrs))
   const [cod, setCod] = useState(p.cod)
   const [urgent, setUrgent] = useState<UrgentDelivery>(p.urgentDelivery)
+  const [pickup, setPickup] = useState(p.pickupEnabled)
   const { paymentWindowHrs: pw, autoConfirmHrs: ac } = SHOP_PROFILE_RULES
 
   const refresh = (saved: ShopProfile) => {
@@ -91,9 +92,9 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
     void queryClient.invalidateQueries({ queryKey: ME_KEY })
   }
 
-  // `codChange`: the COD switch saves at once (turning it on carries the accepted terms).
+  // `change`: the COD and pickup switches save at once (turning COD on carries the accepted terms).
   const save = useMutation({
-    mutationFn: (codChange?: { codEnabled: boolean; codTermsAccepted?: boolean }) =>
+    mutationFn: (change?: { codEnabled?: boolean; codTermsAccepted?: boolean; pickupEnabled?: boolean }) =>
       send<ShopProfile>('PUT', '/me/shop/profile', {
         name: name.trim(),
         description: description.trim() || undefined,
@@ -107,18 +108,30 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
         paymentAccountNumber: accountNumber.trim() || null,
         paymentWindowHrs: Number(paymentWindow),
         autoConfirmHrs: Number(autoConfirm),
-        codEnabled: codChange?.codEnabled ?? cod.enabled,
+        codEnabled: change?.codEnabled ?? cod.enabled,
+        pickupEnabled: change?.pickupEnabled ?? pickup,
         urgentDelivery: {
           ...urgent,
           eta: urgent.eta.trim(),
           zones: urgent.zones.map((z) => ({ ...z, districts: z.districts.map((d) => d.trim()).filter(Boolean) })),
         },
-        codTermsAccepted: codChange?.codTermsAccepted,
+        codTermsAccepted: change?.codTermsAccepted,
       }),
-    onSuccess: (saved, codChange) => {
+    onSuccess: (saved, change) => {
       refresh(saved)
       setCod(saved.cod)
-      toast.success(codChange ? (saved.cod.enabled ? t.cod.turnedOn : t.cod.turnedOff) : t.profile.saved)
+      setPickup(saved.pickupEnabled)
+      toast.success(
+        change?.pickupEnabled !== undefined
+          ? saved.pickupEnabled
+            ? t.pickup.turnedOn
+            : t.pickup.turnedOff
+          : change?.codEnabled !== undefined
+            ? saved.cod.enabled
+              ? t.cod.turnedOn
+              : t.cod.turnedOff
+            : t.profile.saved,
+      )
     },
     onError: (e) => toast.error(errorText(e, t)),
   })
@@ -292,6 +305,27 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
         </Card>
 
         <UrgentCard value={urgent} onChange={setUrgent} />
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Store className="size-5 text-primary" />
+              {t.pickup.title}
+            </CardTitle>
+            <CardDescription>{t.pickup.description}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <label className="flex items-center justify-between gap-4 rounded-xl border p-4">
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">{t.pickup.toggle}</span>
+                <span className={cn('mt-0.5 block text-xs', pickup ? 'text-primary' : 'text-muted-foreground')}>
+                  {pickup ? fill(t.pickup.on, { address: p.address || '—' }) : t.pickup.off}
+                </span>
+              </span>
+              <Switch checked={pickup} disabled={save.isPending} onCheckedChange={(on) => save.mutate({ pickupEnabled: on })} />
+            </label>
+          </CardContent>
+        </Card>
 
         <CodCard
           cod={cod}

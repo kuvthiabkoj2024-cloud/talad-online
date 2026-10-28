@@ -1,4 +1,4 @@
-import { formatPhone, KYC_DOCUMENT_TYPES, normalizePhone, SHOP_RULES, slugify, type KycDocumentType } from '@talad/shared'
+import { formatPhone, KYC_DOCUMENT_TYPES, normalizePhone, REQUIRED_KYC_DOCUMENTS, SHOP_RULES, slugify, type KycDocumentType } from '@talad/shared'
 import { Button } from '@talad/ui/components/button'
 import { Card, CardContent } from '@talad/ui/components/card'
 import { Input } from '@talad/ui/components/input'
@@ -176,6 +176,7 @@ function ApplicationForm({ account, application }: { account: Account; applicati
     if (!normalizePhone(phone)) e.phone = 'phone'
     if (address.trim().length < 5) e.address = 'address'
     if (!docs.NATIONAL_ID?.key) e.documents = 'idRequired'
+    else if (!docs.ID_SELFIE?.key) e.documents = 'selfieRequired'
     if (!terms) e.terms = 'terms'
     setErrors(e)
     if (Object.keys(e).length) {
@@ -225,7 +226,7 @@ function ApplicationForm({ account, application }: { account: Account; applicati
     { label: t.register.checkShop, done: name.trim().length >= SHOP_RULES.nameMin && SHOP_RULES.slugPattern.test(effectiveSlug) && slugCheck.data?.available !== false },
     { label: t.register.checkContact, done: ownerName.trim().length >= 2 && (!email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) && !!normalizePhone(phone) },
     { label: t.register.checkAddress, done: address.trim().length >= 5 },
-    { label: t.register.checkId, done: !!docs.NATIONAL_ID?.key },
+    { label: t.register.checkId, done: REQUIRED_KYC_DOCUMENTS.every((type) => !!docs[type]?.key) },
     { label: t.register.checkTerms, done: terms },
   ]
   const done = checks.filter((c) => c.done).length
@@ -332,7 +333,7 @@ function ApplicationForm({ account, application }: { account: Account; applicati
                   key={type}
                   type={type}
                   doc={docs[type]}
-                  invalid={type === 'NATIONAL_ID' && !!errors.documents}
+                  invalid={REQUIRED_KYC_DOCUMENTS.includes(type) && !docs[type]?.key && !!errors.documents}
                   onFile={(f) => void uploadDoc(type, f)}
                   onView={(d) => void viewDoc(d)}
                   onRemove={() =>
@@ -581,7 +582,7 @@ function DocumentRow({
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
             {t.register.docTypes[type]}
-            {type === 'NATIONAL_ID' && (
+            {REQUIRED_KYC_DOCUMENTS.includes(type) && (
               <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">{t.register.required}</span>
             )}
           </p>
@@ -590,7 +591,7 @@ function DocumentRow({
               ? fill(t.editor.uploading, { pct: Math.round((doc.progress ?? 0) * 100) })
               : doc
                 ? (doc.name ?? t.register.uploaded)
-                : type === 'NATIONAL_ID' ? t.register.dropHint : `${t.register.dropHint} · ${t.common.optional}`}
+                : REQUIRED_KYC_DOCUMENTS.includes(type) ? t.register.dropHint : `${t.register.dropHint} · ${t.common.optional}`}
           </p>
         </div>
       </div>

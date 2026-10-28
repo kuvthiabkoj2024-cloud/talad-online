@@ -23,7 +23,7 @@ const param = (v: string | string[] | undefined) => (typeof v === "string" ? v :
 export default async function CheckoutPage({ searchParams }: PageProps<"/[lang]/checkout">) {
   const locale = await getLocale();
   const { checkout, cart, account, cartErrors, auth } = await getDictionary();
-  const { items, courier, coupon, address } = await searchParams;
+  const { items, courier, coupon, address, points } = await searchParams;
   const itemIds = [...new Set(param(items).split(",").filter((id) => UUID.test(id)))];
   const self = `/${locale}/checkout?items=${itemIds.join(",")}`;
   await requireCustomer(locale, self);
@@ -35,6 +35,7 @@ export default async function CheckoutPage({ searchParams }: PageProps<"/[lang]/
           ...(UUID.test(param(courier)) && { deliveryProviderId: param(courier) }),
           ...(param(coupon) && { couponCode: param(coupon).slice(0, 40) }),
           ...(UUID.test(param(address)) && { addressId: param(address) }),
+          ...(param(points) === "1" && { usePoints: true }),
         })
       : null,
     apiGetAsCustomer<AddressItem[]>("/me/addresses"),

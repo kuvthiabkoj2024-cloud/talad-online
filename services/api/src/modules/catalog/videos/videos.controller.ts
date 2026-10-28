@@ -10,7 +10,7 @@ import { COMMENT_MAX_LENGTH, VideoEngagementService } from './video-engagement.s
 
 const id = new ParseUUIDPipe({ version: '7' });
 
-class CommentPageQuery {
+export class CommentPageQuery {
   @IsOptional()
   @IsUUID()
   cursor?: string;
@@ -23,7 +23,7 @@ class CommentPageQuery {
   limit: number = 20;
 }
 
-class AddCommentDto {
+export class AddCommentDto {
   @IsString()
   // Room for whitespace the service trims; the cleaned body is re-checked there.
   @MaxLength(COMMENT_MAX_LENGTH + 100)
@@ -48,6 +48,11 @@ class ShopVideoListQuery {
   @Min(1)
   @Max(50)
   pageSize: number = 24;
+
+  /** Just this one video (a notification's link). */
+  @IsOptional()
+  @IsUUID('7')
+  productId?: string;
 }
 
 class FavoriteStatusQuery {
@@ -84,12 +89,12 @@ export class VideosController {
 
   @Get('comments')
   comments(@Param('productId', id) productId: string, @Query() q: CommentPageQuery) {
-    return this.videos.comments(productId, q.cursor, q.limit);
+    return this.videos.comments({ productId }, q.cursor, q.limit);
   }
 
   @Get('comments/:commentId/replies')
   replies(@Param('productId', id) productId: string, @Param('commentId', id) commentId: string, @Query() q: CommentPageQuery) {
-    return this.videos.replies(productId, commentId, q.cursor, q.limit);
+    return this.videos.replies({ productId }, commentId, q.cursor, q.limit);
   }
 }
 
@@ -104,7 +109,7 @@ export class MyVideosController {
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('videos/:productId/comments')
   comment(@CurrentCustomer() c: Customer, @Param('productId', id) productId: string, @Body() dto: AddCommentDto) {
-    return this.videos.addComment(c.id, productId, dto.body, dto.parentId);
+    return this.videos.addComment(c.id, { productId }, dto.body, dto.parentId);
   }
 
   @Delete('videos/comments/:commentId')
@@ -138,7 +143,7 @@ export class ShopVideosController {
 
   @Get()
   list(@CurrentShop() shop: Shop, @Query() q: ShopVideoListQuery) {
-    return this.videos.shopVideos(shop.id, q.page, q.pageSize);
+    return this.videos.shopVideos(shop.id, q.page, q.pageSize, q.productId);
   }
 
   @Get(':productId/likes')

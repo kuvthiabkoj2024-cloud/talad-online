@@ -9,16 +9,16 @@ const ORDER_TEXT: Record<OrderStatus, { lo: Text; en: Text }> = {
     en: { title: 'Order placed', body: 'Your order {n} has been placed. Please complete payment before the deadline.' },
   },
   CONFIRMED: {
-    lo: { title: 'ຮ້ານຢືນຢັນຄຳສັ່ງຊື້ແລ້ວ', body: '{shop} ໄດ້ຢືນຢັນຄຳສັ່ງຊື້ {n} ແລະ ກຳລັງກະກຽມສິນຄ້າ.' },
-    en: { title: 'Order confirmed', body: '{shop} confirmed your order {n} and is preparing it.' },
+    lo: { title: 'ຊຳລະເງິນແລ້ວ', body: 'Taladonline ຢືນຢັນການຊຳລະຂອງຄຳສັ່ງຊື້ {n} ແລ້ວ. {shop} ກຳລັງກະກຽມສິນຄ້າ.' },
+    en: { title: 'Payment confirmed', body: 'Taladonline confirmed the payment for order {n}. {shop} is preparing it.' },
   },
   PACKED: {
     lo: { title: 'ແພັກສິນຄ້າແລ້ວ', body: 'ຄຳສັ່ງຊື້ {n} ແພັກແລ້ວ ແລະ ລໍຖ້າຂົນສົ່ງມາຮັບ.' },
     en: { title: 'Order packed', body: 'Your order {n} is packed and waiting for the courier.' },
   },
   SHIPPED: {
-    lo: { title: 'ກຳລັງຈັດສົ່ງ', body: 'ຄຳສັ່ງຊື້ {n} ກຳລັງເດີນທາງໄປຫາທ່ານ.' },
-    en: { title: 'Order shipped', body: 'Your order {n} is on its way.' },
+    lo: { title: 'ສົ່ງສິນຄ້າແລ້ວ', body: 'ຄຳສັ່ງຊື້ {n} ກຳລັງເດີນທາງໄປຫາທ່ານ. ກົດ "ໄດ້ຮັບສິນຄ້າແລ້ວ" ເມື່ອໄດ້ຮັບ (ຈະສຳເລັດເອງພາຍໃນ 7 ມື້).' },
+    en: { title: 'Order sent', body: 'Your order {n} is on its way. Tap "Received" when it arrives (it completes on its own after 7 days).' },
   },
   DELIVERED: {
     lo: { title: 'ຈັດສົ່ງສຳເລັດ', body: 'ຄຳສັ່ງຊື້ {n} ຈັດສົ່ງຮອດແລ້ວ. ກະລຸນາຢືນຢັນການຮັບສິນຄ້າ.' },
@@ -38,11 +38,18 @@ const ORDER_TEXT: Record<OrderStatus, { lo: Text; en: Text }> = {
   },
 };
 
+/** A pickup order isn't sent: "shipped" means it is ready to collect at the shop. */
+const READY_FOR_PICKUP = {
+  lo: { title: 'ພ້ອມໃຫ້ໄປຮັບແລ້ວ', body: 'ຄຳສັ່ງຊື້ {n} ພ້ອມແລ້ວ, ໄປຮັບໄດ້ທີ່ {shop}. ກົດ "ໄດ້ຮັບສິນຄ້າແລ້ວ" ເມື່ອຮັບແລ້ວ (ຈະສຳເລັດເອງພາຍໃນ 7 ມື້).' },
+  en: { title: 'Ready for pickup', body: 'Your order {n} is ready to collect at {shop}. Tap "Received" once you have it (it completes on its own after 7 days).' },
+};
+
 /** Lao and English text for an order notification; `reason` (as written by the shop) is appended. */
-export function orderMessage(status: OrderStatus, number: string, shop: string, reason?: string | null): { lo: Text; en: Text } {
+export function orderMessage(status: OrderStatus, number: string, shop: string, reason?: string | null, pickup = false): { lo: Text; en: Text } {
   const fill = (t: Text, label: string): Text => {
     const sub = (s: string) => s.replace('{n}', number).replace('{shop}', shop);
     return { title: sub(t.title), body: sub(t.body) + (reason ? ` ${label}: ${reason}` : '') };
   };
-  return { lo: fill(ORDER_TEXT[status].lo, 'ເຫດຜົນ'), en: fill(ORDER_TEXT[status].en, 'Reason') };
+  const text = pickup && status === 'SHIPPED' ? READY_FOR_PICKUP : ORDER_TEXT[status];
+  return { lo: fill(text.lo, 'ເຫດຜົນ'), en: fill(text.en, 'Reason') };
 }

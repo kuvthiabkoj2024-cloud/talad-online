@@ -3,7 +3,7 @@
 import { API_URL } from "./api";
 import { getSessionToken } from "./session";
 
-/** Following shops: state, follow / unfollow, and the shops a customer follows. */
+/** Following shops and other customers: state, follow / unfollow, and the shops a customer follows. */
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -50,4 +50,31 @@ export async function setFollow(shopId: string, follow: boolean): Promise<Follow
   if (res.ok) return { ok: true, ...res.data };
   if (res.status === 401) return { ok: false, error: "UNAUTHENTICATED" };
   return { ok: false, error: res.code === "OWN_SHOP" ? "OWN_SHOP" : "generic" };
+}
+
+/** Which of these shops the signed-in customer follows (empty when signed out). */
+export async function followedShops(shopIds: string[]): Promise<string[]> {
+  const ids = Array.isArray(shopIds) ? shopIds.filter((id) => UUID.test(id)).slice(0, 50) : [];
+  if (!ids.length) return [];
+  const res = await call<{ shopIds: string[] }>("GET", `/me/follows/status?ids=${ids.join(",")}`);
+  return res.ok ? res.data.shopIds : [];
+}
+
+/* ── Following other customers (their profile and feed videos) ── */
+
+export type ProfileFollowResult = ({ ok: true } & FollowState) | { ok: false; error: "UNAUTHENTICATED" | "generic" };
+
+export async function setProfileFollow(customerId: string, follow: boolean): Promise<ProfileFollowResult> {
+  if (!UUID.test(customerId)) return { ok: false, error: "generic" };
+  const res = await call<FollowState>(follow ? "PUT" : "DELETE", `/me/profile-follows/${customerId}`);
+  if (res.ok) return { ok: true, ...res.data };
+  return { ok: false, error: res.status === 401 ? "UNAUTHENTICATED" : "generic" };
+}
+
+/** Which of these customers the signed-in customer follows (empty when signed out). */
+export async function followedProfiles(customerIds: string[]): Promise<string[]> {
+  const ids = Array.isArray(customerIds) ? customerIds.filter((id) => UUID.test(id)).slice(0, 50) : [];
+  if (!ids.length) return [];
+  const res = await call<{ customerIds: string[] }>("GET", `/me/profile-follows/status?ids=${ids.join(",")}`);
+  return res.ok ? res.data.customerIds : [];
 }

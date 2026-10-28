@@ -5,6 +5,7 @@ import {
   formatMoney,
   formatPhone,
   MAX_CART_QUANTITY,
+  MAX_PAYMENT_SLIPS,
   provinceName,
   type CheckoutPaymentMethod,
   type Locale,
@@ -13,9 +14,9 @@ import {
   ArrowLeft,
   Banknote,
   CircleAlert,
+  Coins,
   CreditCard,
   LoaderCircle,
-  type LucideIcon,
   MapPin,
   MessageSquareText,
   Package,
@@ -24,6 +25,7 @@ import {
   Store,
   TicketPercent,
   Truck,
+  type LucideIcon,
   X,
   Zap,
 } from "lucide-react";
@@ -43,6 +45,9 @@ import { Modal } from "../auth/modal";
 import { useSession } from "../auth/session-provider";
 import { emptySlip, PaymentPanel, type SlipState } from "./payment-panel";
 import { QuantityStepper } from "./quantity-stepper";
+
+/** How one shop's part of the order reaches the customer. */
+type DeliveryMode = "standard" | "urgent" | "pickup";
 
 const PAYMENT_ICONS: Record<CheckoutPaymentMethod, LucideIcon> = {
   BANK_TRANSFER: QrCode,
@@ -95,9 +100,10 @@ export function CheckoutForm({
   // A method is usable when the platform allows it and every shop in the order takes it.
   const usable = (m: CheckoutPaymentMethod) => (m === "BANK_TRANSFER" ? quote.transferAvailable : m === "COD" ? quote.codAvailable : true);
   const [payment, setPayment] = useState<CheckoutPaymentMethod>(() => methods.find(usable) ?? methods[0] ?? "BANK_TRANSFER");
-  // Per shop: the uploaded slip's storage key (sent with the order) and its UI state.
-  const [slipKeys, setSlipKeys] = useState<Record<string, string>>({});
-  const [slips, setSlips] = useState<Record<string, SlipState>>({});
+  // One transfer to Taladonline for the whole order: up to MAX_PAYMENT_SLIPS slips, each with
+  // its storage key once uploaded (sent with the order) and its UI state.
+  const [slips, setSlips] = useState<(SlipState & { key: string | null })[]>([]);
+  const [slipNotice, setSlipNotice] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [picker, setPicker] = useState<"list" | "new" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -107,38 +113,48 @@ export function CheckoutForm({
   const address = addresses.find((a) => a.id === addressId) ?? addresses.find((a) => a.isDefault) ?? null;
   const blocked = quote.issues.length > 0;
   const isTransfer = payment === "BANK_TRANSFER";
-  const slipsMissing = isTransfer && quote.shops.some((s) => !slipKeys[s.shop.id]);
+  const slipKeys = slips.flatMap((x) => (x.key ? [x.key] : []));
+  // Every slip uploaded (none still sending or failed), and at least one.
+  // Points that cover the whole order leave nothing to transfer.
+  const paidByPoints = quote.total === 0 && quote.points.used > 0;
+  const slipsMissing = isTransfer && !paidByPoints && (slipKeys.length === 0 || slips.some((x) => !x.key));
 
-  async function pickSlip(shopId: string, original: File) {
-    const previous = slips[shopId]?.preview;
-    if (previous) URL.revokeObjectURL(previous);
+  async function pickSlip(original: File) {
+    if (slips.length >= MAX_PAYMENT_SLIPS) return;
     const file = await compressImage(original);
-    setSlips((m) => ({ ...m, [shopId]: { ...emptySlip, preview: URL.createObjectURL(file), uploading: true } }));
-    // Until the new upload finishes, the old slip no longer counts.
-    setSlipKeys((k) => Object.fromEntries(Object.entries(k).filter(([id]) => id !== shopId)));
+    const preview = URL.createObjectURL(file);
+    setSlips((list) => [...list, { ...emptySlip, preview, uploading: true, key: null }]);
     const form = new FormData();
     form.set("slip", file);
     const res = await uploadCheckoutSlip(form);
-    if (res.ok) setSlipKeys((k) => ({ ...k, [shopId]: res.slipKey }));
-    setSlips((m) => ({
-      ...m,
-      [shopId]: {
-        ...m[shopId],
-        uploading: false,
-        attached: res.ok,
-        error: res.ok ? null : (cartErrors[res.error as keyof typeof cartErrors] ?? cartErrors.generic),
-      },
-    }));
+    setSlips((list) =>
+      list.map((x) =>
+        x.preview === preview
+          ? {
+              ...x,
+              uploading: false,
+              attached: res.ok,
+              key: res.ok ? res.slipKey : null,
+              error: res.ok ? null : (cartErrors[res.error as keyof typeof cartErrors] ?? cartErrors.generic),
+            }
+          : x,
+      ),
+    );
+  }
+
+  function removeSlip(index: number) {
+    const preview = slips[index]?.preview;
+    if (preview) URL.revokeObjectURL(preview);
+    setSlips((list) => list.filter((_, i) => i !== index));
   }
 
   const qty = (item: CartItem) => desired[item.id] ?? item.quantity;
 
-  /** A shop's slip was for its old total: drop it and say why. */
-  function clearSlip(shopId: string) {
-    const preview = slips[shopId]?.preview;
-    if (preview) URL.revokeObjectURL(preview);
-    setSlips((m) => ({ ...m, [shopId]: { ...emptySlip, error: dict.slipReset } }));
-    setSlipKeys((k) => Object.fromEntries(Object.entries(k).filter(([id]) => id !== shopId)));
+  /** The slips were for the old total: drop them and say why. */
+  function clearSlips() {
+    for (const x of slips) if (x.preview) URL.revokeObjectURL(x.preview);
+    setSlips([]);
+    setSlipNotice(dict.slipReset);
   }
 
   /** Keeps courier, coupon and address in the URL so a server re-render (router.refresh) keeps them. */
@@ -157,14 +173,17 @@ export function CheckoutForm({
    * one at a time, so quotes come back in click order.
    */
   function requote(
-    change: { courier?: string | null; coupon?: string | null; addressId?: string | null; urgent?: string[] },
+    change: { courier?: string | null; coupon?: string | null; addressId?: string | null; urgent?: string[]; pickup?: string[]; points?: boolean },
     steps: { before?: () => Promise<void>; after?: () => void } = {},
   ) {
     const nextAddressId = change.addressId !== undefined ? change.addressId : (address?.id ?? null);
     const couponCode = change.coupon !== undefined ? change.coupon : (quote.coupon?.code ?? null);
     const urgentShopIds = change.urgent ?? quote.shops.filter((s) => s.urgentSelected).map((s) => s.shop.id);
+    const pickupShopIds = change.pickup ?? quote.shops.filter((s) => s.pickupSelected).map((s) => s.shop.id);
+    const usePoints = change.points ?? quote.points.used > 0;
     setError(null);
     if (change.addressId !== undefined) syncUrl({ address: nextAddressId });
+    if (change.points !== undefined) syncUrl({ points: change.points ? "1" : null });
     startRequote(async () => {
       await steps.before?.();
       const res = await getCheckoutQuote({
@@ -173,18 +192,15 @@ export function CheckoutForm({
         ...(couponCode && { couponCode }),
         ...(nextAddressId && { addressId: nextAddressId }),
         ...(urgentShopIds.length > 0 && { urgentShopIds }),
+        ...(pickupShopIds.length > 0 && { pickupShopIds }),
+        ...(usePoints && { usePoints: true }),
       });
       setPendingCourier(null);
       steps.after?.();
       if (!res.ok) return router.refresh(); // items gone: the page sends the customer back to the cart
       const next = res.quote;
-      // Only shops whose amount changed need a new slip.
-      for (const shop of next.shops) {
-        const old = quote.shops.find((s) => s.shop.id === shop.shop.id);
-        if (old && old.total !== shop.total && (slipKeys[shop.shop.id] || slips[shop.shop.id]?.preview)) {
-          clearSlip(shop.shop.id);
-        }
-      }
+      // The slips paid the old total; a new amount needs new ones.
+      if (next.total !== quote.total && slips.length) clearSlips();
       setFresh({ from: initialQuote, quote: next });
       if (couponCode) setCouponMessage(next.couponError ? cartErrors[next.couponError] : null);
       syncUrl({ courier: next.delivery.selectedId, coupon: next.coupon?.code });
@@ -208,11 +224,14 @@ export function CheckoutForm({
     );
   }
 
-  /** Standard (courier) or the shop's own urgent delivery, per shop. */
-  function chooseUrgent(shopId: string, urgent: boolean) {
-    const current = quote.shops.filter((s) => s.urgentSelected).map((s) => s.shop.id);
-    const next = urgent ? [...new Set([...current, shopId])] : current.filter((id) => id !== shopId);
-    requote({ urgent: next });
+  /** Per shop: by courier, the shop's own urgent delivery, or collected at the shop. */
+  function chooseDelivery(shopId: string, mode: DeliveryMode) {
+    const others = (picked: (s: (typeof quote.shops)[number]) => boolean) =>
+      quote.shops.filter((s) => s.shop.id !== shopId && picked(s)).map((s) => s.shop.id);
+    requote({
+      urgent: [...others((s) => s.urgentSelected), ...(mode === "urgent" ? [shopId] : [])],
+      pickup: [...others((s) => s.pickupSelected), ...(mode === "pickup" ? [shopId] : [])],
+    });
   }
 
   function chooseCourier(id: string) {
@@ -249,10 +268,12 @@ export function CheckoutForm({
         addressId: address.id,
         paymentMethod: payment,
         expectedTotal: quote.total,
-        ...(quote.delivery.selectedId && { deliveryProviderId: quote.delivery.selectedId }),
+        ...(quote.delivery.needed && quote.delivery.selectedId && { deliveryProviderId: quote.delivery.selectedId }),
         ...(quote.coupon && { couponCode: quote.coupon.code }),
         ...(quote.shops.some((s) => s.urgentSelected) && { urgentShopIds: quote.shops.filter((s) => s.urgentSelected).map((s) => s.shop.id) }),
-        ...(isTransfer && { slips: slipKeys }),
+        ...(quote.shops.some((s) => s.pickupSelected) && { pickupShopIds: quote.shops.filter((s) => s.pickupSelected).map((s) => s.shop.id) }),
+        ...(quote.points.used > 0 && { usePoints: true }),
+        ...(isTransfer && !paidByPoints && { slipKeys }),
         ...(note.trim() && { note: note.trim() }),
       });
       if (res.ok) {
@@ -304,7 +325,7 @@ export function CheckoutForm({
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
         <div className="flex min-w-0 flex-col gap-4">
           {/* Items per shop */}
-          {quote.shops.map(({ shop, items, discount, total, urgent, urgentSelected, shippingFee }) => (
+          {quote.shops.map(({ shop, items, discount, total, urgent, urgentSelected, pickup, pickupSelected, shippingFee }) => (
             <Card key={shop.id} flush>
               <div className="flex items-center gap-2 border-b border-border px-4 py-3 text-sm font-semibold">
                 <Store className="size-4 text-primary" />
@@ -341,34 +362,64 @@ export function CheckoutForm({
                   </li>
                 ))}
               </ul>
-              {/* The shop's own urgent delivery, when it covers this address. */}
-              {urgent && (
-                <div role="radiogroup" aria-label={dict.delivery} className="grid grid-cols-2 gap-2 border-t border-border px-4 py-3">
-                  {[false, true].map((isUrgent) => {
-                    const active = urgentSelected === isUrgent;
-                    const Icon = isUrgent ? Zap : Truck;
+              {/* The shop's own urgent delivery (when it covers this address) and pickup at the shop. */}
+              {(urgent || pickup) && (
+                <div
+                  role="radiogroup"
+                  aria-label={dict.delivery}
+                  className={`grid gap-2 border-t border-border px-4 py-3 ${urgent && pickup ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-2"}`}
+                >
+                  {(["standard", ...(urgent ? ["urgent"] : []), ...(pickup ? ["pickup"] : [])] as DeliveryMode[]).map((mode) => {
+                    const selected: DeliveryMode = pickupSelected ? "pickup" : urgentSelected ? "urgent" : "standard";
+                    const active = selected === mode;
+                    const Icon = mode === "urgent" ? Zap : mode === "pickup" ? Store : Truck;
                     return (
                       <button
-                        key={String(isUrgent)}
+                        key={mode}
                         type="button"
                         role="radio"
                         aria-checked={active}
                         disabled={requoting}
-                        onClick={() => !active && chooseUrgent(shop.id, isUrgent)}
+                        onClick={() => !active && chooseDelivery(shop.id, mode)}
                         className={`flex items-start gap-2 rounded-xl border p-2.5 text-left transition-colors disabled:opacity-60 ${
                           active ? "border-primary bg-primary-soft ring-1 ring-primary" : "border-border hover:border-primary/50"
                         }`}
                       >
-                        <Icon className={`mt-0.5 size-4 shrink-0 ${isUrgent ? "text-sale" : "text-primary"}`} />
+                        <Icon className={`mt-0.5 size-4 shrink-0 ${mode === "urgent" ? "text-sale" : "text-primary"}`} />
                         <span className="min-w-0">
-                          <span className="block text-sm font-semibold">{isUrgent ? dict.deliveryUrgent : dict.deliveryStandard}</span>
+                          <span className="block text-sm font-semibold">
+                            {mode === "urgent" ? dict.deliveryUrgent : mode === "pickup" ? dict.deliveryPickup : dict.deliveryStandard}
+                          </span>
                           <span className="block text-xs text-muted-foreground">
-                            {isUrgent ? [formatMoney(urgent.fee, locale), urgent.eta].filter(Boolean).join(" · ") : dict.deliveryStandardHint}
+                            {mode === "urgent"
+                              ? [formatMoney(urgent!.fee, locale), urgent!.eta].filter(Boolean).join(" · ")
+                              : mode === "pickup"
+                                ? dict.deliveryPickupHint
+                                : dict.deliveryStandardHint}
                           </span>
                         </span>
                       </button>
                     );
                   })}
+                </div>
+              )}
+              {pickupSelected && pickup?.address && (
+                <div className="flex items-start gap-2 border-t border-border px-4 py-2.5 text-sm">
+                  <MapPin className="mt-0.5 size-4 shrink-0 text-primary" />
+                  <span className="min-w-0">
+                    <span className="block text-xs text-muted-foreground">{dict.pickupAt}</span>
+                    <span className="block">{pickup.address}</span>
+                    {pickup.latitude !== null && pickup.longitude !== null && (
+                      <a
+                        href={`https://www.google.com/maps?q=${pickup.latitude},${pickup.longitude}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs font-medium text-primary hover:underline"
+                      >
+                        {dict.openMap}
+                      </a>
+                    )}
+                  </span>
                 </div>
               )}
               {shippingFee > 0 && (
@@ -437,8 +488,8 @@ export function CheckoutForm({
           </Card>
 
           {/* Delivery service */}
-          {/* Couriers only matter for shops not delivering urgently themselves. */}
-          {quote.delivery.options.length > 0 && !quote.shops.every((s) => s.urgentSelected) && (
+          {/* Couriers only matter for shops not delivering themselves or collected from. */}
+          {quote.delivery.options.length > 0 && quote.delivery.needed && (
             <Card>
               <CardTitle icon={Truck} required>
                 {dict.delivery}
@@ -537,22 +588,51 @@ export function CheckoutForm({
             )}
           </Card>
 
-          {/* Manual QR payment: one panel per shop, each needs its slip */}
-          {isTransfer &&
-            quote.shops.map(({ shop, total, transfer }) =>
-              transfer ? (
-                <PaymentPanel
-                  key={shop.id}
-                  title={interpolate(dict.payShop, { shop: shop.name })}
-                  qrSrc={transfer.hasQr ? `/api/shop-qr/${shop.id}` : null}
-                  amount={formatMoney(total, locale)}
-                  transfer={transfer}
-                  slip={slips[shop.id] ?? emptySlip}
-                  onPickSlip={(file) => void pickSlip(shop.id, file)}
-                  dict={dict}
+          {/* Loyalty points: pay part (or all) of the order with them. */}
+          {quote.points.balance > 0 && quote.points.value > 0 && (
+            <Card>
+              <CardTitle icon={Coins}>{dict.pointsTitle}</CardTitle>
+              <label className={`flex items-center gap-3 rounded-xl px-3 py-3 ring-1 transition-colors ${quote.points.used > 0 ? "bg-primary-soft ring-primary/40" : "ring-border"} ${quote.points.usable > 0 ? "cursor-pointer" : "opacity-60"}`}>
+                <input
+                  type="checkbox"
+                  className="size-5 accent-(--primary)"
+                  checked={quote.points.used > 0}
+                  disabled={requoting || quote.points.usable === 0}
+                  onChange={(e) => requote({ points: e.target.checked })}
                 />
-              ) : null,
-            )}
+                <span className="min-w-0 flex-1 text-sm">
+                  <span className="block font-semibold">
+                    {interpolate(dict.pointsUse, { n: (quote.points.used || quote.points.usable).toLocaleString("en-US"), amount: formatMoney((quote.points.used || quote.points.usable) * quote.points.value, locale) })}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    {interpolate(dict.pointsBalance, { n: quote.points.balance.toLocaleString("en-US"), value: formatMoney(quote.points.value, locale) })}
+                  </span>
+                </span>
+              </label>
+              {paidByPoints && <p className="mt-2 text-sm font-medium text-primary">{dict.pointsCoverAll}</p>}
+            </Card>
+          )}
+
+          {/* Manual QR payment: one transfer to Taladonline for the whole order */}
+          {isTransfer && quote.transfer && !paidByPoints && (
+            <div className="flex flex-col gap-2">
+              <PaymentPanel
+                title={dict.payTaladonline}
+                qrSrc={quote.transfer.hasQr ? "/api/payment-qr" : null}
+                amount={formatMoney(quote.total, locale)}
+                transfer={quote.transfer}
+                slips={slips}
+                max={MAX_PAYMENT_SLIPS}
+                onPickSlip={(file) => {
+                  setSlipNotice(null);
+                  void pickSlip(file);
+                }}
+                onRemoveSlip={removeSlip}
+                dict={dict}
+              />
+              {slipNotice && <p role="alert" className="px-1 text-sm text-sale">{slipNotice}</p>}
+            </div>
+          )}
 
           {/* Discount coupon */}
           <Card>
@@ -744,6 +824,12 @@ function SummaryRows({
           <div className="flex justify-between gap-3">
             <dt className="text-muted-foreground">{dict.shippingFee}</dt>
             <dd className="tabular-nums">{formatMoney(quote.shippingTotal, locale)}</dd>
+          </div>
+        )}
+        {quote.points.discount > 0 && (
+          <div className="flex justify-between gap-3">
+            <dt className="text-muted-foreground">{interpolate(dict.pointsLine, { n: quote.points.used.toLocaleString("en-US") })}</dt>
+            <dd className="tabular-nums text-sale">-{formatMoney(quote.points.discount, locale)}</dd>
           </div>
         )}
       </dl>

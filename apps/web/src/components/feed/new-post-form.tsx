@@ -123,8 +123,9 @@ export function NewPostForm({ locale, dict }: { locale: Locale; dict: Dict }) {
       <input
         ref={input}
         type="file"
-        accept="video/mp4,video/quicktime,video/webm,video/x-m4v"
-        capture="environment"
+        // No `capture`: phones then offer the gallery as well as the camera. Any video type
+        // can be picked; the server only keeps MP4, MOV and WebM.
+        accept="video/*"
         hidden
         onChange={(e) => {
           void pick(e.target.files?.[0]);

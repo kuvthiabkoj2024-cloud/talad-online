@@ -1,4 +1,4 @@
-import type { AdminPermission, KycDocumentType, Locale, OrderStatus, PaymentMethod, ProductStatus, ShopOrderTab } from '@talad/shared'
+import type { AdminPermission, Commission, KycDocumentType, Locale, OrderStatus, PaymentMethod, ProductStatus, ShopOrderTab } from '@talad/shared'
 
 export type LocalizedText = Partial<Record<Locale, string>>
 export type ShopStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED'
@@ -50,6 +50,53 @@ export interface Alerts {
   lowStock: number
   payoutsDue: { count: number; net: number }
   unsettledOrders: number
+  /** Transfers waiting for a check. */
+  paymentsToCheck: number
+  /** Paid orders cancelled, refund not yet sent. */
+  refundsDue: number
+  /** Shops' product commission requests waiting for a decision. */
+  commissionRequests: number
+}
+
+export type PaymentQueue = 'review' | 'rejected' | 'approved'
+export type SlipStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
+
+/** A checkout's transfer to Taladonline and its slips (admin Payments). */
+export interface PaymentReview {
+  number: string
+  createdAt: string
+  total: number
+  customer: { id: string; name: string; phone: string | null }
+  shopOrders: { number: string; status: OrderStatus; total: number; shop: string; paymentDueAt: string | null; payment: { method: string; status: string } | null }[]
+  slips: { id: string; status: SlipStatus; rejectReason: string | null; createdAt: string; reviewedAt: string | null }[]
+  pending: number
+  lastSlipAt: string | null
+}
+
+export interface PaymentQueuePage extends Paged<PaymentReview> {
+  counts: Record<PaymentQueue, number>
+}
+
+export type RefundQueue = 'due' | 'done'
+
+export interface RefundRow {
+  number: string
+  orderNumber: string
+  shop: string
+  customer: { id: string; name: string; phone: string | null }
+  reason: string | null
+  cancelledAt: string
+  amount: number
+  refundedAt: string | null
+  reference: string | null
+  refundAccount: { id: string; bankCode: string; accountName: string; accountNumber: string; hasQr: boolean } | null
+}
+
+export interface PaymentAccount {
+  bankCode: string | null
+  accountName: string | null
+  accountNumber: string | null
+  hasQr: boolean
 }
 
 export interface TopRow {
@@ -77,7 +124,7 @@ export interface ShopRow {
   ownerName: string
   status: ShopStatus
   logoUrl: string | null
-  commissionRate: number | null
+  commission: Commission | null
   ratingAvg: number
   createdAt: string
   updatedAt: string
@@ -97,8 +144,8 @@ export interface ShopDetail {
   address: string | null
   logoUrl: string | null
   coverUrl: string | null
-  commissionRate: number | null
-  /** Platform default, used when `commissionRate` is null. */
+  commission: Commission | null
+  /** Platform default (percent), used when `commission` is null. */
   platformCommissionRate: number
   payment: { bankCode: string | null; accountName: string | null; accountNumber: string | null; hasQr: boolean }
   /** Cash on delivery, the shop's own choice, and when it accepted the COD terms. */
@@ -175,6 +222,8 @@ export interface CustomerDetail extends Omit<CustomerRow, 'shop'> {
   shop: { id: string; name: string; slug: string; status: ShopStatus } | null
   linked: { google: boolean; apple: boolean }
   points: { id: string; type: string; points: number; note: string | null; expiresAt: string | null; createdAt: string }[]
+  /** Where refunds are sent, default first. */
+  bankAccounts: { id: string; bankCode: string; accountName: string; accountNumber: string; isDefault: boolean; hasQr: boolean }[]
   addressCount: number
   reviewCount: number
   activeSessions: number
@@ -198,17 +247,23 @@ export interface OrderRow {
   total: number
   itemCount: number
   items: OrderLine[]
-  customer: { name: string }
+  customer: { id: string; name: string }
   shop: { id: string; name: string; slug: string }
   payment: { method: PaymentMethod; status: PaymentStatus; hasSlip: boolean } | null
   awaitingConfirmation: boolean
+  /** While unpaid: slips being checked, rejected (waiting for new ones), or none yet. */
+  paymentCheck: 'reviewing' | 'rejected' | 'approved' | null
 }
 
 export interface OrderList extends Paged<OrderRow> {
   counts: Record<ShopOrderTab | 'all', number>
+  /** Open orders (not completed, cancelled or in a return) per payment method, for the tab badges. */
+  open?: { transfer: number; cod: number }
 }
 
 export interface OrderDetail extends Omit<OrderRow, 'customer' | 'payment'> {
+  /** The whole checkout; a transfer is checked per checkout (Payments). */
+  orderNumber: string
   subtotal: number
   discountTotal: number
   commissionAmount: number
@@ -274,6 +329,8 @@ export interface PayoutDetail {
   status: PayoutStatus
   paidAt: string | null
   reference: string | null
+  /** Taladonline's transfer slip was uploaded (GET /admin/payouts/:id/slip). */
+  hasSlip: boolean
   createdAt: string
   orders: {
     number: string
@@ -302,7 +359,7 @@ export interface Category {
   imageUrl: string | null
   sortOrder: number
   isActive: boolean
-  commissionRate: number | null
+  commission: Commission | null
   productCount: number
   childCount: number
 }
@@ -391,3 +448,24 @@ export interface AuditEntry {
   createdAt: string
   admin: { id: string; name: string; email: string } | null
 }
+
+export type CommissionRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
+export type CommissionSource = 'PRODUCT' | 'CATEGORY' | 'SHOP' | 'DEFAULT'
+
+export interface CommissionRequestRow {
+  id: string
+  requested: Commission
+  reason: string | null
+  status: CommissionRequestStatus
+  reviewNote: string | null
+  reviewedAt: string | null
+  createdAt: string
+  shop: { id: string; name: string }
+  product: { id: string; name: string; sku: string; price: number; imageUrl: string | null; category: LocalizedText }
+  /** What the product pays without its own rate. */
+  standard: { commission: Commission; source: CommissionSource }
+  /** Its own rate in force now (null once removed). */
+  productCommission: Commission | null
+}
+
+export type CommissionRequestPage = Paged<CommissionRequestRow> & { counts: Record<CommissionRequestStatus, number> }

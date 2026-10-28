@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { FeedQuery } from './feed.query.js';
 import { ListProductsQuery } from './list-products.query.js';
@@ -24,6 +24,12 @@ export class ProductsController {
   @Get('feed')
   feed(@Query() query: FeedQuery) {
     return this.products.feed(query);
+  }
+
+  /** One product video as a feed item, for links to it (the feed opens on it). */
+  @Get('feed/:productId')
+  feedVideo(@Param('productId', new ParseUUIDPipe({ version: '7' })) productId: string) {
+    return this.products.feedVideo(productId);
   }
 
   /** Product slugs are unique per shop, so the shop slug is part of the path. */

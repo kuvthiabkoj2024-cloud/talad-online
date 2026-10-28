@@ -5,12 +5,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 /** Pages opened from the account hub (/account); deeper pages have their own back link. */
-const HUB_CHILDREN = /^\/account\/(profile|orders|addresses|bank-accounts)\/?$/;
+const HUB_CHILDREN = /^\/account\/(profile|orders|addresses|bank-accounts|following|points)\/?$/;
 
 /** "← Back to Profile" above the pages listed on the account hub. */
 export function BackToAccount({ href, label }: { href: string; label: string }) {
   const path = usePathname().replace(/^\/[^/]+/, "");
   if (!HUB_CHILDREN.test(path)) return null;
+  return <BackLink href={href} label={label} />;
+}
+
+function BackLink({ href, label }: { href: string; label: string }) {
   return (
     <Link
       href={href}

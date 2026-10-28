@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Prisma, type AdminUser } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { StorageService } from '../media/storage.service.js';
 
 /** Customer accounts for the admin console (§2.4). */
 @Injectable()
@@ -9,6 +10,7 @@ export class AdminCustomersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly storage: StorageService,
   ) {}
 
   async list(filter: { q?: string; status?: string; page: number; pageSize: number }) {
@@ -81,6 +83,11 @@ export class AdminCustomersService {
         shop: { select: { id: true, name: true, slug: true, status: true } },
         _count: { select: { orders: true, addresses: true, reviews: true } },
         points: { orderBy: { createdAt: 'desc' }, take: 10, select: { id: true, type: true, points: true, note: true, expiresAt: true, createdAt: true } },
+        // Where refunds are sent (the customer's saved accounts, default first).
+        bankAccounts: {
+          orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
+          select: { id: true, bankCode: true, accountName: true, accountNumber: true, isDefault: true, qrImageKey: true },
+        },
       },
     });
     if (!c) throw new NotFoundException('Customer not found');
@@ -89,9 +96,10 @@ export class AdminCustomersService {
       this.prisma.session.count({ where: { actorType: 'CUSTOMER', actorId: id, revokedAt: null, expiresAt: { gt: new Date() } } }),
       this.prisma.dispute.count({ where: { shopOrder: { order: { customerId: id } } } }),
     ]);
-    const { googleId, appleId, _count, ...rest } = c;
+    const { googleId, appleId, _count, bankAccounts, ...rest } = c;
     return {
       ...rest,
+      bankAccounts: bankAccounts.map(({ qrImageKey, ...a }) => ({ ...a, hasQr: qrImageKey !== null })),
       linked: { google: googleId !== null, apple: appleId !== null },
       orderCount: _count.orders,
       addressCount: _count.addresses,
@@ -100,6 +108,13 @@ export class AdminCustomersService {
       activeSessions: sessions,
       disputeCount: disputes,
     };
+  }
+
+  /** The QR of one of the customer's refund accounts (private). */
+  async bankAccountQr(customerId: string, accountId: string) {
+    const a = await this.prisma.customerBankAccount.findFirst({ where: { id: accountId, customerId }, select: { qrImageKey: true } });
+    if (!a?.qrImageKey) throw new NotFoundException('No QR');
+    return this.storage.get(a.qrImageKey);
   }
 
   /** Suspending signs the customer out everywhere; their shop stays as it is. */

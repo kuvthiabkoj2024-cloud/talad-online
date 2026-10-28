@@ -20,6 +20,8 @@ export const ADMIN_PERMISSIONS = [
   'customers',
   'orders',
   'disputes',
+  /** Checking customers' transfer slips and refunding cancelled paid orders. */
+  'payments',
   'payouts',
   'coupons',
   'catalog',
@@ -36,7 +38,7 @@ export type AdminPermission = (typeof ADMIN_PERMISSIONS)[number];
 export const ADMIN_PERMISSION_GROUPS: { key: 'overview' | 'marketplace' | 'money' | 'content' | 'system'; permissions: AdminPermission[] }[] = [
   { key: 'overview', permissions: ['dashboard', 'reports'] },
   { key: 'marketplace', permissions: ['shops', 'shops.review', 'shops.commission', 'products', 'customers', 'orders', 'disputes'] },
-  { key: 'money', permissions: ['payouts', 'coupons'] },
+  { key: 'money', permissions: ['payments', 'payouts', 'coupons'] },
   { key: 'content', permissions: ['catalog', 'banners', 'pages', 'announcements'] },
   { key: 'system', permissions: ['delivery', 'settings', 'audit'] },
 ];
@@ -44,7 +46,7 @@ export const ADMIN_PERMISSION_GROUPS: { key: 'overview' | 'marketplace' | 'money
 /** What the built-in roles start with (editable later, except Super Admin). */
 export const DEFAULT_ROLE_PERMISSIONS: Record<Exclude<AdminRole, 'SUPER_ADMIN'>, AdminPermission[]> = {
   SUPPORT: ['dashboard', 'shops', 'shops.review', 'products', 'customers', 'orders', 'disputes'],
-  FINANCE: ['dashboard', 'reports', 'shops', 'shops.commission', 'orders', 'payouts'],
+  FINANCE: ['dashboard', 'reports', 'shops', 'shops.commission', 'orders', 'payments', 'payouts'],
 };
 
 export const isAdminPermission = (p: string): p is AdminPermission => (ADMIN_PERMISSIONS as readonly string[]).includes(p);

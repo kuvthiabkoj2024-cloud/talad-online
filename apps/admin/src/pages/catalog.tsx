@@ -9,6 +9,8 @@ import { ExternalLink, FolderTree, ImageOff, LoaderCircle, Pencil, Plus, Ruler, 
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { FlagBadge } from '@/components/badges'
+import { CommissionInput } from '@/components/commission-input'
+import { commissionFrom, commissionLabel, draftOf } from '@/lib/commission'
 import { ConfirmDialog, type ConfirmOptions } from '@/components/confirm-dialog'
 import { Field } from '@/components/field'
 import { PageBody, PageIntro, TopBar } from '@/components/page-header'
@@ -165,7 +167,7 @@ export function UnitsPage() {
 }
 
 function CategoryRow({ c, onEdit, onDelete }: { c: Category; onEdit: () => void; onDelete: () => void }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   return (
     <div className="flex items-center gap-3">
       <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted text-muted-foreground">
@@ -177,7 +179,7 @@ function CategoryRow({ c, onEdit, onDelete }: { c: Category; onEdit: () => void;
         </span>
         <span className="text-xs text-muted-foreground">
           /{c.slug} · {fill(t.catalog.productsCount, { n: c.productCount })}
-          {c.commissionRate !== null && ` · ${c.commissionRate}%`}
+          {c.commission && ` · ${commissionLabel(c.commission, locale, t.commission.perUnit)}`}
         </span>
       </span>
       {!c.isActive && <FlagBadge tone="muted">{t.catalog.hidden}</FlagBadge>}
@@ -260,7 +262,7 @@ function CategoryForm({ value, roots, onDone }: { value: Partial<Category>; root
   const [icon, setIcon] = useState(iconFieldValue(value.iconUrl))
   const [sortOrder, setSortOrder] = useState(String(value.sortOrder ?? 0))
   const [isActive, setIsActive] = useState(value.isActive ?? true)
-  const [rate, setRate] = useState(value.commissionRate != null ? String(value.commissionRate) : '')
+  const [commission, setCommission] = useState(draftOf(value.commission ?? null))
   const [error, setError] = useState<string | null>(null)
   const save = useMutation({
     mutationFn: () => {
@@ -272,7 +274,7 @@ function CategoryForm({ value, roots, onDone }: { value: Partial<Category>; root
         imageUrl: value.imageUrl ?? null,
         sortOrder: Number(sortOrder) || 0,
         isActive,
-        commissionRate: rate.trim() === '' ? null : Number(rate),
+        commission: commissionFrom(commission),
       }
       return value.id ? send('PUT', `/admin/categories/${value.id}`, body) : send('POST', '/admin/categories', body)
     },
@@ -323,7 +325,7 @@ function CategoryForm({ value, roots, onDone }: { value: Partial<Category>; root
           <Input id="sort" type="number" min={0} max={1000} value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} />
         </Field>
         <Field id="rate" label={t.catalog.commission} hint={t.catalog.commissionHint}>
-          <Input id="rate" inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value.replace(/[^\d.]/g, ''))} />
+          <CommissionInput id="rate" value={commission} onChange={setCommission} />
         </Field>
       </div>
       <IconField value={icon} onChange={setIcon} />

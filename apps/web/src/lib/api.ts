@@ -106,7 +106,7 @@ export function listProducts(query: ProductQuery): Promise<ProductCard[] | null>
 export interface FeedItem extends Omit<ProductCard, "shop"> {
   kind?: "product";
   videoUrl: string;
-  shop: { slug: string; name: string; logoUrl: string | null };
+  shop: { id: string; slug: string; name: string; logoUrl: string | null };
   /** Units available (all options together). */
   stock: number;
   hasVariants: boolean;
@@ -152,7 +152,34 @@ export interface FeedPostItem {
 export interface PostStats {
   views: number;
   likes: number;
+  comments: number;
   shares: number;
+}
+
+/** What a comment sheet is about: a shop's product video or a customer's post. */
+export type CommentTarget = { kind: "product" | "post"; id: string };
+
+/** Mirrors `CustomerProfileView` from services/api catalog/videos. */
+export interface CustomerProfile {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  joinedAt: string;
+  followers: number;
+  following: number;
+  videos: number;
+  likes: number;
+}
+
+export interface ProfileVideoPage {
+  items: FeedPostItem[];
+  nextCursor: string | null;
+}
+
+export interface ProfileFollowerPage {
+  items: { id: string; name: string; avatarUrl: string | null; followedAt: string }[];
+  nextCursor: string | null;
+  total: number;
 }
 
 /** One screen of the feed. */

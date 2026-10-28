@@ -64,6 +64,12 @@ export class ShopFollowsService {
     return { following: follow, followers };
   }
 
+  async followingAmong(customerId: string, shopIds: string[]): Promise<{ shopIds: string[] }> {
+    if (!shopIds.length) return { shopIds: [] };
+    const rows = await this.prisma.shopFollow.findMany({ where: { customerId, shopId: { in: shopIds } }, select: { shopId: true } });
+    return { shopIds: rows.map((r) => r.shopId) };
+  }
+
   /** The shops a customer follows, most recently followed first. */
   async mine(customerId: string): Promise<FollowedShop[]> {
     const rows = await this.prisma.shopFollow.findMany({

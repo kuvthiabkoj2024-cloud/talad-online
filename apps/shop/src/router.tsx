@@ -35,6 +35,7 @@ export const router = createBrowserRouter([
               { path: 'videos', lazy: page(() => import('@/pages/videos'), (m) => m.VideosPage) },
               { path: 'marketing', lazy: page(() => import('@/pages/marketing'), (m) => m.MarketingPage) },
               { path: 'customers', lazy: page(() => import('@/pages/customers'), (m) => m.CustomersPage) },
+              { path: 'cod', lazy: page(() => import('@/pages/cod-orders'), (m) => m.CodOrdersPage) },
               { path: 'finance', lazy: page(() => import('@/pages/finance'), (m) => m.FinancePage) },
               // Desktop shows these on the home page; phones open them from the home tool grid.
               { path: 'stats', lazy: page(() => import('@/pages/stats'), (m) => m.StatsPage) },

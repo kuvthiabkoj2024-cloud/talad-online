@@ -13,13 +13,18 @@ describe('shop order actions', () => {
     expect(shopOrderActions('CANCELLED')).toEqual([]);
   });
 
-  it('give a new order the two ways forward: ship with the bill, or out of stock', () => {
+  it('give a paid order the two ways forward: ship with the bill, or out of stock', () => {
     expect(shopOrderActions('CONFIRMED')).toEqual(['pack', 'ship', 'out-of-stock', 'cancel']);
-    expect(shopOrderActions('PENDING')).toEqual(['confirm', 'reject-payment', 'ship', 'out-of-stock', 'cancel']);
   });
 
-  it('cover every active status', () => {
-    for (const s of ORDER_STATUSES.filter((s) => !['COMPLETED', 'CANCELLED', 'DELIVERED'].includes(s))) {
+  it('leave unchecked transfers and sent orders to Taladonline and the customer', () => {
+    // PENDING: Taladonline checks the transfer; SHIPPED/DELIVERED: the customer confirms receipt.
+    expect(shopOrderActions('PENDING')).toEqual([]);
+    expect(shopOrderActions('SHIPPED')).toEqual([]);
+  });
+
+  it('cover every other active status', () => {
+    for (const s of ORDER_STATUSES.filter((s) => !['COMPLETED', 'CANCELLED', 'DELIVERED', 'PENDING', 'SHIPPED'].includes(s))) {
       expect(shopOrderActions(s).length).toBeGreaterThan(0);
     }
   });

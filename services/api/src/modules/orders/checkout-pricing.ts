@@ -1,4 +1,5 @@
 /** Coupon rules for checkout (§4.4, §3.4). Pure functions so the maths is unit-testable. */
+import { commissionFee, type Commission } from '@talad/shared';
 
 export type CouponErrorCode =
   | 'COUPON_INVALID'
@@ -72,12 +73,16 @@ export function allocateDiscount(discount: number, shops: { id: string; subtotal
 }
 
 /**
- * Commission per item: each at its own rate, on what it sold for after its share of a
- * shop-funded coupon (the shop gave that discount; a platform coupon doesn't lower the fee).
+ * Commission per item: each at its own commission (a percent, or a fixed amount per unit), on
+ * what it sold for after its share of a shop-funded coupon (the shop gave that discount; a
+ * platform coupon doesn't lower the fee).
  */
-export function itemCommissions(lines: { id: string; lineTotal: number; rate: number }[], shopDiscount: number): Map<string, number> {
+export function itemCommissions(
+  lines: { id: string; lineTotal: number; quantity: number; commission: Commission }[],
+  shopDiscount: number,
+): Map<string, number> {
   const shares = allocateDiscount(shopDiscount, lines.map((l) => ({ id: l.id, subtotal: l.lineTotal })));
-  return new Map(lines.map((l) => [l.id, Math.round(((l.lineTotal - (shares.get(l.id) ?? 0)) * l.rate) / 100)]));
+  return new Map(lines.map((l) => [l.id, commissionFee(l.commission, l.lineTotal - (shares.get(l.id) ?? 0), l.quantity)]));
 }
 
 /**

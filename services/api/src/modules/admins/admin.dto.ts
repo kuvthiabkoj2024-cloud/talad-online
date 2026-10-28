@@ -1,5 +1,5 @@
 import { Transform, Type } from 'class-transformer';
-import { IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateIf } from 'class-validator';
+import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 /** `?q=&page=&pageSize=` for admin lists. */
 export class AdminPageQuery {
@@ -34,13 +34,4 @@ export class ReasonDto {
   @IsString()
   @MaxLength(500)
   reason?: string;
-}
-
-export class RateDto {
-  /** Percent, or null for the platform default. */
-  @ValidateIf((_, v) => v !== null)
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  @Max(50)
-  rate: number | null;
 }

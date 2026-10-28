@@ -1,9 +1,10 @@
-import { formatPhone } from '@talad/shared'
+import { formatPhone, LAO_BANKS, type BankCode } from '@talad/shared'
 import { Button } from '@talad/ui/components/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@talad/ui/components/card'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@talad/ui/components/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@talad/ui/components/table'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Users } from 'lucide-react'
+import { Check, Copy, ImageOff, Landmark, LoaderCircle, Users } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
@@ -16,6 +17,7 @@ import { useSearchParamInput, useUrlParams } from '@/hooks/use-url-params'
 import { useI18n } from '@/i18n/context'
 import { api, send } from '@/lib/api'
 import { formatDate, formatMoney, formatNumber } from '@/lib/format'
+import { usePrivateImage } from '@/lib/private-file'
 import type { CustomerDetail, CustomerRow, OrderList, Paged } from '@/lib/types'
 
 const FILTERS = ['all', 'active', 'suspended', 'sellers'] as const
@@ -211,6 +213,7 @@ export function CustomerDetailPage() {
                 )}
               </CardContent>
             </Card>
+            <BankAccounts customerId={c.id} accounts={c.bankAccounts} />
             <Card className="gap-2">
               <CardHeader>
                 <CardTitle className="text-base">{t.customers.pointsHistory}</CardTitle>
@@ -251,4 +254,73 @@ function Stat({ label, value }: { label: string; value: string }) {
       </CardContent>
     </Card>
   )
+}
+
+/** The customer's refund accounts: bank, name and number to copy, and the QR to scan (pop-up). */
+function BankAccounts({ customerId, accounts }: { customerId: string; accounts: CustomerDetail['bankAccounts'] }) {
+  const { t } = useI18n()
+  const [qr, setQr] = useState<string | null>(null)
+  const [copied, setCopied] = useState<string | null>(null)
+  const copy = (a: CustomerDetail['bankAccounts'][number]) =>
+    void navigator.clipboard.writeText(a.accountNumber).then(() => {
+      setCopied(a.id)
+      setTimeout(() => setCopied(null), 1500)
+    })
+  return (
+    <Card className="gap-2">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Landmark className="size-4 text-muted-foreground" />
+          {t.customers.bankAccounts}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2 text-sm">
+        {accounts.length === 0 ? (
+          <p className="text-muted-foreground">{t.customers.noBankAccounts}</p>
+        ) : (
+          accounts.map((a) => (
+            <div key={a.id} className="flex items-center gap-3 rounded-lg border p-3">
+              {a.hasQr && <AccountQrThumb customerId={customerId} accountId={a.id} onOpen={() => setQr(a.id)} />}
+              <div className="min-w-0 flex-1">
+                <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                  {LAO_BANKS[a.bankCode as BankCode] ?? a.bankCode}
+                  {a.isDefault && <span className="rounded-full bg-primary/10 px-1.5 text-[11px] font-semibold text-primary">{t.customers.defaultAccount}</span>}
+                </p>
+                <p className="font-medium">{a.accountName}</p>
+                <p className="flex items-center gap-1 font-mono">
+                  {a.accountNumber}
+                  <button type="button" onClick={() => copy(a)} className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={t.customers.copy} title={t.customers.copy}>
+                    {copied === a.id ? <Check className="size-3.5 text-primary" /> : <Copy className="size-3.5" />}
+                  </button>
+                </p>
+              </div>
+            </div>
+          ))
+        )}
+      </CardContent>
+      <Dialog open={qr !== null} onOpenChange={(open) => !open && setQr(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t.customers.bankAccounts}</DialogTitle>
+          </DialogHeader>
+          {qr && <AccountQrImage customerId={customerId} accountId={qr} className="w-full rounded-lg bg-white object-contain" />}
+        </DialogContent>
+      </Dialog>
+    </Card>
+  )
+}
+
+function AccountQrThumb({ customerId, accountId, onOpen }: { customerId: string; accountId: string; onOpen: () => void }) {
+  return (
+    <button type="button" onClick={onOpen} className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white ring-1 ring-border transition hover:ring-primary">
+      <AccountQrImage customerId={customerId} accountId={accountId} className="size-full object-contain" />
+    </button>
+  )
+}
+
+function AccountQrImage({ customerId, accountId, className }: { customerId: string; accountId: string; className?: string }) {
+  const img = usePrivateImage(`/admin/customers/${customerId}/bank-accounts/${accountId}/qr`)
+  if (img.isPending) return <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
+  if (!img.data) return <ImageOff className="size-4 text-muted-foreground" />
+  return <img src={img.data} alt="" className={className} />
 }

@@ -23,6 +23,12 @@ export class CustomerOrdersController {
     return this.orders.detail(customer.id, number);
   }
 
+  /** Cancel an unpaid transfer whose slips Taladonline rejected (or that has none). */
+  @Post(':number/cancel')
+  cancel(@CurrentCustomer() customer: Customer, @Param('number') number: string) {
+    return this.orders.cancel(customer.id, number);
+  }
+
   /** "I received it" on a delivered order: completes it now. */
   @Post(':number/receive')
   receive(@CurrentCustomer() customer: Customer, @Param('number') number: string) {

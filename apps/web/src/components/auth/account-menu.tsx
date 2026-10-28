@@ -127,14 +127,14 @@ function CustomerDropdown({
               </p>
             </div>
           </div>
-          <div className="p-2">
+          <div className="space-y-1 p-2">
             {items.map(({ href, label, icon: Icon }) => (
               <Link
                 key={href}
                 href={href}
                 role="menuitem"
                 onClick={() => setOpen(false)}
-                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors hover:bg-muted"
+                className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition-colors hover:bg-muted"
               >
                 <Icon className="size-5 text-muted-foreground" />
                 {label}
@@ -145,7 +145,7 @@ function CustomerDropdown({
                 href={SELLER_CENTER_URL}
                 role="menuitem"
                 onClick={() => setOpen(false)}
-                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors hover:bg-muted"
+                className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition-colors hover:bg-muted"
               >
                 <Store className="size-5 text-primary" />
                 <span className="min-w-0 flex-1">
@@ -163,7 +163,7 @@ function CustomerDropdown({
                 setOpen(false);
                 setConfirmLogout(true);
               }}
-              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-sale transition-colors hover:bg-sale/10"
+              className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-sale transition-colors hover:bg-sale/10"
             >
               <LogOut className="size-5" />
               {dict.account.logout}

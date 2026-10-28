@@ -1,14 +1,15 @@
 import { formatMoney, formatPhone, provinceName, SLIP_PAYMENT_METHODS } from "@talad/shared";
-import { ArrowLeft, CircleAlert, CircleX, Clock, CreditCard, MapPin, MessageCircleMore, MessageSquareText, ReceiptText, RotateCcw, Store, Truck, Zap } from "lucide-react";
+import { ArrowLeft, Check, CircleAlert, CircleX, Clock, CreditCard, LoaderCircle, MapPin, MessageCircleMore, MessageSquareText, RotateCcw, Store, TriangleAlert, Truck, Zap } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { OrderProgress } from "@/components/account/order-progress";
 import { OrderStatusBadge } from "@/components/account/order-status-badge";
 import { OrderThumb } from "@/components/account/order-thumb";
+import { CancelOrderButton } from "@/components/account/cancel-order-button";
 import { ReceiveOrderButton } from "@/components/account/receive-order-button";
+import { ShippingBill } from "@/components/account/shipping-bill";
 import { OrderPayment } from "@/components/cart/order-payment";
-import { SimulatePaymentButton } from "@/components/cart/simulate-payment-button";
 import { interpolate, productPath } from "@/lib/format";
 import { formatDate, type OrderDetail, type PaymentStatus } from "@/lib/orders";
 import { requireCustomer } from "@/lib/require-customer";
@@ -17,6 +18,12 @@ import { getDictionary, getLocale } from "@/app/[lang]/dictionaries";
 import { RefreshOnLive } from "@/components/realtime/refresh-on-live";
 
 type Props = PageProps<"/[lang]/account/orders/[number]">;
+
+/** System notes are stored in English; show them in the page's language when we know them. */
+function noteText(note: string, notes: Record<string, string>): string {
+  if (note.startsWith("Payment slip rejected: ")) return interpolate(notes.slipRejected, { reason: note.slice(23) });
+  return notes[note] ?? note;
+}
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { number } = await params;
@@ -44,13 +51,36 @@ export default async function OrderDetailPage({ params }: Props) {
   const refundNote = order.history.findLast((h) => h.status === "RETURN_REQUESTED")?.note;
   const first = order.items[0];
   const payment = order.payment;
-  // Manual transfer still open: the customer can pay (QR + slip) or replace the slip.
+  // Manual transfer still open: the customer pays Taladonline (QR + slips) or sends new slips.
   const payable =
     order.status === "PENDING" &&
     payment?.status === "PENDING" &&
     SLIP_PAYMENT_METHODS.includes(payment.method) &&
     order.transfer !== null;
-  const statusLabel = order.awaitingConfirmation ? checkoutDict.verifying : dict.orderStatus[order.status];
+  // The step in progress, shown on top of the timeline.
+  const next =
+    order.status === "PENDING"
+      ? order.paymentCheck === "reviewing"
+        ? dict.timelineNext.reviewing
+        : order.paymentCheck === "rejected"
+          ? dict.timelineNext.rejected
+          : dict.timelineNext.payment
+      : order.status === "CONFIRMED" || order.status === "PACKED"
+        ? dict.timelineNext.preparing
+        : order.status === "SHIPPED" || order.status === "DELIVERED"
+          ? order.pickup
+            ? dict.timelineNext.pickup
+            : dict.timelineNext.receive
+          : order.status === "RETURN_REQUESTED"
+            ? dict.timelineNext.return
+            : null;
+  const statusLabel = order.awaitingConfirmation
+    ? checkoutDict.verifying
+    : order.paymentCheck === "rejected"
+      ? checkoutDict.slipRejectedTitle
+      : order.pickup && order.status === "SHIPPED"
+        ? dict.stepReadyPickup
+        : dict.orderStatus[order.status];
 
   return (
     <>
@@ -77,7 +107,7 @@ export default async function OrderDetailPage({ params }: Props) {
 
       {order.status === "PENDING" && (payable || order.paymentDueAt) && (
         <div className="flex flex-col gap-3">
-          {order.paymentDueAt && !payment?.slipUploadedAt && (
+          {order.paymentDueAt && order.paymentCheck !== "reviewing" && (
             <Notice tone="amber" icon={Clock}>
               {interpolate(dict.payBefore, { date: formatDate(order.paymentDueAt, locale, true) })}
             </Notice>
@@ -86,30 +116,45 @@ export default async function OrderDetailPage({ params }: Props) {
             <OrderPayment
               locale={locale}
               orderNumber={order.number}
-              amount={formatMoney(payment.amount, locale)}
+              amount={formatMoney(order.orderTotal, locale)}
               transfer={order.transfer!}
-              slipUploadedAt={payment.slipUploadedAt}
+              check={order.paymentCheck}
+              slips={order.slips}
               dict={checkoutDict}
               cartErrors={cartErrors}
               closeLabel={auth.close}
             />
           )}
-          {payment?.status === "PENDING" && payment.method !== "COD" && (
-            <SimulatePaymentButton orderNumber={order.number} label={checkoutDict.simulatePayment} />
-          )}
+          {/* Payment rejected (or never sent): the customer may give up on the order. */}
+          {order.cancellable && order.paymentCheck === "rejected" && <CancelOrderButton orderNumber={order.number} labels={dict} />}
         </div>
       )}
-      {order.status === "DELIVERED" && (
+      {(order.status === "SHIPPED" || order.status === "DELIVERED") && (
         <Notice tone="green" icon={Truck} title={dict.receiveTitle}>
           <span className="flex flex-col gap-3">
-            {order.autoConfirmAt && interpolate(dict.autoConfirmOn, { date: formatDate(order.autoConfirmAt, locale) })}
+            {order.autoConfirmAt && interpolate(dict.autoComplete, { date: formatDate(order.autoConfirmAt, locale) })}
+            {/* Points only for confirming: an order that completes by itself earns none. */}
+            {order.pointsOnReceive > 0 && (
+              <span className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 font-medium text-amber-800 ring-1 ring-inset ring-amber-200">
+                <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+                {interpolate(dict.pointsWarning, { n: order.pointsOnReceive })}
+              </span>
+            )}
             <ReceiveOrderButton orderNumber={order.number} labels={dict} />
           </span>
         </Notice>
       )}
       {order.status === "CANCELLED" && (
         <Notice tone="grey" icon={CircleX} title={dict.cancelledTitle}>
-          {order.cancelReason}
+          {order.cancelReason && noteText(order.cancelReason, dict.timelineNotes)}
+          {/* A paid transfer: Taladonline sends the money back. */}
+          {payment && payment.method !== "COD" && (payment.status === "PAID" || payment.refundedAt) && (
+            <span className="mt-1 block font-medium text-foreground">
+              {payment.refundedAt
+                ? interpolate(checkoutDict.refundDone, { amount: formatMoney(payment.amount, locale), date: formatDate(payment.refundedAt, locale) })
+                : interpolate(checkoutDict.refundPending, { amount: formatMoney(payment.amount, locale) })}
+            </span>
+          )}
         </Notice>
       )}
       {order.status === "RETURN_REQUESTED" && (
@@ -123,7 +168,18 @@ export default async function OrderDetailPage({ params }: Props) {
         <Card className="px-3 py-5 sm:px-6">
           <OrderProgress
             status={order.status}
-            labels={[dict.stepPlaced, dict.stepConfirmed, dict.stepPacked, dict.stepShipped, dict.stepDelivered, dict.stepCompleted]}
+            labels={[
+              dict.stepPlaced,
+              payment?.method === "COD" ? dict.stepConfirmed : dict.stepPaid,
+              order.pickup ? dict.stepReadyPickup : dict.stepShipped,
+              dict.stepCompleted,
+            ]}
+            waitingLabels={[
+              dict.stepPlaced,
+              dict.stepWaitingPayment,
+              order.pickup ? dict.stepWaitingPickup : dict.stepWaitingShip,
+              dict.stepWaitingConfirm,
+            ]}
           />
         </Card>
       )}
@@ -174,19 +230,32 @@ export default async function OrderDetailPage({ params }: Props) {
           <Card className="px-4 py-4">
             <h2 className="mb-3 text-sm font-semibold">{dict.timeline}</h2>
             <ol className="relative flex flex-col gap-4 border-l-2 border-border pl-5">
-              {[...order.history].reverse().map((h, i) => (
+              {/* What happens next (amber, in progress) above what already happened (green). */}
+              {next && (
+                <li className="relative">
+                  <span aria-hidden className="absolute -left-[31px] top-0 flex size-5 items-center justify-center rounded-full bg-amber-400 text-white ring-4 ring-card">
+                    <LoaderCircle className="size-3 animate-[spin_2s_linear_infinite]" strokeWidth={3} />
+                  </span>
+                  <p className="text-sm font-semibold text-amber-700">{next}</p>
+                  {(order.status === "SHIPPED" || order.status === "DELIVERED") && order.autoConfirmAt && (
+                    <p className="text-xs text-muted-foreground">{interpolate(dict.autoComplete, { date: formatDate(order.autoConfirmAt, locale) })}</p>
+                  )}
+                </li>
+              )}
+              {[...order.history].reverse().map((h) => (
                 <li key={`${h.status}-${h.at}`} className="relative">
-                  <span
-                    aria-hidden
-                    className={`absolute -left-[27px] top-1 size-3 rounded-full ring-4 ring-card ${
-                      i === 0 ? "bg-primary" : "bg-muted-foreground/40"
-                    }`}
-                  />
-                  <p className={`text-sm ${i === 0 ? "font-semibold" : ""}`}>
-                    {h.status === "PENDING" ? dict.timelinePlaced : dict.orderStatus[h.status]}
+                  <span aria-hidden className="absolute -left-[31px] top-0 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground ring-4 ring-card">
+                    <Check className="size-3" strokeWidth={3.5} />
+                  </span>
+                  <p className="text-sm font-medium">
+                    {h.status === "PENDING"
+                      ? dict.timelinePlaced
+                      : h.status === "CONFIRMED" && payment?.method === "COD"
+                        ? dict.stepConfirmed
+                        : dict.orderStatus[h.status]}
                   </p>
                   <p className="text-xs text-muted-foreground">{formatDate(h.at, locale, true)}</p>
-                  {h.note && <p className="mt-0.5 text-xs text-muted-foreground">“{h.note}”</p>}
+                  {h.note && <p className="mt-0.5 text-xs text-muted-foreground">“{noteText(h.note, dict.timelineNotes)}”</p>}
                 </li>
               ))}
             </ol>
@@ -201,8 +270,34 @@ export default async function OrderDetailPage({ params }: Props) {
             <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
               {[address.line, address.village, address.district, provinceName(address.province, locale)].filter(Boolean).join(", ")}
             </p>
-            {(order.deliveryProvider || order.trackingNumber || order.hasShippingBill || order.urgentDelivery) && (
+            {(order.deliveryProvider || order.trackingNumber || order.hasShippingBill || order.urgentDelivery || order.pickup) && (
               <dl className="mt-3 space-y-1.5 border-t border-border pt-3 text-sm">
+                {order.pickup && (
+                  <div className="space-y-1">
+                    <p className="flex items-center gap-1.5 font-semibold text-primary">
+                      <Store className="size-4" />
+                      {dict.pickup}
+                    </p>
+                    {order.pickup.address && (
+                      <div>
+                        <dt className="text-muted-foreground">{dict.pickupAt}</dt>
+                        <dd>{order.pickup.address}</dd>
+                      </div>
+                    )}
+                    <Row label={dict.pickupCall} value={<a href={`tel:${order.pickup.phone}`} className="text-primary hover:underline">{formatPhone(order.pickup.phone)}</a>} />
+                    {order.pickup.latitude !== null && order.pickup.longitude !== null && (
+                      <a
+                        href={`https://www.google.com/maps?q=${order.pickup.latitude},${order.pickup.longitude}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                      >
+                        <MapPin className="size-3.5" />
+                        {dict.openMap}
+                      </a>
+                    )}
+                  </div>
+                )}
                 {order.urgentDelivery && (
                   <p className="flex items-center gap-1.5 font-semibold text-sale">
                     <Zap className="size-4" />
@@ -216,15 +311,7 @@ export default async function OrderDetailPage({ params }: Props) {
                   <Row label={dict.tracking} value={<span className="font-mono">{order.trackingNumber}</span>} />
                 )}
                 {order.hasShippingBill && (
-                  <a
-                    href={`/api/orders/${encodeURIComponent(order.number)}/shipping-bill`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 pt-1 text-sm font-semibold text-primary hover:underline"
-                  >
-                    <ReceiptText className="size-4" />
-                    {dict.shippingBill}
-                  </a>
+                  <ShippingBill src={`/api/orders/${encodeURIComponent(order.number)}/shipping-bill`} label={dict.shippingBill} closeLabel={auth.close} />
                 )}
               </dl>
             )}
@@ -270,6 +357,9 @@ export default async function OrderDetailPage({ params }: Props) {
               )}
               {order.discountTotal > 0 && (
                 <Row label={dict.discount} value={<span className="text-sale">-{formatMoney(order.discountTotal, locale)}</span>} />
+              )}
+              {order.pointsUsed > 0 && (
+                <p className="-mt-1 text-right text-xs text-muted-foreground">{interpolate(dict.pointsUsedNote, { n: order.pointsUsed.toLocaleString("en-US") })}</p>
               )}
             </dl>
             <div className="mt-3 flex items-baseline justify-between border-t border-dashed border-border pt-3">

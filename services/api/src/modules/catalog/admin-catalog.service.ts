@@ -2,7 +2,9 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import type { AdminUser, Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { commissionOf } from '@talad/shared';
 import type { AdminCategoryDto, AdminUnitDto } from './admin-catalog.dto.js';
+import { commissionData } from './commission/commission.js';
 
 /** A DTO as a plain JSON object for the audit log. */
 const plain = (dto: object): Record<string, unknown> => JSON.parse(JSON.stringify(dto)) as Record<string, unknown>;
@@ -32,9 +34,9 @@ export class AdminCatalogService {
       orderBy: [{ sortOrder: 'asc' }, { slug: 'asc' }],
       include: { _count: { select: { products: true, children: true } } },
     });
-    return rows.map(({ _count, commissionRate, ...c }) => ({
+    return rows.map(({ _count, commissionRate, commissionFixed, ...c }) => ({
       ...c,
-      commissionRate: commissionRate?.toNumber() ?? null,
+      commission: commissionOf(commissionRate?.toNumber(), commissionFixed?.toNumber()),
       productCount: _count.products,
       childCount: _count.children,
     }));
@@ -68,7 +70,7 @@ export class AdminCatalogService {
       imageUrl: dto.imageUrl || null,
       sortOrder: dto.sortOrder,
       isActive: dto.isActive,
-      commissionRate: dto.commissionRate ?? null,
+      ...commissionData(dto.commission ?? null),
     };
     const saved = id
       ? await this.prisma.category.update({ where: { id }, data })

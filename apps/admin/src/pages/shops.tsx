@@ -1,16 +1,18 @@
 import { formatPhone, LAO_BANKS, type BankCode } from '@talad/shared'
 import { Button } from '@talad/ui/components/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@talad/ui/components/card'
-import { Input } from '@talad/ui/components/input'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@talad/ui/components/dialog'
 import { Label } from '@talad/ui/components/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@talad/ui/components/table'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ExternalLink, FileText, LoaderCircle, Store } from 'lucide-react'
+import { ExternalLink, FileText, ImageOff, LoaderCircle, Store } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
 import { can, useAuth } from '@/auth/context'
 import { ShopStatusBadge } from '@/components/badges'
+import { CommissionInput } from '@/components/commission-input'
+import { commissionFrom, commissionLabel, draftOf } from '@/lib/commission'
 import { ConfirmDialog, type ConfirmOptions } from '@/components/confirm-dialog'
 import { FilterTabs, Pager, SearchBox } from '@/components/list-controls'
 import { PageBody, PageIntro, TopBar } from '@/components/page-header'
@@ -20,7 +22,7 @@ import type { Dict } from '@/i18n/en'
 import { useI18n } from '@/i18n/context'
 import { ApiError, api, send } from '@/lib/api'
 import { fill, formatDate, formatMoney, formatNumber, storefrontUrl } from '@/lib/format'
-import { openPrivateFile } from '@/lib/private-file'
+import { openPrivateFile, usePrivateImage } from '@/lib/private-file'
 import type { Paged, ShopDetail, ShopRow, ShopStatus } from '@/lib/types'
 import { ALERTS_KEY } from '@/nav'
 
@@ -100,7 +102,7 @@ export function ShopsPage() {
                       <TableCell>{s.ownerName}</TableCell>
                       <TableCell className="tabular-nums">{formatNumber(s._count.products, locale)}</TableCell>
                       <TableCell className="tabular-nums">{formatNumber(s._count.orders, locale)}</TableCell>
-                      <TableCell className="tabular-nums">{s.commissionRate !== null ? `${s.commissionRate}%` : <span className="text-muted-foreground">{t.shops.defaultRate}</span>}</TableCell>
+                      <TableCell className="tabular-nums">{s.commission ? commissionLabel(s.commission, locale, t.commission.perUnit) : <span className="text-muted-foreground">{t.shops.defaultRate}</span>}</TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(s.status === 'PENDING' ? s.updatedAt : s.createdAt, locale)}</TableCell>
                       <TableCell className="pr-4">
                         <ShopStatusBadge status={s.status} />
@@ -267,7 +269,7 @@ export function ShopDetailPage() {
                 />
                 <Info
                   label={t.shops.orders}
-                  value={Object.entries(s.orderCounts).map(([k, v]) => `${t.orderStatus[k as keyof Dict['orderStatus']]}: ${v}`).join(' · ') || '0'}
+                  value={statusCounts(s.orderCounts, t).join(' · ') || '0'}
                   wide
                 />
               </CardContent>
@@ -305,7 +307,7 @@ export function ShopDetailPage() {
                 ) : (
                   <p className="text-muted-foreground">{t.shops.noPayment}</p>
                 )}
-                {s.payment.hasQr && <p className="mt-1 text-xs text-primary">{t.shops.hasQr}</p>}
+                {s.payment.hasQr && <ShopQr shopId={s.id} label={t.shops.hasQr} />}
                 <p className="mt-3 border-t pt-3 text-xs">
                   <span className="font-medium">{t.shops.cod}: </span>
                   {s.cod.enabled ? (
@@ -331,9 +333,9 @@ export function ShopDetailPage() {
 
 function CommissionCard({ shop, defaultRate, onSaved }: { shop: ShopDetail; defaultRate?: number; onSaved: (s: ShopDetail) => void }) {
   const { t } = useI18n()
-  const [rate, setRate] = useState(shop.commissionRate !== null ? String(shop.commissionRate) : '')
+  const [commission, setCommission] = useState(draftOf(shop.commission))
   const save = useMutation({
-    mutationFn: () => send<ShopDetail>('PUT', `/admin/shops/${shop.id}/commission`, { rate: rate.trim() === '' ? null : Number(rate) }),
+    mutationFn: () => send<ShopDetail>('PUT', `/admin/shops/${shop.id}/commission`, { commission: commissionFrom(commission) }),
     onSuccess: (saved) => {
       onSaved(saved)
       toast.success(t.common.saved)
@@ -356,8 +358,8 @@ function CommissionCard({ shop, defaultRate, onSaved }: { shop: ShopDetail; defa
           <Label htmlFor="rate" className="sr-only">
             {t.shops.commissionTitle}
           </Label>
-          <div className="flex gap-2">
-            <Input id="rate" inputMode="decimal" value={rate} placeholder={defaultRate !== undefined ? String(defaultRate) : ''} onChange={(e) => setRate(e.target.value.replace(/[^\d.]/g, ''))} />
+          <CommissionInput id="rate" value={commission} onChange={setCommission} placeholder={defaultRate !== undefined && commission.type === 'PERCENT' ? String(defaultRate) : ''} />
+          <div className="flex justify-end">
             <Button type="submit" disabled={save.isPending}>
               {save.isPending && <LoaderCircle className="animate-spin" />}
               {t.common.save}
@@ -382,4 +384,48 @@ function Info({ label, value, wide }: { label: string; value: React.ReactNode; w
 function errorText(e: unknown, t: Dict): string {
   if (e instanceof ApiError && e.code && e.code in t.shops.errors) return t.shops.errors[e.code as keyof Dict['shops']['errors']]
   return t.common.saveError
+}
+
+/** The shop's receiving QR (where payouts go): a thumbnail, full size in a pop-up. */
+function ShopQr({ shopId, label }: { shopId: string; label: string }) {
+  const [open, setOpen] = useState(false)
+  const qr = usePrivateImage(`/admin/shops/${shopId}/payment-qr`)
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        disabled={!qr.data}
+        className="mt-2 flex size-32 items-center justify-center overflow-hidden rounded-lg bg-white ring-1 ring-border transition hover:ring-primary"
+        aria-label={label}
+        title={label}
+      >
+        {qr.isPending ? (
+          <LoaderCircle className="size-5 animate-spin text-muted-foreground" />
+        ) : qr.data ? (
+          <img src={qr.data} alt="" className="size-full object-contain" />
+        ) : (
+          <ImageOff className="size-5 text-muted-foreground" />
+        )}
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{label}</DialogTitle>
+          </DialogHeader>
+          {qr.data && <img src={qr.data} alt={label} className="w-full rounded-lg bg-white object-contain" />}
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+/** "To ship: 12 · Sent: 2 …": statuses sharing a label (packed and confirmed are both "to ship") add up. */
+function statusCounts(counts: Partial<Record<string, number>>, t: Dict): string[] {
+  const byLabel = new Map<string, number>()
+  for (const [status, n] of Object.entries(counts)) {
+    const label = t.orderStatus[status as keyof Dict['orderStatus']] ?? status
+    byLabel.set(label, (byLabel.get(label) ?? 0) + (n ?? 0))
+  }
+  return [...byLabel].map(([label, n]) => `${label}: ${n}`)
 }

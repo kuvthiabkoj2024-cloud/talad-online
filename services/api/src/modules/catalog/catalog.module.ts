@@ -9,6 +9,8 @@ import { AdminProductsController } from './products/admin-products.controller.js
 import { AdminProductsService } from './products/admin-products.service.js';
 import { AdminCatalogController } from './admin-catalog.controller.js';
 import { AdminCatalogService } from './admin-catalog.service.js';
+import { AdminCommissionController, ShopCommissionController } from './commission/commission-requests.controller.js';
+import { CommissionRequestsService } from './commission/commission-requests.service.js';
 import { CategoriesController } from './categories/categories.controller.js';
 import { CategoriesService } from './categories/categories.service.js';
 import { ChatController } from './chat/chat.controller.js';
@@ -28,12 +30,15 @@ import { FeedPostsController, MyFeedPostsController } from './videos/feed-posts.
 import { FeedPostsService } from './videos/feed-posts.service.js';
 import { VideoEngagementService } from './videos/video-engagement.service.js';
 import { MyVideosController, ShopVideosController, VideosController } from './videos/videos.controller.js';
+import { MyProfileFollowsController, ProfilesController } from './videos/profiles.controller.js';
+import { ProfilesService } from './videos/profiles.service.js';
 
 /** Categories, units, products, variants and moderation (§2.5, §2.6, §3.3). */
 @Module({
   imports: [AuthModule, CmsModule, MediaModule, PromotionsModule, NotificationsModule, OrdersModule],
-  controllers: [ChatController, PhotoSearchController, CategoriesController, UnitsController, ProductsController, ShopProductsController, AdminProductsController, AdminCatalogController, VideosController, MyVideosController, ShopVideosController, FeedPostsController, MyFeedPostsController],
+  controllers: [ChatController, PhotoSearchController, CategoriesController, UnitsController, ProductsController, ShopProductsController, AdminProductsController, AdminCatalogController, VideosController, MyVideosController, ShopVideosController, FeedPostsController, MyFeedPostsController, ProfilesController, MyProfileFollowsController, ShopCommissionController, AdminCommissionController],
   providers: [
+    CommissionRequestsService,
     CategoriesService,
     ProductsService,
     ShopProductsService,
@@ -47,6 +52,7 @@ import { MyVideosController, ShopVideosController, VideosController } from './vi
     ChatService,
     VideoEngagementService,
     FeedPostsService,
+    ProfilesService,
   ],
   exports: [CategoriesService, ProductsService, PhotoSearchService, AnthropicService],
 })

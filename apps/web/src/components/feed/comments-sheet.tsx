@@ -5,7 +5,7 @@ import { LoaderCircle, MessageCircle, SendHorizontal, Trash2, X } from "lucide-r
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
-import type { VideoComment } from "@/lib/api";
+import type { CommentTarget, VideoComment } from "@/lib/api";
 import { formatRelativeTime, interpolate } from "@/lib/format";
 import { deleteVideoComment, loadVideoComments, loadVideoReplies, postVideoComment } from "@/lib/video-actions";
 import { useSession } from "../auth/session-provider";
@@ -22,25 +22,29 @@ interface Thread {
 }
 
 /**
- * Comments on one feed video, newest first, with one level of replies. Anyone can read;
- * posting needs an account. `onCountChange` keeps the counter on the video in step.
+ * Comments on one feed video (a shop's product video or a customer's post), newest first,
+ * with one level of replies. Anyone can read; posting needs an account. `onCountChange` keeps
+ * the counter on the video in step. `focus` (from a notification) opens that comment's thread
+ * and picks the comment out.
  */
 export function CommentsSheet({
   open,
   onClose,
-  productId,
+  target,
   total,
   locale,
   dict,
   onCountChange,
+  focus,
 }: {
   open: boolean;
   onClose: () => void;
-  productId: string;
+  target: CommentTarget;
   total: number;
   locale: Locale;
   dict: Dict;
   onCountChange: (delta: number) => void;
+  focus?: { thread: string; reply?: string };
 }) {
   const { customer } = useSession();
   const [comments, setComments] = useState<VideoComment[]>([]);
@@ -60,27 +64,37 @@ export function CommentsSheet({
     setCursor(page.nextCursor);
     setThreads({});
     setStatus("ready");
+    // Opened from a notification about a reply: show that thread's replies right away.
+    const focused = focus?.reply ? page.items.find((c) => c.id === focus.thread) : undefined;
+    if (focused) void toggleThread(focused);
   }
 
   function retry() {
     setStatus("loading");
-    void loadVideoComments(productId).then(applyFirst);
+    void loadVideoComments(target).then(applyFirst);
   }
 
   // Mounted fresh each time the sheet opens: load the first page then.
   useEffect(() => {
     let live = true;
-    void loadVideoComments(productId).then((page) => live && applyFirst(page));
+    void loadVideoComments(target).then((page) => live && applyFirst(page));
     return () => {
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per opening
   }, []);
 
+  // Bring the comment a notification pointed at into view once it's on screen.
+  const focusId = focus?.reply ?? focus?.thread;
+  const focusShown = status === "ready" && (comments.some((c) => c.id === focusId) || Object.values(threads).some((t) => t.replies.some((r) => r.id === focusId)));
+  useEffect(() => {
+    if (focusShown && focusId) document.getElementById(`comment-${focusId}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [focusShown, focusId]);
+
   async function loadMore() {
     if (!cursor) return;
     setLoadingMore(true);
-    const page = await loadVideoComments(productId, cursor);
+    const page = await loadVideoComments(target, cursor);
     setLoadingMore(false);
     if (!page) return;
     setComments((prev) => [...prev, ...page.items.filter((c) => !prev.some((p) => p.id === c.id))]);
@@ -106,7 +120,7 @@ export function CommentsSheet({
         loading: true,
       },
     }));
-    const page = await loadVideoReplies(productId, c.id, more ? (t?.cursor ?? undefined) : undefined);
+    const page = await loadVideoReplies(target, c.id, more ? (t?.cursor ?? undefined) : undefined);
     setThreads((s) => {
       const prev = s[c.id];
       const replies = page
@@ -140,7 +154,7 @@ export function CommentsSheet({
     if (body.length > MAX_LENGTH) return setError(dict.commentTooLong);
     setError(null);
     startPosting(async () => {
-      const res = await postVideoComment(productId, body, replyTo?.id);
+      const res = await postVideoComment(target, body, replyTo?.id);
       if (!res.ok) {
         setError(res.error === "COMMENT_TOO_LONG" ? dict.commentTooLong : dict.commentError);
         return;
@@ -163,7 +177,7 @@ export function CommentsSheet({
           }));
         } else {
           // Thread never opened: load it (oldest first, so the new reply comes last).
-          const page = await loadVideoReplies(productId, parentId);
+          const page = await loadVideoReplies(target, parentId);
           setThreads((s) => ({
             ...s,
             [parentId]: {
@@ -256,6 +270,7 @@ export function CommentsSheet({
                 <li key={c.id}>
                   <CommentRow
                     comment={c}
+                    focused={c.id === focusId}
                     locale={locale}
                     dict={dict}
                     mine={customer?.id === c.author.id}
@@ -269,6 +284,7 @@ export function CommentsSheet({
                           key={r.id}
                           small
                           comment={r}
+                          focused={r.id === focusId}
                           locale={locale}
                           dict={dict}
                           mine={customer?.id === r.author.id}
@@ -385,6 +401,7 @@ export function CommentsSheet({
 
 function CommentRow({
   comment: c,
+  focused,
   locale,
   dict,
   mine,
@@ -393,6 +410,7 @@ function CommentRow({
   onDelete,
 }: {
   comment: VideoComment;
+  focused?: boolean;
   locale: Locale;
   dict: Dict;
   mine: boolean;
@@ -401,12 +419,29 @@ function CommentRow({
   onDelete: () => void;
 }) {
   const deleted = c.body === null;
+  // Customers' names lead to their profile; the shop's answers don't.
+  const profile = c.author.isShop ? null : `/${locale}/u/${c.author.id}`;
   return (
-    <div className="flex gap-3">
-      <Avatar name={c.author.name} src={c.author.avatarUrl} size={small ? "size-7" : "size-9"} />
+    <div
+      id={`comment-${c.id}`}
+      className={`flex gap-3 rounded-xl transition-colors ${focused ? "-mx-2 bg-primary-soft px-2 py-1.5" : ""}`}
+    >
+      {profile ? (
+        <Link href={profile} className="shrink-0">
+          <Avatar name={c.author.name} src={c.author.avatarUrl} size={small ? "size-7" : "size-9"} />
+        </Link>
+      ) : (
+        <Avatar name={c.author.name} src={c.author.avatarUrl} size={small ? "size-7" : "size-9"} />
+      )}
       <div className="min-w-0 flex-1">
         <p className="flex items-baseline gap-2 text-xs text-muted-foreground">
-          <span className="truncate font-semibold text-foreground">{c.author.name}</span>
+          {profile ? (
+            <Link href={profile} className="truncate font-semibold text-foreground hover:underline">
+              {c.author.name}
+            </Link>
+          ) : (
+            <span className="truncate font-semibold text-foreground">{c.author.name}</span>
+          )}
           {c.author.isShop && (
             <span className="shrink-0 rounded bg-primary px-1.5 py-px text-[10px] font-bold uppercase leading-4 tracking-wide text-primary-foreground">
               {dict.shopBadge}

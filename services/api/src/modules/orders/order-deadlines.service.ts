@@ -3,14 +3,16 @@ import { ConfigService } from '@nestjs/config';
 import type { Env } from '../../config/env.validation.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
-import { addSold, awardPoints, moveOrder, restoreStock } from './order-transitions.js';
+import { addSold, markCodPaid, moveOrder, restoreStock, returnPoints } from './order-transitions.js';
 
 const EVERY = 5 * 60_000;
 
 /**
  * Order deadlines (§3.6), checked every few minutes in-process:
- * - unpaid orders (no payment, no slip) are cancelled when the payment window ends;
- * - delivered orders complete when the confirmation window ends (and count as sold).
+ * - unpaid orders are cancelled when the payment window ends, unless slips are waiting for
+ *   (or passed) Taladonline's check — rejected slips don't count;
+ * - sent orders complete AUTO_COMPLETE_DAYS after shipping unless the customer confirmed
+ *   sooner (they count as sold and cash on delivery as paid, but earn no loyalty points).
  */
 @Injectable()
 export class OrderDeadlinesService implements OnModuleInit, OnModuleDestroy {
@@ -43,7 +45,8 @@ export class OrderDeadlinesService implements OnModuleInit, OnModuleDestroy {
         where: {
           status: 'PENDING',
           paymentDueAt: { lt: now },
-          payments: { none: { OR: [{ status: 'PAID' }, { slipKey: { not: null } }] } },
+          payments: { none: { status: 'PAID' } },
+          order: { slips: { none: { status: { in: ['PENDING', 'APPROVED'] } } } },
         },
         select: this.select,
       });
@@ -55,6 +58,7 @@ export class OrderDeadlinesService implements OnModuleInit, OnModuleDestroy {
             return false;
           }
           await restoreStock(tx, o.id);
+          await returnPoints(tx, o.id);
           await tx.payment.updateMany({ where: { shopOrderId: o.id, status: 'PENDING' }, data: { status: 'EXPIRED' } });
           await this.notifications.notifyOrder(tx, this.target(o), 'CANCELLED', note);
           return true;
@@ -62,17 +66,18 @@ export class OrderDeadlinesService implements OnModuleInit, OnModuleDestroy {
         if (done) cancelled++;
       }
 
-      const delivered = await this.prisma.shopOrder.findMany({
-        where: { status: 'DELIVERED', autoConfirmAt: { lt: now } },
-        select: this.select,
+      const sent = await this.prisma.shopOrder.findMany({
+        where: { status: { in: ['SHIPPED', 'DELIVERED'] }, autoConfirmAt: { lt: now } },
+        select: { ...this.select, status: true },
       });
       let completed = 0;
-      for (const o of delivered) {
+      for (const o of sent) {
         const done = await this.prisma.$transaction(async (tx) => {
           const note = 'Confirmed automatically';
-          if (!(await moveOrder(tx, o.id, 'DELIVERED', 'COMPLETED', {}, { actorType: null, actorId: null, note }))) return false;
+          if (!(await moveOrder(tx, o.id, o.status, 'COMPLETED', {}, { actorType: null, actorId: null, note }))) return false;
+          await markCodPaid(tx, o.id);
           await addSold(tx, o.id);
-          await awardPoints(tx, o.id);
+          // No loyalty points: only an order the customer confirms earns them.
           await this.notifications.notifyOrder(tx, this.target(o), 'COMPLETED');
           return true;
         });

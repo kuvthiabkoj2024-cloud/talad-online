@@ -8,19 +8,21 @@ import {
   Post,
   StreamableFile,
   UploadedFile,
+  UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { CHECKOUT_PAYMENT_METHODS, CUSTOMER_LIMITS, type CheckoutPaymentMethod } from '@talad/shared';
+import { CHECKOUT_PAYMENT_METHODS, CUSTOMER_LIMITS, MAX_PAYMENT_SLIPS, type CheckoutPaymentMethod } from '@talad/shared';
 import {
   ArrayMaxSize,
   ArrayMinSize,
+  IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
-  IsObject,
   IsOptional,
   IsString,
   IsUUID,
@@ -55,6 +57,17 @@ class CheckoutSelectionDto {
   @ArrayMaxSize(50)
   @IsUUID('7', { each: true })
   urgentShopIds?: string[];
+
+  /** Shops the customer will collect from in person. */
+  @IsOptional()
+  @ArrayMaxSize(50)
+  @IsUUID('7', { each: true })
+  pickupShopIds?: string[];
+
+  /** Spend loyalty points on this order (as many as the balance and total allow). */
+  @IsOptional()
+  @IsBoolean()
+  usePoints?: boolean;
 }
 
 class QuoteDto extends CheckoutSelectionDto {
@@ -76,10 +89,13 @@ class PlaceOrderDto extends CheckoutSelectionDto {
   @Min(0)
   expectedTotal: number;
 
-  /** { [shopId]: slipKey } from POST /me/checkout/slips — required for BANK_TRANSFER. */
+  /** BANK_TRANSFER: 1–3 slip keys from POST /me/checkout/slips (one transfer for the whole order). */
   @IsOptional()
-  @IsObject()
-  slips?: Record<string, string>;
+  @IsArray()
+  @ArrayMaxSize(MAX_PAYMENT_SLIPS)
+  @IsString({ each: true })
+  @MaxLength(200, { each: true })
+  slipKeys?: string[];
 
   @IsOptional()
   @IsString()
@@ -88,6 +104,7 @@ class PlaceOrderDto extends CheckoutSelectionDto {
 }
 
 const uploadSlip = FileInterceptor('file', { limits: { fileSize: CUSTOMER_LIMITS.qrMaxBytes, files: 1 } });
+const uploadSlips = FilesInterceptor('files', MAX_PAYMENT_SLIPS, { limits: { fileSize: CUSTOMER_LIMITS.qrMaxBytes, files: MAX_PAYMENT_SLIPS } });
 const image = (file: StoredObject) =>
   new StreamableFile(file.body, { type: file.contentType, length: file.contentLength, disposition: 'inline' });
 
@@ -122,17 +139,10 @@ export class CheckoutController {
     return this.slips.uploadCheckoutSlip(c.id, file);
   }
 
-  /** A shop's receiving QR (LAO QR) for manual transfers. */
-  @Get('shops/:shopId/payment-qr')
-  async shopQr(@Param('shopId', new ParseUUIDPipe({ version: '7' })) shopId: string) {
-    return image(await this.slips.shopQr(shopId));
-  }
-
-  /** Development only — stands in for the shop confirming the slip. */
-  @Post('simulate-payment/:number')
-  @HttpCode(200)
-  simulatePayment(@CurrentCustomer() c: Customer, @Param('number') number: string) {
-    return this.checkout.simulatePayment(c.id, number);
+  /** Taladonline's receiving QR (LAO QR) for transfers. */
+  @Get('payment-qr')
+  async platformQr() {
+    return image(await this.slips.platformQr());
   }
 }
 
@@ -152,22 +162,23 @@ export class OrderPaymentController {
     return image(await this.shopOrders.bill(null, number, c.id));
   }
 
-  @Get('payment-qr')
-  async qr(@CurrentCustomer() c: Customer, @Param('number') number: string) {
-    return image(await this.slips.orderQr(c.id, number));
+  /** The order's slips and whether Taladonline approved or rejected them. */
+  @Get('payment-slips')
+  slipList(@CurrentCustomer() c: Customer, @Param('number') number: string) {
+    return this.slips.slips(c.id, number);
   }
 
-  /** Pay later, or replace a wrong slip, while the order still awaits payment. */
-  @Post('payment-slip')
+  /** New slips (1–3, multipart field `files`) while the order still awaits payment, e.g. after a rejection. */
+  @Post('payment-slips')
   @HttpCode(200)
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(uploadSlip)
-  attachSlip(@CurrentCustomer() c: Customer, @Param('number') number: string, @UploadedFile() file?: Express.Multer.File) {
-    return this.slips.attachSlip(c.id, number, file);
+  @UseInterceptors(uploadSlips)
+  attachSlips(@CurrentCustomer() c: Customer, @Param('number') number: string, @UploadedFiles() files?: Express.Multer.File[]) {
+    return this.slips.attachSlips(c.id, number, files);
   }
 
-  @Get('payment-slip')
-  async slip(@CurrentCustomer() c: Customer, @Param('number') number: string) {
-    return image(await this.slips.slip(c.id, number));
+  @Get('payment-slips/:slipId')
+  async slip(@CurrentCustomer() c: Customer, @Param('number') number: string, @Param('slipId', new ParseUUIDPipe()) slipId: string) {
+    return image(await this.slips.slipImage(c.id, number, slipId));
   }
 }

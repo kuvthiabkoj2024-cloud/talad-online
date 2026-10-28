@@ -43,6 +43,8 @@ export interface ShopProfile {
   cod: { enabled: boolean; termsAcceptedAt: Date | null };
   /** The shop's own urgent delivery (areas, prices, how fast). */
   urgentDelivery: UrgentDelivery;
+  /** Customers may collect their orders at the shop. */
+  pickupEnabled: boolean;
   verifiedAt: Date | null;
 }
 
@@ -82,6 +84,7 @@ export class ShopProfileService {
       autoConfirmHrs: shop.autoConfirmHrs,
       cod: { enabled: shop.codEnabled, termsAcceptedAt: shop.codTermsAcceptedAt },
       urgentDelivery: parseUrgentDelivery(shop.urgentDelivery) ?? { enabled: false, eta: '', zones: [] },
+      pickupEnabled: shop.pickupEnabled,
       verifiedAt: shop.verifiedAt,
     };
   }
@@ -129,6 +132,7 @@ export class ShopProfileService {
         autoConfirmHrs: dto.autoConfirmHrs,
         ...(dto.codEnabled !== undefined && { codEnabled: dto.codEnabled }),
         ...(turningCodOn && { codTermsAcceptedAt: new Date() }),
+        ...(dto.pickupEnabled !== undefined && { pickupEnabled: dto.pickupEnabled }),
         ...(dto.urgentDelivery && { urgentDelivery: this.urgent(dto.urgentDelivery) as unknown as Prisma.InputJsonValue }),
       },
     });

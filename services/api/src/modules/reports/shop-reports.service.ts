@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { MediaService } from '../media/media.service.js';
+import { StorageService } from '../media/storage.service.js';
 import { shopNet } from '../orders/checkout-pricing.js';
 
 const DAY = 86_400_000;
@@ -32,7 +33,7 @@ export interface ShopFinance {
   /** Paid or cash orders still on their way to the customer. */
   inProgress: { orders: number; amount: number };
   refunded: { orders: number; amount: number };
-  /** All-time completed net minus payouts already paid. */
+  /** All-time completed net (transfers only) minus payouts already paid. */
   balance: number;
   payouts: {
     id: string;
@@ -68,7 +69,15 @@ export class ShopReportsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly media: MediaService,
+    private readonly storage: StorageService,
   ) {}
+
+  /** Taladonline's transfer slip for one of the shop's payouts. */
+  async payoutSlip(shopId: string, id: string) {
+    const p = await this.prisma.payout.findFirst({ where: { id, shopId }, select: { slipKey: true } });
+    if (!p?.slipKey) throw new NotFoundException('No transfer slip');
+    return this.storage.get(p.slipKey);
+  }
 
   async finance(shopId: string, from: Date, to: Date): Promise<ShopFinance> {
     const inPeriod = { shopId, createdAt: { gte: from, lt: to } };
@@ -88,7 +97,8 @@ export class ShopReportsService {
         _count: { _all: true },
         _sum: { total: true },
       }),
-      this.prisma.shopOrder.aggregate({ where: { shopId, status: 'COMPLETED' }, _sum: { total: true, commissionAmount: true, platformDiscount: true } }),
+      // What Taladonline owes the shop: cash on delivery is already the shop's (it pays that commission monthly).
+      this.prisma.shopOrder.aggregate({ where: { shopId, status: 'COMPLETED', payments: { none: { method: 'COD' } } }, _sum: { total: true, commissionAmount: true, platformDiscount: true } }),
       this.prisma.payout.findMany({ where: { shopId }, orderBy: { periodStart: 'desc' }, take: 24 }),
       // Flash-sale savings: regular price − sale price, per unit sold (unknown on older orders).
       this.prisma.$queryRaw<{ amount: Prisma.Decimal | null }[]>`
@@ -124,6 +134,7 @@ export class ShopReportsService {
         status: p.status,
         paidAt: p.paidAt,
         reference: p.reference,
+        hasSlip: p.slipKey !== null,
       })),
     };
   }

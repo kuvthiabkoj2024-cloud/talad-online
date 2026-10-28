@@ -1,10 +1,11 @@
 "use client";
 
 import { LAO_BANKS, type BankCode } from "@talad/shared";
-import { Camera, Check, Copy, Download, LoaderCircle, QrCode } from "lucide-react";
+import { Camera, Check, Copy, Download, LoaderCircle, Plus, QrCode, X } from "lucide-react";
 import { useRef, useState } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
-import type { ShopTransferInfo } from "@/lib/cart";
+import type { TransferAccount } from "@/lib/cart";
+import { interpolate } from "@/lib/format";
 import { groupDigits } from "@/lib/profile";
 
 export interface SlipState {
@@ -17,26 +18,31 @@ export interface SlipState {
 export const emptySlip: SlipState = { preview: null, uploading: false, attached: false, error: null };
 
 /**
- * Manual payment for one shop: its QR + account to transfer to, the exact amount,
- * and the slip upload (required before the order can be confirmed).
+ * Manual payment: Taladonline's QR + account to transfer to, the exact amount, and the slips
+ * (required; up to `max`, for a payment split over several transfers). An admin checks them.
  */
 export function PaymentPanel({
   title,
   qrSrc,
   amount,
   transfer,
-  slip,
+  slips,
+  max = 1,
   onPickSlip,
+  onRemoveSlip,
   dict,
   bare = false,
 }: {
   title: string;
-  /** Image URL of the shop's QR (null when the shop only has account details). */
+  /** Image URL of the receiving QR (null when there are only account details). */
   qrSrc: string | null;
   amount: string;
-  transfer: ShopTransferInfo;
-  slip: SlipState;
+  transfer: TransferAccount;
+  slips: SlipState[];
+  /** How many slips can be attached (1 = picking again replaces the slip). */
+  max?: number;
   onPickSlip: (file: File) => void;
+  onRemoveSlip?: (index: number) => void;
   dict: Dictionary["checkout"];
   /** No card frame of its own, for use inside another card (the chat order card). */
   bare?: boolean;
@@ -110,7 +116,7 @@ export function PaymentPanel({
           <Camera className="size-4 text-primary" />
           {dict.slipTitle} <span className="text-sale">*</span>
         </h4>
-        <p className="text-sm text-muted-foreground">{dict.slipBody}</p>
+        <p className="text-sm text-muted-foreground">{max > 1 ? interpolate(dict.slipsBody, { n: max }) : dict.slipBody}</p>
         <input
           ref={fileInput}
           type="file"
@@ -122,34 +128,74 @@ export function PaymentPanel({
             e.target.value = "";
           }}
         />
-        {slip.preview ? (
-          <div className="flex items-center gap-4 rounded-xl border border-border p-3">
-            {/* eslint-disable-next-line @next/next/no-img-element -- local preview */}
-            <img src={slip.preview} alt="" className="h-24 w-20 rounded-lg object-cover ring-1 ring-border" />
-            <div className="flex flex-col items-start gap-1.5">
-              {slip.uploading ? (
-                <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <LoaderCircle className="size-4 animate-spin" />
-                  {dict.uploading}
-                </span>
-              ) : (
-                slip.attached && (
-                  <span className="flex items-center gap-1.5 text-sm font-semibold text-primary">
-                    <Check className="size-4" />
-                    {dict.slipAttached}
+        {slips.some((x) => x.preview || x.attached) ? (
+          <ul className="flex flex-wrap gap-3">
+            {slips.map((x, i) => (
+              <li key={i} className="relative flex w-24 flex-col items-center gap-1">
+                {x.preview ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- local preview
+                  <img src={x.preview} alt="" className="h-28 w-24 rounded-lg object-cover ring-1 ring-border" />
+                ) : (
+                  <span className="flex h-28 w-24 items-center justify-center rounded-lg bg-primary-soft text-primary ring-1 ring-border">
+                    <Check className="size-6" />
                   </span>
-                )
-              )}
-              <button
-                type="button"
-                disabled={slip.uploading}
-                onClick={() => fileInput.current?.click()}
-                className="rounded-full px-3 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-              >
-                {dict.changeSlip}
-              </button>
-            </div>
-          </div>
+                )}
+                <span className="flex items-center gap-1 text-xs">
+                  {x.uploading ? (
+                    <>
+                      <LoaderCircle className="size-3.5 animate-spin text-muted-foreground" />
+                      <span className="text-muted-foreground">{dict.uploading}</span>
+                    </>
+                  ) : x.error ? (
+                    <span className="text-sale">{dict.slipFailed}</span>
+                  ) : (
+                    x.attached && (
+                      <span className="flex items-center gap-1 font-semibold text-primary">
+                        <Check className="size-3.5" />
+                        {dict.slipAttached}
+                      </span>
+                    )
+                  )}
+                </span>
+                {onRemoveSlip && !x.uploading && (
+                  <button
+                    type="button"
+                    onClick={() => onRemoveSlip(i)}
+                    aria-label={dict.removeSlip}
+                    title={dict.removeSlip}
+                    className="absolute -right-2 -top-2 flex size-6 items-center justify-center rounded-full bg-card text-muted-foreground shadow ring-1 ring-border hover:text-sale"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
+              </li>
+            ))}
+            {slips.length < max ? (
+              <li>
+                <button
+                  type="button"
+                  onClick={() => fileInput.current?.click()}
+                  className="flex h-28 w-24 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-primary/40 bg-primary-soft/60 text-xs font-semibold text-primary transition-colors hover:bg-primary-soft"
+                >
+                  <Plus className="size-5" />
+                  {dict.addSlip}
+                </button>
+              </li>
+            ) : (
+              max === 1 && (
+                <li className="self-center">
+                  <button
+                    type="button"
+                    disabled={slips[0]?.uploading}
+                    onClick={() => fileInput.current?.click()}
+                    className="rounded-full px-3 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                  >
+                    {dict.changeSlip}
+                  </button>
+                </li>
+              )
+            )}
+          </ul>
         ) : (
           <button
             type="button"
@@ -159,7 +205,7 @@ export function PaymentPanel({
             + {dict.chooseSlip}
           </button>
         )}
-        {slip.error && <p role="alert" className="text-sm text-sale">{slip.error}</p>}
+        {slips.map((x, i) => x.error && <p key={i} role="alert" className="text-sm text-sale">{x.error}</p>)}
       </div>
     </section>
   );

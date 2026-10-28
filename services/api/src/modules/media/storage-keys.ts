@@ -10,6 +10,7 @@
  *   s-<shopId>/products/      image-<uuid>.<ext>, video-<uuid>.<ext>
  *   s-<shopId>/orders/        bill-<uuid>.<ext> (courier bills photographed when shipping; private)
  *   p-<zero uuid>/media/      image-<uuid>.<ext> (platform banners, category icons; public)
+ *   p-<zero uuid>/payments/   payment-qr-<uuid>.<ext> (Taladonline's receiving QR; private)
  *   m-<conversationId>/photos/ photo-<uuid>.<ext> (customer ↔ shop chat photos; private)
  */
 export const storageFolder = {
@@ -22,8 +23,12 @@ export const storageFolder = {
   shopProducts: (shopId: string) => `s-${shopId}/products/`,
   /** Courier bills uploaded when shipping (served to the shop and that order's customer). */
   shopOrders: (shopId: string) => `s-${shopId}/orders/`,
+  /** Taladonline's transfer slips for the shop's payouts (served to admins and that shop). */
+  shopPayouts: (shopId: string) => `s-${shopId}/payouts/`,
   /** Platform-owned public media uploaded in the admin console. */
   platformMedia: () => 'p-00000000-0000-0000-0000-000000000000/media/',
+  /** Taladonline's receiving QR, shown to signed-in customers at checkout. */
+  platformPayments: () => 'p-00000000-0000-0000-0000-000000000000/payments/',
   /** Photos in one customer ↔ shop conversation (served only to its two sides). */
   conversation: (conversationId: string) => `m-${conversationId}/photos/`,
 };

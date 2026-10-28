@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { useI18n } from '@/i18n/context'
 import { getToken } from '@/lib/api'
 import { NOTIFICATIONS_KEY, notificationText } from '@/lib/realtime'
+import { ALERTS_KEY } from '@/nav'
 
 /** Live staff notifications (e.g. a new shop to review): the bell refreshes, a toast shows, a chime plays. */
 export function RealtimeBridge() {
@@ -35,6 +36,13 @@ export function RealtimeBridge() {
         refresh()
         // The shops list shows the new application straight away.
         if (event.type === 'SHOP_APPLICATION') void queryClient.invalidateQueries({ queryKey: ['admin', 'shops'] })
+        // A transfer to check or a refund to make: the queues, order lists and sidebar badges update.
+        if (event.type === 'PAYMENT' || event.type === 'REFUND') {
+          void queryClient.invalidateQueries({ queryKey: ['admin', 'payments'] })
+          void queryClient.invalidateQueries({ queryKey: ['admin', 'refunds'] })
+          void queryClient.invalidateQueries({ queryKey: ['admin', 'orders'] })
+          void queryClient.invalidateQueries({ queryKey: ALERTS_KEY })
+        }
         const text = notificationText(event, locale)
         toast(text.title, {
           description: text.body,

@@ -31,8 +31,8 @@ export interface CartView {
   count: number;
 }
 
-/** Where a customer sends a manual transfer for one shop. */
-export interface ShopTransferInfo {
+/** Taladonline's account a customer transfers to (an admin checks the slips). */
+export interface TransferAccount {
   bankCode: string | null;
   accountName: string | null;
   accountNumber: string | null;
@@ -61,25 +61,34 @@ export interface CheckoutQuote {
   shops: (CartShop & {
     discount: number;
     total: number;
-    transfer: ShopTransferInfo | null;
     cod: boolean;
     /** The shop's own urgent delivery to this address (null when it doesn't deliver there). */
     urgent: { fee: number; eta: string } | null;
     /** The customer chose it; its fee is `shippingFee` (in `total`). */
     urgentSelected: boolean;
+    /** The shop lets customers collect at its address (null when it doesn't). */
+    pickup: { address: string | null; latitude: number | null; longitude: number | null } | null;
+    pickupSelected: boolean;
     shippingFee: number;
+    /** Points spent on this shop and their kip value (already off `total`). */
+    points: number;
+    pointsDiscount: number;
   })[];
+  /** Loyalty points: balance, kip per point, how many this order can take, and what's used. */
+  points: { balance: number; value: number; usable: number; used: number; discount: number };
   subtotal: number;
   discountTotal: number;
   /** Urgent delivery fees (couriers are paid outside Taladonline). */
   shippingTotal: number;
   total: number;
-  delivery: { options: DeliveryOption[]; selectedId: string | null };
+  /** `needed`: some shop goes by courier (not urgent delivery or pickup). */
+  delivery: { options: DeliveryOption[]; selectedId: string | null; needed: boolean };
   /** The applied coupon; `couponError` says why a requested code wasn't applied. */
   coupon: { code: string; shopId: string | null; discount: number } | null;
   couponError: CouponErrorCode | null;
   issues: { itemId: string; code: "UNAVAILABLE" | "QUANTITY_EXCEEDS_STOCK" | "OWN_PRODUCT" }[];
-  /** QR transfer needs every shop in the order to accept transfers. */
+  /** Where to transfer: Taladonline's account, one payment for the whole order. */
+  transfer: TransferAccount | null;
   transferAvailable: boolean;
   /** Cash on delivery needs every shop in the order to offer it. */
   codAvailable: boolean;
@@ -105,6 +114,7 @@ export type CartErrorCode =
   | "NOTHING_SELECTED"
   | "NOT_PAYABLE"
   | "SLIP_REQUIRED"
+  | "TOO_MANY_SLIPS"
   | "TRANSFER_UNAVAILABLE"
   | "COD_UNAVAILABLE"
   | "INVALID_IMAGE"

@@ -1,14 +1,6 @@
-import {
-  BadRequestException,
-  ConflictException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { formatMoney, parseUrgentDelivery, urgentFee, type CheckoutPaymentMethod, type UrgentDelivery } from '@talad/shared';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import { formatMoney, MAX_PAYMENT_SLIPS, parseUrgentDelivery, urgentFee, type CheckoutPaymentMethod, type UrgentDelivery } from '@talad/shared';
 import { randomInt } from 'node:crypto';
-import type { Env } from '../../config/env.validation.js';
 import { Prisma, type OrderStatus } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { CmsService } from '../cms/cms.service.js';
@@ -23,21 +15,15 @@ import {
   type CouponErrorCode,
   type CouponRule,
 } from './checkout-pricing.js';
-import { paymentOf, slipPrefix } from './payment-slips.service.js';
+import { pointRules } from './order-transitions.js';
+import { PaymentSlipsService, slipPrefix, tellAdminsToCheck } from './payment-slips.service.js';
+import { PlatformAccountService, type PlatformAccount } from './platform-account.service.js';
 
 const DEFAULT_COMMISSION_RATE = 5;
 
 export interface QuoteIssue {
   itemId: string;
   code: 'UNAVAILABLE' | 'QUANTITY_EXCEEDS_STOCK' | 'OWN_PRODUCT';
-}
-
-/** Where a customer sends a manual transfer for one shop. */
-export interface ShopTransferInfo {
-  bankCode: string | null;
-  accountName: string | null;
-  accountNumber: string | null;
-  hasQr: boolean;
 }
 
 /**
@@ -62,14 +48,18 @@ export interface CheckoutSelection {
   addressId?: string;
   /** Shops whose own urgent delivery the customer chose (when they offer it to the address). */
   urgentShopIds?: string[];
+  /** Shops the customer will collect from in person (when they offer pickup). */
+  pickupShopIds?: string[];
+  /** Spend loyalty points: as many as the balance and the total allow. */
+  usePoints?: boolean;
 }
 
 export interface PlaceOrderInput extends CheckoutSelection {
   addressId: string;
   paymentMethod: CheckoutPaymentMethod;
   expectedTotal: number;
-  /** Transfer slip storage key per shop id (required for BANK_TRANSFER). */
-  slips?: Record<string, string>;
+  /** BANK_TRANSFER: 1–MAX_PAYMENT_SLIPS slip keys for the whole order (one transfer to Taladonline). */
+  slipKeys?: string[];
   note?: string;
 }
 
@@ -82,14 +72,15 @@ export class CheckoutService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cart: CartService,
-    private readonly config: ConfigService<Env, true>,
     private readonly cms: CmsService,
     private readonly notifications: NotificationsService,
+    private readonly account: PlatformAccountService,
+    private readonly slips: PaymentSlipsService,
   ) {}
 
   /**
-   * Totals for the selected cart lines, split per shop: coupon discount and each shop's
-   * transfer details. Delivery isn't priced (paid to the courier). An unusable coupon is
+   * Totals for the selected cart lines, split per shop, with the coupon discount and where to
+   * transfer (Taladonline's account, for the whole order). Delivery isn't priced (paid to the courier). An unusable coupon is
    * reported in `couponError`, not thrown.
    */
   async quote(customerId: string, selection: CheckoutSelection) {
@@ -106,14 +97,15 @@ export class CheckoutService {
     }
 
     const groups = groupByShop(lines);
-    const [transfer, cod, urgentSettings, address, options] = await Promise.all([
-      this.transferInfo(groups.map((g) => g.shop.id)),
-      this.codShops(groups.map((g) => g.shop.id)),
+    const [transfer, { cod, pickup }, urgentSettings, address, options] = await Promise.all([
+      this.account.available(),
+      this.shopOptions(groups.map((g) => g.shop.id)),
       this.urgentSettings(groups.map((g) => g.shop.id)),
       this.address(customerId, selection.addressId),
       this.deliveryOptions(customerId, selection.addressId),
     ]);
     const wantsUrgent = new Set(selection.urgentShopIds ?? []);
+    const wantsPickup = new Set(selection.pickupShopIds ?? []);
     // Unknown or missing choice falls back to the first courier.
     const courier = options.find((o) => o.id === selection.deliveryProviderId) ?? options[0] ?? null;
 
@@ -124,39 +116,61 @@ export class CheckoutService {
       const settings = urgentSettings.get(g.shop.id);
       const fee = address ? urgentFee(settings, address) : null;
       const urgent = fee !== null ? { fee, eta: settings!.eta } : null;
-      const urgentSelected = urgent !== null && wantsUrgent.has(g.shop.id);
+      // Pickup wins over urgent delivery if both were sent.
+      const pickupSelected = pickup.has(g.shop.id) && wantsPickup.has(g.shop.id);
+      const urgentSelected = !pickupSelected && urgent !== null && wantsUrgent.has(g.shop.id);
       const shippingFee = urgentSelected ? urgent.fee : 0;
       return {
         ...g,
         discount,
         urgent,
         urgentSelected,
+        /** The shop lets customers collect at its address (`pickupAddress`). */
+        pickup: pickup.get(g.shop.id) ?? null,
+        pickupSelected,
         shippingFee,
         total: g.subtotal - discount + shippingFee,
-        transfer: transfer.get(g.shop.id) ?? null,
         /** The shop offers cash on delivery (its own choice, §6). */
         cod: cod.has(g.shop.id),
       };
     });
-    const subtotal = shops.reduce((n, s) => n + s.subtotal, 0);
-    const discountTotal = shops.reduce((n, s) => n + s.discount, 0);
-    const shippingTotal = shops.reduce((n, s) => n + s.shippingFee, 0);
+    // Loyalty points pay part (or all) of the order; Taladonline pays their value back to the
+    // shops like a platform coupon. Spread over the shops in proportion to what each costs.
+    const [rules, customer] = await Promise.all([pointRules(this.prisma), this.prisma.customer.findUnique({ where: { id: customerId }, select: { pointsBalance: true } })])
+    const pointValue = rules.redeemValue && rules.redeemValue > 0 ? rules.redeemValue : 0;
+    const balance = Math.max(0, customer?.pointsBalance ?? 0);
+    const beforePoints = shops.reduce((n, s) => n + s.total, 0);
+    const usable = pointValue ? Math.min(balance, Math.floor(beforePoints / pointValue)) : 0;
+    const used = selection.usePoints ? usable : 0;
+    const pointShares = allocateDiscount(used, shops.map((s) => ({ id: s.shop.id, subtotal: s.total })));
+    const priced = shops.map((s) => {
+      const points = pointShares.get(s.shop.id) ?? 0;
+      return { ...s, points, pointsDiscount: points * pointValue, total: s.total - points * pointValue };
+    });
+    const subtotal = priced.reduce((n, s) => n + s.subtotal, 0);
+    const discountTotal = priced.reduce((n, s) => n + s.discount, 0);
+    const shippingTotal = priced.reduce((n, s) => n + s.shippingFee, 0);
+    const pointsDiscount = used * pointValue;
     return {
       couponRule: coupon,
       quote: {
-        shops,
+        shops: priced,
         subtotal,
         discountTotal,
         shippingTotal,
-        total: subtotal - discountTotal + shippingTotal,
+        total: subtotal - discountTotal + shippingTotal - pointsDiscount,
+        /** The customer's points: how many can go on this order, and what was used (`usePoints`). */
+        points: { balance, value: pointValue, usable, used, discount: pointsDiscount },
         issues,
-        delivery: { options, selectedId: courier?.id ?? null },
+        // No courier is needed when every shop delivers itself or is collected from.
+        delivery: { options, selectedId: courier?.id ?? null, needed: priced.some((s) => !s.urgentSelected && !s.pickupSelected) },
         coupon: coupon ? { code: coupon.code, shopId: coupon.shopId, discount: discountTotal } : null,
         couponError,
-        // QR transfer needs every shop in the order to accept transfers.
-        transferAvailable: shops.every((s) => s.transfer !== null),
+        // Transfers go to Taladonline's account (checked by an admin), once one is set up.
+        transfer: transfer as PlatformAccount | null,
+        transferAvailable: transfer !== null,
         // Likewise COD: every shop in the order must have turned it on.
-        codAvailable: shops.length > 0 && shops.every((s) => s.cod),
+        codAvailable: priced.length > 0 && priced.every((s) => s.cod),
         /** Payment methods the platform currently accepts. */
         paymentMethods: (await this.cms.publicSettings()).paymentMethods,
       },
@@ -169,7 +183,7 @@ export class CheckoutService {
     if (!quote.paymentMethods.includes(input.paymentMethod)) {
       throw new BadRequestException({ code: 'PAYMENT_METHOD_DISABLED', message: 'This payment method is not available' });
     }
-    if (quote.delivery.options.length > 0 && quote.delivery.selectedId !== input.deliveryProviderId) {
+    if (quote.delivery.needed && quote.delivery.options.length > 0 && quote.delivery.selectedId !== input.deliveryProviderId) {
       throw new BadRequestException({ code: 'DELIVERY_REQUIRED', message: 'Choose a delivery service' });
     }
     if (input.couponCode && quote.couponError) {
@@ -186,19 +200,17 @@ export class CheckoutService {
     if (input.paymentMethod === 'COD' && !quote.codAvailable) {
       throw new BadRequestException({ code: 'COD_UNAVAILABLE', message: 'A shop in this order does not offer cash on delivery' });
     }
-    const isTransfer = input.paymentMethod === 'BANK_TRANSFER';
+    // Points can cover the whole order: then there is nothing to transfer or check.
+    const paidByPoints = quote.total === 0 && quote.points.used > 0;
+    const isTransfer = input.paymentMethod === 'BANK_TRANSFER' && !paidByPoints;
     if (isTransfer) {
       if (!quote.transferAvailable) {
-        throw new BadRequestException({ code: 'TRANSFER_UNAVAILABLE', message: 'A shop in this order does not accept transfers' });
+        throw new BadRequestException({ code: 'TRANSFER_UNAVAILABLE', message: 'Transfers are not available right now' });
       }
-      // Manual payment: a slip for every shop must be attached before ordering.
-      const missing = quote.shops.filter((s) => !input.slips?.[s.shop.id]?.startsWith(slipPrefix(customerId)));
-      if (missing.length) {
-        throw new BadRequestException({
-          code: 'SLIP_REQUIRED',
-          message: 'Attach a payment slip for every shop',
-          shopIds: missing.map((s) => s.shop.id),
-        });
+      // One transfer for the whole order: 1–3 slips (a payment split over several transfers).
+      const keys = input.slipKeys ?? [];
+      if (keys.length === 0 || keys.length > MAX_PAYMENT_SLIPS || new Set(keys).size !== keys.length || !keys.every((k) => k.startsWith(slipPrefix(customerId)))) {
+        throw new BadRequestException({ code: 'SLIP_REQUIRED', message: `Attach 1 to ${MAX_PAYMENT_SLIPS} payment slips` });
       }
     }
 
@@ -208,7 +220,8 @@ export class CheckoutService {
     const lines = await this.linesFor(customerId, input);
     const defaultRate = await this.defaultCommissionRate();
     const now = new Date();
-    // COD needs no payment step. A transfer waits in "to pay" until the shop checks the slip.
+    // COD (and an order paid in full with points) goes straight to the shops. A transfer waits in
+    // "to pay" until Taladonline checks the slips.
     const status: OrderStatus = isTransfer ? 'PENDING' : 'CONFIRMED';
     const note = input.note?.trim() || null;
     const shippingAddress = {
@@ -222,7 +235,7 @@ export class CheckoutService {
 
     for (let attempt = 0; ; attempt++) {
       try {
-        return await this.prisma.$transaction(async (tx) => {
+        const placed = await this.prisma.$transaction(async (tx) => {
           // Reserve stock; a concurrent order that took the last units makes this fail.
           for (const l of lines) {
             const updated = l.variantId
@@ -244,6 +257,14 @@ export class CheckoutService {
           }
 
           if (couponRule) await this.redeemCoupon(tx, couponRule, customerId);
+          // Spend the points (a balance that dropped since the quote refuses the order).
+          if (quote.points.used > 0) {
+            const { count } = await tx.customer.updateMany({
+              where: { id: customerId, pointsBalance: { gte: quote.points.used } },
+              data: { pointsBalance: { decrement: quote.points.used } },
+            });
+            if (!count) throw new ConflictException({ code: 'POINTS_CHANGED', message: 'Your points balance changed, please review your order' });
+          }
 
           const number = orderNumber(now);
           const order = await tx.order.create({
@@ -252,17 +273,24 @@ export class CheckoutService {
               customerId,
               shippingAddress,
               subtotal: quote.subtotal,
-              discountTotal: quote.discountTotal,
+              discountTotal: quote.discountTotal + quote.points.discount,
               shippingTotal: quote.shippingTotal,
+              pointsRedeemed: quote.points.used,
               grandTotal: quote.total,
               note,
             },
           });
+          if (quote.points.used > 0) {
+            await tx.pointTransaction.create({
+              data: { customerId, type: 'REDEEM', points: -quote.points.used, orderId: order.id, note: 'Spent at checkout' },
+            });
+          }
           if (couponRule) {
             await tx.couponRedemption.create({
               data: { couponId: couponRule.id, customerId, orderId: order.id, amount: quote.discountTotal },
             });
           }
+          if (isTransfer) await tx.paymentSlip.createMany({ data: input.slipKeys!.map((key) => ({ orderId: order.id, key, createdAt: now })) });
 
           const shopOrders: string[] = [];
           for (const [i, group] of quote.shops.entries()) {
@@ -270,10 +298,12 @@ export class CheckoutService {
             // A shop coupon is the shop's own discount; a platform coupon is funded by Taladonline.
             const shopDiscount = couponRule?.shopId ? group.discount : 0;
             const platformDiscount = couponRule && !couponRule.shopId ? group.discount : 0;
-            const rates = new Map(groupLines.map((l) => [l.id, l.internal.commissionRate ?? defaultRate]));
-            const fees = itemCommissions(groupLines.map((l) => ({ id: l.id, lineTotal: l.lineTotal, rate: rates.get(l.id)! })), shopDiscount);
+            const commissions = new Map(groupLines.map((l) => [l.id, l.internal.commission ?? { type: 'PERCENT' as const, value: defaultRate }]));
+            const fees = itemCommissions(
+              groupLines.map((l) => ({ id: l.id, lineTotal: l.lineTotal, quantity: l.quantity, commission: commissions.get(l.id)! })),
+              shopDiscount,
+            );
             const shopNumber = quote.shops.length > 1 ? `${number}-${i + 1}` : number;
-            const slipKey = isTransfer ? input.slips![group.shop.id] : null;
             await tx.shopOrder.create({
               data: {
                 number: shopNumber,
@@ -283,15 +313,18 @@ export class CheckoutService {
                 // Unpaid orders are cancelled when the shop's payment window ends (OrderDeadlinesService).
                 paymentDueAt: status === 'PENDING' ? new Date(now.getTime() + groupLines[0].internal.paymentWindowHrs * 3_600_000) : null,
                 subtotal: group.subtotal,
-                discountTotal: group.discount,
-                platformDiscount,
+                // Points are Taladonline's discount too (paid back to the shop).
+                discountTotal: group.discount + group.pointsDiscount,
+                platformDiscount: platformDiscount + group.pointsDiscount,
+                pointsRedeemed: group.points,
                 // Each item at its own rate (shop override, else its category, else the default).
                 commissionAmount: [...fees.values()].reduce((n, f) => n + f, 0),
                 total: group.total,
                 shippingFee: group.shippingFee,
                 urgentDelivery: group.urgentSelected,
-                // Urgent delivery is the shop's own; other shops go with the chosen courier.
-                ...(!group.urgentSelected && quote.delivery.selectedId && { deliveryProvider: { connect: { id: quote.delivery.selectedId } } }),
+                pickup: group.pickupSelected,
+                // Urgent delivery and pickup need no courier; other shops go with the chosen one.
+                ...(!group.urgentSelected && !group.pickupSelected && quote.delivery.selectedId && { deliveryProvider: { connect: { id: quote.delivery.selectedId } } }),
                 items: {
                   create: groupLines.map((l) => ({
                     productId: l.productId,
@@ -302,19 +335,20 @@ export class CheckoutService {
                     regularPrice: l.regularPrice,
                     quantity: l.quantity,
                     lineTotal: l.lineTotal,
-                    commissionRate: rates.get(l.id)!,
+                    ...(commissions.get(l.id)!.type === 'FIXED'
+                      ? { commissionFixed: commissions.get(l.id)!.value }
+                      : { commissionRate: commissions.get(l.id)!.value }),
                     commissionAmount: fees.get(l.id)!,
                   })),
                 },
-                // Each shop is paid separately (its own QR / its own courier collecting COD).
+                // Each shop's share is tracked on its own (paid out to it later, or refunded alone).
                 payments: {
                   create: {
                     order: { connect: { id: order.id } },
                     method: input.paymentMethod,
-                    status: 'PENDING',
+                    status: paidByPoints ? 'PAID' : 'PENDING',
                     amount: group.total,
-                    slipKey,
-                    slipUploadedAt: slipKey ? now : null,
+                    ...(paidByPoints && { paidAt: now }),
                   },
                 },
                 history: {
@@ -323,88 +357,47 @@ export class CheckoutService {
                       toStatus: 'PENDING',
                       actorType: 'CUSTOMER',
                       actorId: customerId,
-                      note: isTransfer ? 'Payment slip submitted' : null,
+                      note: isTransfer ? 'Payment slip submitted' : paidByPoints ? 'Paid with points' : null,
                       createdAt: now,
                     },
                     ...(isTransfer
                       ? []
-                      : [{ fromStatus: 'PENDING' as const, toStatus: 'CONFIRMED' as const, note: 'Cash on delivery', createdAt: now }]),
+                      : [{ fromStatus: 'PENDING' as const, toStatus: 'CONFIRMED' as const, note: paidByPoints ? 'Paid with points' : 'Cash on delivery', createdAt: now }]),
                   ],
                 },
               },
             });
             shopOrders.push(shopNumber);
-            // The shop hears about it right away (live in the Seller Center, with a sound).
-            const units = groupLines.reduce((n, l) => n + l.quantity, 0);
-            const pay = isTransfer ? { lo: 'ກວດສະລິບການໂອນ', en: 'transfer slip to check' } : { lo: 'ຈ່າຍປາຍທາງ', en: 'cash on delivery' };
-            await this.notifications.toShop(
-              tx,
-              group.shop.id,
-              'ORDER',
-              {
-                lo: { title: `ມີຄຳສັ່ງຊື້ໃໝ່ ${shopNumber}`, body: `${units} ລາຍການ · ${formatMoney(group.total, 'lo')} · ${pay.lo}` },
-                en: { title: `New order ${shopNumber}`, body: `${units} item${units === 1 ? '' : 's'} · ${formatMoney(group.total, 'en')} · ${pay.en}` },
-              },
-              { link: `/orders/${shopNumber}` },
-            );
+            // Cash on delivery: the shop hears about it right away (live, with a sound). A
+            // transfer reaches the shop only once Taladonline approves the payment.
+            if (!isTransfer) {
+              const units = groupLines.reduce((n, l) => n + l.quantity, 0);
+              await this.notifications.toShop(
+                tx,
+                group.shop.id,
+                'ORDER',
+                {
+                  lo: { title: `ມີຄຳສັ່ງຊື້ໃໝ່ ${shopNumber}`, body: `${units} ລາຍການ · ${formatMoney(group.total, 'lo')} · ${paidByPoints ? 'ຈ່າຍແລ້ວ' : 'ຈ່າຍປາຍທາງ'}` },
+                  en: { title: `New order ${shopNumber}`, body: `${units} item${units === 1 ? '' : 's'} · ${formatMoney(group.total, 'en')} · ${paidByPoints ? 'paid' : 'cash on delivery'}` },
+                },
+                { link: `/orders/${shopNumber}` },
+              );
+            }
           }
+          if (isTransfer) await tellAdminsToCheck(this.notifications, tx, { number: order.number, total: quote.total });
 
           if (!input.items) await tx.cartItem.deleteMany({ where: { customerId, id: { in: lines.map((l) => l.id) } } });
           return { orderNumber: order.number, shopOrders, total: quote.total, paymentMethod: input.paymentMethod };
         });
+        // Every transfer order is emailed to the admins who check payments (they also get it live).
+        if (isTransfer) void this.slips.emailAdmins(placed.orderNumber);
+        return placed;
       } catch (e) {
         // Order numbers are random; retry the rare collision.
         const collision = e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
         if (!collision || attempt >= 3) throw e;
       }
     }
-  }
-
-  /**
-   * Development only: confirm an order's payment, standing in for the shop checking
-   * the slip (and, later, payment gateway callbacks).
-   */
-  async simulatePayment(customerId: string, shopOrderNumber: string) {
-    if (this.config.get('NODE_ENV', { infer: true }) === 'production') throw new ForbiddenException();
-    const shopOrder = await this.prisma.shopOrder.findFirst({
-      where: { number: shopOrderNumber, order: { customerId } },
-      include: {
-        payments: { orderBy: { createdAt: 'desc' }, take: 1 },
-        shop: { select: { paymentQrKey: true } },
-        order: {
-          select: {
-            shopOrders: { select: { id: true, status: true } },
-            payments: { where: { shopOrderId: null }, orderBy: { createdAt: 'desc' }, take: 1 },
-          },
-        },
-      },
-    });
-    if (!shopOrder) throw new NotFoundException('Order not found');
-    const payment = paymentOf(shopOrder);
-    if (!payment || payment.status !== 'PENDING' || payment.method === 'COD') {
-      throw new BadRequestException({ code: 'NOT_PAYABLE', message: 'This order has nothing to pay' });
-    }
-
-    // A per-shop payment confirms that shop order; a legacy order-level one confirms all.
-    const covered = payment.shopOrderId
-      ? [shopOrder]
-      : shopOrder.order.shopOrders;
-    const now = new Date();
-    await this.prisma.$transaction([
-      this.prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: 'PAID', paidAt: now, providerRef: `SIM-${Date.now()}` },
-      }),
-      ...covered
-        .filter((so) => so.status === 'PENDING')
-        .flatMap((so) => [
-          this.prisma.shopOrder.update({ where: { id: so.id }, data: { status: 'CONFIRMED' } }),
-          this.prisma.orderStatusHistory.create({
-            data: { shopOrderId: so.id, fromStatus: 'PENDING', toStatus: 'CONFIRMED', note: 'Payment confirmed', createdAt: now },
-          }),
-        ]),
-    ]);
-    return { ok: true };
   }
 
   /** Active couriers that deliver to the address's province. */
@@ -512,37 +505,20 @@ export class CheckoutService {
     });
   }
 
-  /** Shops (of these) that offer cash on delivery. */
-  private async codShops(shopIds: string[]): Promise<Set<string>> {
-    const shops = await this.prisma.shop.findMany({ where: { id: { in: shopIds }, codEnabled: true }, select: { id: true } });
-    return new Set(shops.map((s) => s.id));
-  }
-
-  private async transferInfo(shopIds: string[]): Promise<Map<string, ShopTransferInfo>> {
+  /** Shops (of these) that offer cash on delivery, and those customers may collect from (with where). */
+  private async shopOptions(shopIds: string[]) {
     const shops = await this.prisma.shop.findMany({
       where: { id: { in: shopIds } },
-      select: {
-        id: true,
-        paymentQrKey: true,
-        paymentBankCode: true,
-        paymentAccountName: true,
-        paymentAccountNumber: true,
-      },
+      select: { id: true, codEnabled: true, pickupEnabled: true, address: true, latitude: true, longitude: true },
     });
-    return new Map(
-      shops
-        // A shop accepts transfers once it has a QR or a full account on file.
-        .filter((s) => s.paymentQrKey || (s.paymentAccountNumber && s.paymentAccountName))
-        .map((s) => [
-          s.id,
-          {
-            bankCode: s.paymentBankCode,
-            accountName: s.paymentAccountName,
-            accountNumber: s.paymentAccountNumber,
-            hasQr: s.paymentQrKey !== null,
-          },
-        ]),
-    );
+    return {
+      cod: new Set(shops.filter((s) => s.codEnabled).map((s) => s.id)),
+      pickup: new Map(
+        shops
+          .filter((s) => s.pickupEnabled)
+          .map((s) => [s.id, { address: s.address, latitude: s.latitude?.toNumber() ?? null, longitude: s.longitude?.toNumber() ?? null }] as const),
+      ),
+    };
   }
 
   /** Checkout lines for items outside the cart (an order card in a chat). */

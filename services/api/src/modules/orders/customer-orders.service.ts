@@ -5,8 +5,9 @@ import { PrismaService } from '../../prisma/prisma.service.js';
 import { MediaService } from '../media/media.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import type { ListOrdersQuery } from './list-orders.query.js';
-import { addSold, awardPoints, moveOrder } from './order-transitions.js';
-import { paymentOf } from './payment-slips.service.js';
+import { addSold, awardPoints, markCodPaid, moveOrder, pointsFor, restoreStock, returnPoints } from './order-transitions.js';
+import { paymentCheck, paymentOf, type PaymentCheck, type SlipView } from './payment-slips.service.js';
+import { PlatformAccountService, type PlatformAccount } from './platform-account.service.js';
 
 export interface OrderLine {
   productSlug: string;
@@ -22,8 +23,12 @@ export interface OrderLine {
 export interface OrderSummary {
   number: string;
   status: OrderStatus;
-  /** Transfer slip uploaded and waiting for the shop to confirm it. */
+  /** Transfer slips sent and waiting for Taladonline's check. */
   awaitingConfirmation: boolean;
+  /** Where the transfer stands: being checked, rejected (send new slips), approved. */
+  paymentCheck: PaymentCheck;
+  /** Unpaid and not waiting for a check (slips rejected, or none sent): the customer may cancel. */
+  cancellable?: boolean;
   createdAt: Date;
   total: number;
   itemCount: number;
@@ -44,6 +49,8 @@ export interface OrderDetail extends Omit<OrderSummary, 'items'> {
   hasShippingBill: boolean;
   /** Urgent delivery by the shop itself (its fee is `shippingFee`). */
   urgentDelivery: boolean;
+  /** Collected at the shop: where to go (the shop's address and map pin). */
+  pickup: { address: string | null; phone: string; latitude: number | null; longitude: number | null } | null;
   deliveryProvider: string | null;
   paymentDueAt: Date | null;
   autoConfirmAt: Date | null;
@@ -55,10 +62,19 @@ export interface OrderDetail extends Omit<OrderSummary, 'items'> {
     status: PaymentStatus;
     amount: number;
     paidAt: Date | null;
-    slipUploadedAt: Date | null;
+    /** A paid order that was cancelled: when Taladonline sent the money back. */
+    refundedAt: Date | null;
   } | null;
-  /** Where to transfer when paying this order manually (null if the shop takes no transfers). */
-  transfer: { bankCode: string | null; accountName: string | null; accountNumber: string | null; hasQr: boolean } | null;
+  /** Taladonline's account to transfer to (null when transfers aren't set up). */
+  transfer: PlatformAccount | null;
+  /** One transfer pays the whole checkout (all its shops): this much. */
+  orderTotal: number;
+  /** Slips sent for the checkout, newest first, with Taladonline's verdict. */
+  slips: SlipView[];
+  /** Loyalty points for confirming receipt (an order that completes on its own earns none). */
+  pointsOnReceive: number;
+  /** Points spent on this shop order (their value is part of `discountTotal`). */
+  pointsUsed: number;
   note: string | null;
   items: OrderLine[];
   history: { status: OrderStatus; note: string | null; at: Date }[];
@@ -90,6 +106,7 @@ const paymentSelect = {
     select: {
       shopOrders: { select: { id: true } },
       payments: { where: { shopOrderId: null }, orderBy: { createdAt: 'desc' }, take: 1 },
+      slips: { orderBy: { createdAt: 'desc' }, select: { id: true, status: true, rejectReason: true, createdAt: true } },
     },
   },
 } satisfies Prisma.ShopOrderSelect;
@@ -101,11 +118,12 @@ export class CustomerOrdersService {
     private readonly prisma: PrismaService,
     private readonly media: MediaService,
     private readonly notifications: NotificationsService,
+    private readonly account: PlatformAccountService,
   ) {}
 
   /**
-   * The customer confirms they got a delivered order: it completes now instead of when the
-   * confirmation window ends (same effects as the automatic sweep — sold count, points).
+   * The customer confirms they got a sent order: it completes now instead of AUTO_COMPLETE_DAYS
+   * after shipping (same effects as the automatic sweep — sold count, points).
    * Interim flow; returns / problem reports come later.
    */
   async receive(customerId: string, number: string): Promise<{ status: OrderStatus }> {
@@ -121,10 +139,13 @@ export class CustomerOrdersService {
       },
     });
     if (!o) throw new NotFoundException('Order not found');
-    if (o.status !== 'DELIVERED') throw new ConflictException({ code: 'ORDER_NOT_DELIVERED', message: 'Only a delivered order can be marked as received' });
+    if (o.status !== 'SHIPPED' && o.status !== 'DELIVERED') {
+      throw new ConflictException({ code: 'ORDER_NOT_DELIVERED', message: 'Only a sent order can be marked as received' });
+    }
     await this.prisma.$transaction(async (tx) => {
-      const moved = await moveOrder(tx, o.id, 'DELIVERED', 'COMPLETED', {}, { actorType: 'CUSTOMER', actorId: customerId, note: 'Received by customer' });
-      if (!moved) throw new ConflictException({ code: 'ORDER_NOT_DELIVERED', message: 'Only a delivered order can be marked as received' });
+      const moved = await moveOrder(tx, o.id, o.status, 'COMPLETED', {}, { actorType: 'CUSTOMER', actorId: customerId, note: 'Received by customer' });
+      if (!moved) throw new ConflictException({ code: 'ORDER_NOT_DELIVERED', message: 'Only a sent order can be marked as received' });
+      await markCodPaid(tx, o.id);
       await addSold(tx, o.id);
       await awardPoints(tx, o.id);
       const imageKey = o.items[0]?.product.images[0]?.key;
@@ -141,6 +162,41 @@ export class CustomerOrdersService {
       );
     });
     return { status: 'COMPLETED' };
+  }
+
+  /**
+   * The customer gives up on an unpaid transfer: allowed once Taladonline rejected the slips (or
+   * none were sent), never while slips wait for the check or after one was approved. One transfer
+   * pays the whole checkout, so every shop in it is cancelled; stock and points come back.
+   */
+  async cancel(customerId: string, number: string): Promise<{ status: OrderStatus }> {
+    const o = await this.prisma.shopOrder.findFirst({
+      where: { number, order: { customerId } },
+      select: {
+        status: true,
+        order: {
+          select: {
+            slips: { select: { status: true } },
+            shopOrders: { where: { status: 'PENDING' }, select: { id: true, number: true, shop: { select: { name: true } } } },
+          },
+        },
+      },
+    });
+    if (!o) throw new NotFoundException('Order not found');
+    const check = paymentCheck(o.order.slips);
+    if (o.status !== 'PENDING' || check === 'reviewing' || check === 'approved') {
+      throw new ConflictException({ code: 'NOT_CANCELLABLE', message: 'This order can no longer be cancelled' });
+    }
+    const note = 'Cancelled by customer';
+    await this.prisma.$transaction(async (tx) => {
+      for (const so of o.order.shopOrders) {
+        if (!(await moveOrder(tx, so.id, 'PENDING', 'CANCELLED', { cancelReason: note }, { actorType: 'CUSTOMER', actorId: customerId, note }))) continue;
+        await restoreStock(tx, so.id);
+        await returnPoints(tx, so.id);
+        await tx.payment.updateMany({ where: { shopOrderId: so.id, status: 'PENDING' }, data: { status: 'FAILED' } });
+      }
+    });
+    return { status: 'CANCELLED' };
   }
 
   async list(customerId: string, { tab, page, pageSize }: ListOrdersQuery) {
@@ -179,7 +235,8 @@ export class CustomerOrdersService {
     const orders: OrderSummary[] = rows.map((o) => ({
       number: o.number,
       status: o.status,
-      awaitingConfirmation: o.status === 'PENDING' && Boolean(paymentOf(o)?.slipKey),
+      awaitingConfirmation: o.status === 'PENDING' && paymentCheck(o.order.slips) === 'reviewing',
+      paymentCheck: o.status === 'PENDING' ? paymentCheck(o.order.slips) : null,
       createdAt: o.createdAt,
       total: o.total.toNumber(),
       itemCount: o._count.items,
@@ -209,22 +266,14 @@ export class CustomerOrdersService {
             number: true,
             currency: true,
             note: true,
+            grandTotal: true,
             shippingAddress: true,
             shopOrders: { select: { id: true } },
             payments: { where: { shopOrderId: null }, orderBy: { createdAt: 'desc' }, take: 1 },
+            slips: { orderBy: { createdAt: 'desc' }, select: { id: true, status: true, rejectReason: true, createdAt: true } },
           },
         },
-        shop: {
-          select: {
-            slug: true,
-            name: true,
-            logoUrl: true,
-            paymentQrKey: true,
-            paymentBankCode: true,
-            paymentAccountName: true,
-            paymentAccountNumber: true,
-          },
-        },
+        shop: { select: { slug: true, name: true, logoUrl: true, address: true, phone: true, latitude: true, longitude: true } },
         deliveryProvider: { select: { name: true } },
         items: { select: lineSelect },
         history: { orderBy: { createdAt: 'asc' } },
@@ -233,12 +282,14 @@ export class CustomerOrdersService {
     if (!o) throw new NotFoundException('Order not found');
 
     const payment = paymentOf(o);
-    const acceptsTransfer = Boolean(o.shop.paymentQrKey || (o.shop.paymentAccountNumber && o.shop.paymentAccountName));
+    const check = paymentCheck(o.order.slips);
     return {
       number: o.number,
       orderNumber: o.order.number,
       status: o.status,
-      awaitingConfirmation: o.status === 'PENDING' && Boolean(payment?.slipKey),
+      awaitingConfirmation: o.status === 'PENDING' && check === 'reviewing',
+      paymentCheck: o.status === 'PENDING' ? check : null,
+      cancellable: o.status === 'PENDING' && check !== 'reviewing' && check !== 'approved',
       createdAt: o.createdAt,
       updatedAt: o.updatedAt,
       subtotal: o.subtotal.toNumber(),
@@ -250,6 +301,9 @@ export class CustomerOrdersService {
       trackingNumber: o.trackingNumber,
       hasShippingBill: o.shippingBillKey !== null,
       urgentDelivery: o.urgentDelivery,
+      pickup: o.pickup
+        ? { address: o.shop.address, phone: o.shop.phone, latitude: o.shop.latitude?.toNumber() ?? null, longitude: o.shop.longitude?.toNumber() ?? null }
+        : null,
       deliveryProvider: o.deliveryProvider?.name ?? null,
       paymentDueAt: o.paymentDueAt,
       autoConfirmAt: o.autoConfirmAt,
@@ -266,17 +320,14 @@ export class CustomerOrdersService {
             status: payment.status,
             amount: payment.amount.toNumber(),
             paidAt: payment.paidAt,
-            slipUploadedAt: payment.slipUploadedAt,
+            refundedAt: payment.refundedAt,
           }
         : null,
-      transfer: acceptsTransfer
-        ? {
-            bankCode: o.shop.paymentBankCode,
-            accountName: o.shop.paymentAccountName,
-            accountNumber: o.shop.paymentAccountNumber,
-            hasQr: o.shop.paymentQrKey !== null,
-          }
-        : null,
+      transfer: o.status === 'PENDING' ? await this.account.available() : null,
+      orderTotal: o.order.grandTotal.toNumber(),
+      pointsOnReceive: o.status === 'SHIPPED' || o.status === 'DELIVERED' ? await pointsFor(this.prisma, o.total.toNumber()) : 0,
+      pointsUsed: o.pointsRedeemed,
+      slips: o.order.slips,
       note: o.order.note,
       items: o.items.map((i) => this.line(i)),
       history: o.history.map((h) => ({ status: h.toStatus, note: h.note, at: h.createdAt })),

@@ -1,5 +1,5 @@
 import { formatPhone } from "@talad/shared";
-import { ChevronRight, CircleCheckBig, ExternalLink, Package, Store, Truck, Wallet } from "lucide-react";
+import { ChevronRight, CircleCheckBig, Clapperboard, ExternalLink, Package, Store, Truck, Wallet } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { accountLinks } from "@/components/account/account-links";
@@ -23,7 +23,7 @@ const row =
  */
 export default async function AccountHub() {
   const locale = await getLocale();
-  const { account: dict, auth } = await getDictionary();
+  const { account: dict, auth, profile } = await getDictionary();
   const customer = await requireCustomer(locale, `/${locale}/account`);
   const orders = `/${locale}/account/orders`;
 
@@ -75,6 +75,12 @@ export default async function AccountHub() {
       </section>
 
       <nav className="divide-y divide-border overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-border">
+        {/* Their public page in the video feed: their videos and followers. */}
+        <Link href={`/${locale}/u/${customer.id}`} className={row}>
+          <Clapperboard className="size-5 text-muted-foreground" />
+          <span className="flex-1">{profile.myProfile}</span>
+          <ChevronRight className="size-4 text-muted-foreground" />
+        </Link>
         {accountLinks(locale, dict).map(({ href, label, icon: Icon }) => (
           <Link key={href} href={href} className={row}>
             <Icon className="size-5 text-muted-foreground" />

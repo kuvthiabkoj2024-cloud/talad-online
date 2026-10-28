@@ -2,7 +2,8 @@ import { BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Post,
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { SHOP_STATUSES, type ShopStatus } from '@talad/shared';
 import type { AdminUser } from '../../generated/prisma/client.js';
-import { AdminPageQuery, RateDto, ReasonDto } from '../admins/admin.dto.js';
+import { AdminPageQuery, ReasonDto } from '../admins/admin.dto.js';
+import { CommissionBodyDto } from '../catalog/commission/commission.dto.js';
 import { AdminAuthGuard, ClientIp, CurrentAdmin, Permission } from '../auth/admin-auth.guard.js';
 import { AdminShopsService, type ShopDecision } from './admin-shops.service.js';
 
@@ -37,6 +38,13 @@ export class AdminShopsController {
     return new StreamableFile(file.body, { type: file.contentType, length: file.contentLength, disposition: 'inline' });
   }
 
+  /** The shop's receiving QR (private): where its payouts are sent. */
+  @Get(':id/payment-qr')
+  async paymentQr(@Param('id', id) shopId: string) {
+    const file = await this.shops.paymentQr(shopId);
+    return new StreamableFile(file.body, { type: file.contentType, length: file.contentLength, disposition: 'inline' });
+  }
+
   /** approve | reject | suspend | reinstate (reason required to reject or suspend). */
   @Post(':id/:decision')
   @Permission('shops.review')
@@ -53,7 +61,7 @@ export class AdminShopsController {
 
   @Put(':id/commission')
   @Permission('shops.commission')
-  commission(@CurrentAdmin() admin: AdminUser, @Param('id', id) shopId: string, @Body() dto: RateDto, @ClientIp() ip: string) {
-    return this.shops.setCommission(admin, shopId, dto.rate, ip);
+  commission(@CurrentAdmin() admin: AdminUser, @Param('id', id) shopId: string, @Body() dto: CommissionBodyDto, @ClientIp() ip: string) {
+    return this.shops.setCommission(admin, shopId, dto.commission, ip);
   }
 }

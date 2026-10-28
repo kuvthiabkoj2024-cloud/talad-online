@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Get, Header, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Header, Param, ParseUUIDPipe, Query, StreamableFile, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsDate, IsIn, IsOptional } from 'class-validator';
@@ -49,6 +49,13 @@ export class ShopReportsController {
   finance(@CurrentShop() shop: Shop, @Query() query: PeriodQuery) {
     const { from, to } = period(query);
     return this.reports.finance(shop.id, from, to);
+  }
+
+  /** Taladonline's transfer slip for a payout to this shop. */
+  @Get('finance/payouts/:id/slip')
+  async payoutSlip(@CurrentShop() shop: Shop, @Param('id', new ParseUUIDPipe({ version: '7' })) id: string) {
+    const file = await this.reports.payoutSlip(shop.id, id);
+    return new StreamableFile(file.body, { type: file.contentType, length: file.contentLength, disposition: 'inline' });
   }
 
   @Get('finance/statement')

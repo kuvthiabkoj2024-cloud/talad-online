@@ -2,6 +2,7 @@
 
 import { formatMoney, type Locale } from "@talad/shared";
 import {
+  Check,
   Clapperboard,
   Eye,
   Heart,
@@ -12,8 +13,6 @@ import {
   ShoppingBag,
   Store,
   Trash2,
-  Volume2,
-  VolumeX,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -21,6 +20,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import type { FeedEntry, FeedItem, FeedPostItem, PostStats, VideoStats } from "@/lib/api";
 import { loadFeed } from "@/lib/feed-actions";
+import { followedProfiles, followedShops, setFollow, setProfileFollow } from "@/lib/follow-actions";
 import { formatCount, formatPriceRange, interpolate, productPath } from "@/lib/format";
 import {
   deletePost,
@@ -44,7 +44,14 @@ type Dict = Dictionary["feed"];
 
 /** A customer's own video (no product), as opposed to a shop's product video. */
 const isPost = (e: FeedEntry): e is FeedPostItem => e.kind === "post";
-type Sheet = { kind: "comments" | "buy"; item: FeedItem } | { kind: "share"; item: FeedEntry } | null;
+type Focus = { thread: string; reply?: string };
+type Sheet =
+  | { kind: "buy"; item: FeedItem }
+  | { kind: "comments"; item: FeedEntry; focus?: Focus }
+  | { kind: "share"; item: FeedEntry }
+  | null;
+/** Shops and customers the viewer follows, per signed-in account. */
+type Follows = { owner: string | null; shops: Set<string>; people: Set<string> };
 
 /** A play counts after this much watching, once per video per visit. */
 const VIEW_AFTER_MS = 2500;
@@ -54,8 +61,10 @@ const EMPTY = new Set<string>();
 /**
  * Full-screen vertical video feed: shops' product videos and customers' own videos, one per
  * screen, snap scrolling.
- * The slide on screen plays (muted until the viewer turns sound on); the next page
- * loads when the viewer is two slides from the end.
+ * The slide on screen plays with sound (muted only until the first tap where the browser
+ * refuses sound before any interaction); the next page
+ * loads when the viewer is two slides from the end. `openComments` (a notification's link)
+ * opens the first video's comments on that comment.
  */
 export function FeedView({
   locale,
@@ -63,19 +72,23 @@ export function FeedView({
   cartErrors,
   initialItems,
   initialCursor,
+  openComments,
 }: {
   locale: Locale;
   dict: Dict;
   cartErrors: Dictionary["cartErrors"];
   initialItems: FeedEntry[];
   initialCursor: string | null;
+  openComments?: Focus;
 }) {
   const router = useRouter();
   const { customer } = useSession();
   const [items, setItems] = useState(initialItems);
   const [cursor, setCursor] = useState(initialCursor);
   const [active, setActive] = useState(0);
-  const [muted, setMuted] = useState(true);
+  // Sound is on; it only goes off when the browser refuses autoplay with sound (no tap yet).
+  const [muted, setMuted] = useState(false);
+  const activeRef = useRef(0);
   const [loadFailed, setLoadFailed] = useState(false);
   const [loading, startLoading] = useTransition();
   const scroller = useRef<HTMLDivElement>(null);
@@ -96,7 +109,12 @@ export function FeedView({
       })),
     [owner],
   );
-  const [sheet, setSheet] = useState<Sheet>(null);
+  const [sheet, setSheet] = useState<Sheet>(() =>
+    openComments && initialItems[0] ? { kind: "comments", item: initialItems[0], focus: openComments } : null,
+  );
+  const [followState, setFollowState] = useState<Follows>({ owner: null, shops: new Set(), people: new Set() });
+  const follows = followState.owner === owner ? followState : { owner, shops: EMPTY, people: EMPTY };
+  const checkedFollows = useRef<{ owner: string | null; ids: Set<string> }>({ owner: null, ids: new Set() });
   const checkedFavorites = useRef<{ owner: string | null; ids: Set<string> }>({
     owner: null,
     ids: new Set(),
@@ -158,6 +176,42 @@ export function FeedView({
       setLikeState((s) => ({ owner, ids: new Set([...(s.owner === owner ? s.ids : []), ...on]) })),
     );
   }, [owner, items]);
+
+  // And the shops and people this viewer follows.
+  useEffect(() => {
+    if (!owner) return;
+    if (checkedFollows.current.owner !== owner) checkedFollows.current = { owner, ids: new Set() };
+    const seen = checkedFollows.current.ids;
+    const shopIds = [...new Set(items.filter((i) => !isPost(i)).map((i) => (i as FeedItem).shop.id))].filter((id) => !seen.has(id));
+    const people = [...new Set(items.filter(isPost).map((p) => p.author.id))].filter((id) => id !== owner && !seen.has(id));
+    if (!shopIds.length && !people.length) return;
+    [...shopIds, ...people].forEach((id) => seen.add(id));
+    void Promise.all([followedShops(shopIds), followedProfiles(people)]).then(([s, p]) =>
+      setFollowState((f) => {
+        const mine = f.owner === owner;
+        return { owner, shops: new Set([...(mine ? f.shops : []), ...s]), people: new Set([...(mine ? f.people : []), ...p]) };
+      }),
+    );
+  }, [owner, items]);
+
+  async function toggleFollow(kind: "shops" | "people", id: string) {
+    if (!customer) return loginNext();
+    const on = !follows[kind].has(id);
+    const apply = (value: boolean) =>
+      setFollowState((f) => {
+        const mine = f.owner === owner;
+        const next: Follows = { owner, shops: new Set(mine ? f.shops : []), people: new Set(mine ? f.people : []) };
+        if (value) next[kind].add(id);
+        else next[kind].delete(id);
+        return next;
+      });
+    apply(on);
+    const res = kind === "shops" ? await setFollow(id, on) : await setProfileFollow(id, on);
+    if (!res.ok) {
+      apply(!on);
+      if (res.error === "UNAUTHENTICATED") loginNext();
+    }
+  }
 
   const onPostViewed = useCallback(
     (p: FeedPostItem) => {
@@ -255,6 +309,28 @@ export function FeedView({
     }
   }
 
+  // Sound was refused: the first tap, key or swipe anywhere turns it on for the playing video.
+  useEffect(() => {
+    if (!muted) return;
+    const unlock = () => {
+      const v = scroller.current?.querySelector<HTMLVideoElement>(`[data-index="${activeRef.current}"] video`);
+      // Set right away (still inside the tap), so browsers that need a gesture allow it. The
+      // time stamp keeps the click that follows this tap from pausing the video.
+      if (v) {
+        v.muted = false;
+        v.dataset.soundOnAt = String(Date.now());
+      }
+      setMuted(false);
+    };
+    const events = ["pointerup", "touchend", "keydown"] as const;
+    events.forEach((e) => document.addEventListener(e, unlock, { capture: true, once: true }));
+    return () => events.forEach((e) => document.removeEventListener(e, unlock, { capture: true }));
+  }, [muted]);
+
+  useEffect(() => {
+    activeRef.current = active;
+  }, [active]);
+
   useEffect(() => {
     const root = scroller.current;
     if (!root) return;
@@ -335,12 +411,15 @@ export function FeedView({
               active={i === active}
               preload={i === active + 1}
               muted={muted}
-              onToggleMute={() => setMuted((m) => !m)}
+              onSoundBlocked={() => setMuted(true)}
               stats={postStatsOf(item)}
               liked={liked.has(item.id)}
               mine={item.author.id === owner}
+              following={follows.people.has(item.author.id)}
+              onFollow={() => void toggleFollow("people", item.author.id)}
               onViewed={() => onPostViewed(item)}
               onLike={() => void toggleLike(item)}
+              onComments={() => setSheet({ kind: "comments", item })}
               onShare={() => setSheet({ kind: "share", item })}
               onDelete={() => void removePost(item)}
             />
@@ -354,12 +433,15 @@ export function FeedView({
             active={i === active}
             preload={i === active + 1}
             muted={muted}
-            onToggleMute={() => setMuted((m) => !m)}
+            onSoundBlocked={() => setMuted(true)}
             stats={statsOf(item)}
             favorited={favorited.has(item.id)}
+            // No "+" on the viewer's own shop.
+            following={follows.shops.has(item.shop.id) || customer?.shop?.id === item.shop.id}
+            onFollow={() => void toggleFollow("shops", item.shop.id)}
             onViewed={() => onViewed(item)}
             onFavorite={() => void toggleFavorite(item)}
-            onOpen={(kind) => setSheet(kind === "share" ? { kind, item } : { kind, item })}
+            onOpen={(kind) => setSheet({ kind, item })}
           />
           ),
         )}
@@ -379,11 +461,16 @@ export function FeedView({
           key={sheet.item.id}
           open
           onClose={() => setSheet(null)}
-          productId={sheet.item.id}
-          total={statsOf(sheet.item).comments}
+          target={{ kind: isPost(sheet.item) ? "post" : "product", id: sheet.item.id }}
+          total={isPost(sheet.item) ? postStatsOf(sheet.item).comments : statsOf(sheet.item).comments}
           locale={locale}
           dict={dict}
-          onCountChange={(d) => bump(sheet.item, (s) => ({ comments: Math.max(0, s.comments + d) }))}
+          focus={sheet.focus}
+          onCountChange={(d) => {
+            const item = sheet.item;
+            if (isPost(item)) bumpPost(item, (s) => ({ comments: Math.max(0, s.comments + d) }));
+            else bump(item, (s) => ({ comments: Math.max(0, s.comments + d) }));
+          }}
         />
       )}
       {sheet?.kind === "share" && (
@@ -429,9 +516,11 @@ function FeedSlide({
   active,
   preload,
   muted,
-  onToggleMute,
+  onSoundBlocked,
   stats,
   favorited,
+  following,
+  onFollow,
   onViewed,
   onFavorite,
   onOpen,
@@ -443,9 +532,11 @@ function FeedSlide({
   active: boolean;
   preload: boolean;
   muted: boolean;
-  onToggleMute: () => void;
+  onSoundBlocked: () => void;
   stats: VideoStats;
   favorited: boolean;
+  following: boolean;
+  onFollow: () => void;
   onViewed: () => void;
   onFavorite: () => void;
   onOpen: (kind: "comments" | "share" | "buy") => void;
@@ -459,12 +550,9 @@ function FeedSlide({
   useEffect(() => {
     const v = video.current;
     if (!v) return;
-    if (active) {
-      // Autoplay can be refused (e.g. low-power mode); the play button stays up then.
-      v.play().catch(() => {});
-    } else {
-      v.pause();
-    }
+    if (active) startPlaying(v, muted, onSoundBlocked);
+    else v.pause();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the slide comes on screen
   }, [active]);
 
   // Count a view once the slide has actually played for a moment.
@@ -486,6 +574,8 @@ function FeedSlide({
   function togglePlay() {
     const v = video.current;
     if (!v) return;
+    // The tap that just turned sound on (the browser had refused it) doesn't also pause.
+    if (Date.now() - Number(v.dataset.soundOnAt ?? 0) < 600) return;
     if (v.paused) v.play().catch(() => {});
     else v.pause();
   }
@@ -520,30 +610,11 @@ function FeedSlide({
           </button>
         )}
 
-        <button
-          type="button"
-          onClick={onToggleMute}
-          aria-label={muted ? dict.unmute : dict.mute}
-          aria-pressed={!muted}
-          className="absolute right-3 top-3 flex size-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm"
-        >
-          {muted ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
-        </button>
 
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-3 bg-linear-to-t from-black/85 via-black/40 to-transparent px-4 pb-4 pt-20 text-white">
           <div className="flex items-end gap-3">
             <div className="flex min-w-0 flex-1 flex-col gap-2">
-              <Link
-                href={`/${locale}/s/${item.shop.slug}`}
-                className="pointer-events-auto flex w-fit items-center gap-2 text-sm font-semibold"
-              >
-                <span className="relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-primary ring-2 ring-white">
-                  {item.shop.logoUrl ? (
-                    <ProductImage src={item.shop.logoUrl} alt="" sizes="36px" className="object-cover" />
-                  ) : (
-                    <Store className="size-5" />
-                  )}
-                </span>
+              <Link href={`/${locale}/s/${item.shop.slug}`} className="pointer-events-auto block truncate text-[15px] font-bold">
                 {item.shop.name}
               </Link>
               <p className="line-clamp-2 text-sm text-white/90">{item.name}</p>
@@ -557,6 +628,19 @@ function FeedSlide({
 
             {/* Engagement rail */}
             <div className="pointer-events-auto flex shrink-0 flex-col items-center gap-4 pb-1">
+              <RailAvatar
+                href={`/${locale}/s/${item.shop.slug}`}
+                name={item.shop.name}
+                following={following}
+                dict={dict}
+                onFollow={onFollow}
+              >
+                {item.shop.logoUrl ? (
+                  <ProductImage src={item.shop.logoUrl} alt="" sizes="48px" className="object-cover" />
+                ) : (
+                  <Store className="size-6" />
+                )}
+              </RailAvatar>
               <RailButton
                 label={favorited ? dict.unfavorite : dict.favorite}
                 pressed={favorited}
@@ -618,6 +702,21 @@ function FeedSlide({
   );
 }
 
+/**
+ * Plays with sound. Browsers may refuse sound before the visitor has tapped anything: then it
+ * plays muted and `onBlocked` lets the feed turn sound on at the first tap.
+ */
+function startPlaying(v: HTMLVideoElement, muted: boolean, onBlocked: () => void) {
+  v.muted = muted;
+  v.play().catch(() => {
+    // Refused even muted (e.g. low-power mode): the play button stays up.
+    if (v.muted) return;
+    v.muted = true;
+    onBlocked();
+    v.play().catch(() => {});
+  });
+}
+
 function RailButton({
   label,
   count,
@@ -647,6 +746,62 @@ function RailButton({
   );
 }
 
+/**
+ * TikTok-style profile picture at the top of the rail: opens the shop or profile, with a red
+ * "+" to follow. Once followed the "+" turns into a tick for a moment and goes away (unfollow
+ * from the shop or profile page).
+ */
+function RailAvatar({
+  href,
+  name,
+  following,
+  dict,
+  onFollow,
+  children,
+}: {
+  href: string;
+  name: string;
+  following: boolean;
+  dict: Dict;
+  onFollow: () => void;
+  children: React.ReactNode;
+}) {
+  const [justFollowed, setJustFollowed] = useState(false);
+  useEffect(() => {
+    if (!justFollowed) return;
+    const t = setTimeout(() => setJustFollowed(false), 900);
+    return () => clearTimeout(t);
+  }, [justFollowed]);
+
+  return (
+    <div className="relative mb-2">
+      <Link
+        href={href}
+        aria-label={name}
+        className="relative flex size-12 items-center justify-center overflow-hidden rounded-full bg-white text-primary ring-2 ring-white"
+      >
+        {children}
+      </Link>
+      {(!following || justFollowed) && (
+        <button
+          type="button"
+          onClick={() => {
+            if (following) return;
+            setJustFollowed(true);
+            onFollow();
+          }}
+          aria-label={interpolate(dict.follow, { name })}
+          className={`absolute -bottom-2.5 left-1/2 flex size-6 -translate-x-1/2 items-center justify-center rounded-full shadow transition-all duration-300 active:scale-90 ${
+            justFollowed ? "scale-110 bg-white text-[#ff3b5c]" : "bg-[#ff3b5c] text-white"
+          }`}
+        >
+          {justFollowed ? <Check className="size-4" strokeWidth={3} /> : <Plus className="size-4" strokeWidth={3} />}
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** Floating "+" over the feed: opens the new post page (sign in first). */
 function NewPostButton({ locale, label, signedIn }: { locale: Locale; label: string; signedIn: boolean }) {
   const href = `/${locale}/feed/new`;
@@ -655,7 +810,7 @@ function NewPostButton({ locale, label, signedIn }: { locale: Locale; label: str
       href={signedIn ? href : `/${locale}/login?next=${encodeURIComponent(href)}`}
       aria-label={label}
       title={label}
-      className="fixed left-3 top-[calc(var(--header-h,4rem)+0.75rem)] z-20 flex h-10 items-center gap-1.5 rounded-full bg-white/90 px-3.5 text-sm font-semibold text-foreground shadow-lg backdrop-blur-sm transition hover:bg-white md:left-[max(0.75rem,calc(50%-14rem))]"
+      className="fixed right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-20 flex h-10 items-center gap-1.5 rounded-full bg-primary px-3.5 text-sm font-semibold text-primary-foreground shadow-lg transition hover:brightness-110 md:right-[max(0.75rem,calc(50%-14rem))] md:top-[calc(var(--header-h,4rem)+0.75rem)]"
     >
       <Plus className="size-4" />
       <span>{label}</span>
@@ -672,12 +827,15 @@ function PostSlide({
   active,
   preload,
   muted,
-  onToggleMute,
+  onSoundBlocked,
   stats,
   liked,
   mine,
+  following,
+  onFollow,
   onViewed,
   onLike,
+  onComments,
   onShare,
   onDelete,
 }: {
@@ -688,12 +846,15 @@ function PostSlide({
   active: boolean;
   preload: boolean;
   muted: boolean;
-  onToggleMute: () => void;
+  onSoundBlocked: () => void;
   stats: PostStats;
   liked: boolean;
   mine: boolean;
+  following: boolean;
+  onFollow: () => void;
   onViewed: () => void;
   onLike: () => void;
+  onComments: () => void;
   onShare: () => void;
   onDelete: () => void;
 }) {
@@ -704,8 +865,9 @@ function PostSlide({
   useEffect(() => {
     const v = video.current;
     if (!v) return;
-    if (active) v.play().catch(() => {});
+    if (active) startPlaying(v, muted, onSoundBlocked);
     else v.pause();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the slide comes on screen
   }, [active]);
 
   useEffect(() => {
@@ -717,6 +879,8 @@ function PostSlide({
   function togglePlay() {
     const v = video.current;
     if (!v) return;
+    // The tap that just turned sound on (the browser had refused it) doesn't also pause.
+    if (Date.now() - Number(v.dataset.soundOnAt ?? 0) < 600) return;
     if (v.paused) v.play().catch(() => {});
     else v.pause();
   }
@@ -757,29 +921,12 @@ function PostSlide({
           </button>
         )}
 
-        <button
-          type="button"
-          onClick={onToggleMute}
-          aria-label={muted ? dict.unmute : dict.mute}
-          aria-pressed={!muted}
-          className="absolute right-3 top-3 flex size-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm"
-        >
-          {muted ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
-        </button>
 
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end gap-3 bg-linear-to-t from-black/85 via-black/40 to-transparent px-4 pb-5 pt-24 text-white">
           <div className="flex min-w-0 flex-1 flex-col gap-2">
-            <p className="flex w-fit items-center gap-2 text-sm font-semibold">
-              <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-xs font-bold text-primary ring-2 ring-white">
-                {post.author.avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- social profile picture
-                  <img src={post.author.avatarUrl} alt="" className="size-full object-cover" />
-                ) : (
-                  initials
-                )}
-              </span>
+            <Link href={`/${locale}/u/${post.author.id}`} className="pointer-events-auto block truncate text-[15px] font-bold">
               {post.author.name}
-            </p>
+            </Link>
             {post.caption && <p className="line-clamp-3 whitespace-pre-line text-sm text-white/90">{post.caption}</p>}
             <p className="flex items-center gap-1.5 text-xs text-white/75">
               <Eye className="size-3.5" />
@@ -788,8 +935,19 @@ function PostSlide({
           </div>
 
           <div className="pointer-events-auto flex shrink-0 flex-col items-center gap-4 pb-1">
+            <RailAvatar href={`/${locale}/u/${post.author.id}`} name={post.author.name} following={following || mine} dict={dict} onFollow={onFollow}>
+              {post.author.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- social profile picture
+                <img src={post.author.avatarUrl} alt="" referrerPolicy="no-referrer" className="size-full object-cover" />
+              ) : (
+                <span className="text-sm font-bold">{initials}</span>
+              )}
+            </RailAvatar>
             <RailButton label={liked ? dict.unlike : dict.like} pressed={liked} count={formatCount(stats.likes, locale)} onClick={onLike}>
               <Heart className={`size-7 ${liked ? "fill-[#ff3b5c] text-[#ff3b5c]" : ""}`} />
+            </RailButton>
+            <RailButton label={dict.comments} count={formatCount(stats.comments, locale)} onClick={onComments}>
+              <MessageCircle className="size-7" />
             </RailButton>
             <RailButton label={dict.share} count={formatCount(stats.shares, locale)} onClick={onShare}>
               <Share2 className="size-7" />

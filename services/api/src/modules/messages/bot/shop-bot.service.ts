@@ -9,6 +9,7 @@ import { PhotoSearchService } from '../../catalog/image-search/photo-search.serv
 import { ProductsService, type ProductCard } from '../../catalog/products/products.service.js';
 import { CmsService } from '../../cms/cms.service.js';
 import { ChatOrdersService } from '../../orders/chat-orders.service.js';
+import { PlatformAccountService } from '../../orders/platform-account.service.js';
 import { RealtimeService } from '../../realtime/realtime.service.js';
 import { analyse, describeHours, INFO_TOPICS, saidQuantity, stripBuyWords, type BotTopic } from './shop-bot-text.js';
 
@@ -69,6 +70,7 @@ export class ShopBotService {
     private readonly cms: CmsService,
     private readonly chatOrders: ChatOrdersService,
     private readonly realtime: RealtimeService,
+    private readonly account: PlatformAccountService,
   ) {}
 
   /** After a customer's message: the bot's reply in the chat (or nothing, when the seller is already on it). */
@@ -155,7 +157,7 @@ export class ShopBotService {
     const shop = await this.prisma.shop.findUniqueOrThrow({
       where: { id: shopId },
       select: {
-        id: true, slug: true, name: true, description: true, address: true, businessHours: true, paymentAccountNumber: true, paymentQrKey: true, codEnabled: true,
+        id: true, slug: true, name: true, description: true, address: true, businessHours: true, codEnabled: true,
         faqs: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }], select: { question: true, answer: true } },
       },
     });
@@ -166,7 +168,8 @@ export class ShopBotService {
       description: shop.description,
       address: shop.address,
       hours: shop.businessHours as BusinessHours | null,
-      transfer: !!(shop.paymentAccountNumber || shop.paymentQrKey),
+      // Transfers go to Taladonline's account (as at checkout).
+      transfer: (await this.account.available()) !== null,
       cod: shop.codEnabled,
       faqs: shop.faqs,
     };
@@ -388,7 +391,7 @@ export class ShopBotService {
 
   private async paymentMethods(shop: ShopFacts, lang: ChatLocale) {
     const { paymentMethods } = await this.cms.publicSettings();
-    // Transfers need the shop's bank account or QR, COD the shop's own opt-in (as at checkout).
+    // Transfers need Taladonline's account set up, COD the shop's own opt-in (as at checkout).
     const usable = paymentMethods.filter((m) => (m === 'BANK_TRANSFER' ? shop.transfer : m === 'COD' ? shop.cod : true));
     return { names: usable.map((m) => PAYMENT_NAMES[m]?.[lang] ?? m), cod: usable.includes('COD') };
   }

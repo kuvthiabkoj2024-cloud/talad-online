@@ -205,11 +205,11 @@ export class NotificationsService {
   /** Tells a customer their order moved to `status` (shop actions and deadline sweeps). */
   async notifyOrder(
     db: Db,
-    order: { customerId: string; number: string; shopName: string; imageKey?: string | null },
+    order: { customerId: string; number: string; shopName: string; imageKey?: string | null; pickup?: boolean },
     status: OrderStatus,
     reason?: string | null,
   ): Promise<void> {
-    const text = orderMessage(status, order.number, order.shopName, reason);
+    const text = orderMessage(status, order.number, order.shopName, reason, order.pickup);
     await this.create(db, { customerId: order.customerId }, 'ORDER', text, {
       link: `/account/orders/${order.number}`,
       ...(order.imageKey && { imageUrl: order.imageKey }),

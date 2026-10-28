@@ -310,6 +310,17 @@ body { font-family: ${FONT}; color: #000; font-size: 9pt; line-height: 1.3; }
 }
 
 /**
+ * Several bills or stickers (each a document from billHtml / stickerHtml) as one document,
+ * one order per page, so they go to the printer in a single job.
+ */
+export function combineHtml(docs: string[]): string {
+  if (docs.length === 1) return docs[0]
+  const head = docs[0].slice(0, docs[0].indexOf('<body>') + '<body>'.length)
+  const bodies = docs.map((d) => d.slice(d.indexOf('<body>') + '<body>'.length, d.lastIndexOf('</body>')))
+  return `${head}${bodies.map((b, i) => `<div${i < bodies.length - 1 ? ' style="break-after: page"' : ''}>${b}</div>`).join('')}</body></html>`
+}
+
+/**
  * Prints `html` from a hidden frame (no pop-up to block), once its images have loaded.
  * Works with any printer, a thermal label printer, or "Save as PDF".
  */

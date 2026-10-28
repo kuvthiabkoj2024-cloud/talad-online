@@ -12,6 +12,7 @@ import { ChevronLeft, ChevronRight, ImagePlus, Info, LoaderCircle, Shuffle, Tras
 import { useId, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
+import { CommissionCard } from '@/components/commission-card'
 import { PageBody, TopBar } from '@/components/page-header'
 import { ProductOptionsEditor } from '@/components/product-options'
 import { SearchSelect } from '@/components/search-select'
@@ -625,6 +626,9 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
               </CardContent>
             )}
           </Card>
+
+          {/* Saved products only: the rate is set per product. */}
+          {product?.id && <CommissionCard productId={product.id} />}
         </form>
       </PageBody>
 

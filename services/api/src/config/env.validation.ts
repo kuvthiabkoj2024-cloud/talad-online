@@ -140,6 +140,37 @@ class EnvironmentVariables {
   /** Contact for push services, e.g. mailto:support@taladonline.la. */
   @IsString()
   VAPID_SUBJECT: string = 'mailto:support@taladonline.la';
+
+  /**
+   * Outgoing email over SMTP (e.g. Gmail with an app password: smtp.gmail.com, 465). Unset
+   * host: emails are only written to the log.
+   */
+  @IsOptional()
+  @IsString()
+  SMTP_HOST?: string;
+
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  SMTP_PORT: number = 465;
+
+  @IsOptional()
+  @IsString()
+  SMTP_USER?: string;
+
+  @IsOptional()
+  @IsString()
+  SMTP_PASS?: string;
+
+  /** Sender shown on emails, e.g. "Taladonline <no-reply@taladonline.la>"; defaults to SMTP_USER. */
+  @IsOptional()
+  @IsString()
+  SMTP_FROM?: string;
+
+  /** Where new transfer orders are emailed for checking (comma-separated for several). */
+  @IsOptional()
+  @IsString()
+  ADMIN_ORDER_EMAIL?: string;
 }
 
 export type Env = EnvironmentVariables;

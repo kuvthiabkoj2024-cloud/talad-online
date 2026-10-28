@@ -63,9 +63,15 @@ export const COUPON_RULES = {
 export const PRODUCT_SAVE_INTENTS = ['draft', 'publish'] as const;
 export type ProductSaveIntent = (typeof PRODUCT_SAVE_INTENTS)[number];
 
-/** Shop registration (§3.1, §2.3). */
-export const KYC_DOCUMENT_TYPES = ['NATIONAL_ID', 'BUSINESS_LICENSE', 'TAX_CERTIFICATE', 'OTHER'] as const;
+/**
+ * Shop registration documents (§3.1, §2.3), in the order the form shows them. `ID_SELFIE`: a
+ * clear photo of the owner holding that ID card or passport. (Older applications may still have
+ * a `TAX_CERTIFICATE`; it is no longer asked for.)
+ */
+export const KYC_DOCUMENT_TYPES = ['NATIONAL_ID', 'ID_SELFIE', 'BUSINESS_LICENSE', 'OTHER'] as const;
 export type KycDocumentType = (typeof KYC_DOCUMENT_TYPES)[number];
+/** Every application needs these. */
+export const REQUIRED_KYC_DOCUMENTS: readonly KycDocumentType[] = ['NATIONAL_ID', 'ID_SELFIE'];
 
 export const SHOP_RULES = {
   nameMin: 2,

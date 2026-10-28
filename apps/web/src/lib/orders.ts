@@ -1,5 +1,5 @@
 import type { OrderStatus, OrderTab, PaymentMethod } from "@talad/shared";
-import type { ShopTransferInfo } from "./cart";
+import type { TransferAccount } from "./cart";
 
 /** Mirrors the customer orders API (services/api orders module). */
 export interface OrderLine {
@@ -16,8 +16,12 @@ export interface OrderLine {
 export interface OrderSummary {
   number: string;
   status: OrderStatus;
-  /** Transfer slip uploaded, waiting for the shop to confirm it. */
+  /** Transfer slips sent, waiting for Taladonline's check. */
   awaitingConfirmation: boolean;
+  /** Where the transfer stands while the order waits for payment. */
+  paymentCheck: PaymentCheck;
+  /** Unpaid and not waiting for a check (slips rejected, or none sent): the customer may cancel. */
+  cancellable?: boolean;
   createdAt: string;
   total: number;
   itemCount: number;
@@ -36,6 +40,16 @@ export interface OrderList {
 }
 
 export type PaymentStatus = "PENDING" | "PAID" | "FAILED" | "REFUNDED" | "EXPIRED";
+
+/** Taladonline's check of the transfer: being checked, rejected (send new slips) or approved. */
+export type PaymentCheck = "reviewing" | "rejected" | "approved" | null;
+
+export interface PaymentSlip {
+  id: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  rejectReason: string | null;
+  createdAt: string;
+}
 
 export interface ShippingAddress {
   recipientName: string;
@@ -58,6 +72,8 @@ export interface OrderDetail extends Omit<OrderSummary, "shop"> {
   hasShippingBill?: boolean;
   /** Urgent delivery by the shop itself (its fee is `shippingFee`). */
   urgentDelivery?: boolean;
+  /** Collected at the shop: where to go. */
+  pickup?: { address: string | null; phone: string; latitude: number | null; longitude: number | null } | null;
   deliveryProvider: string | null;
   paymentDueAt: string | null;
   autoConfirmAt: string | null;
@@ -69,9 +85,19 @@ export interface OrderDetail extends Omit<OrderSummary, "shop"> {
     status: PaymentStatus;
     amount: number;
     paidAt: string | null;
-    slipUploadedAt: string | null;
+    /** A paid order that was cancelled: when Taladonline sent the money back. */
+    refundedAt: string | null;
   } | null;
-  transfer: ShopTransferInfo | null;
+  /** Taladonline's account to transfer to (while the order waits for payment). */
+  transfer: TransferAccount | null;
+  /** One transfer pays the whole checkout (all its shops). */
+  orderTotal: number;
+  /** Slips sent for the checkout, newest first. */
+  slips: PaymentSlip[];
+  /** Loyalty points for confirming receipt (none if it completes on its own). */
+  pointsOnReceive: number;
+  /** Points spent on this order (their value is in `discountTotal`). */
+  pointsUsed: number;
   note: string | null;
   history: { status: OrderStatus; note: string | null; at: string }[];
 }
@@ -97,4 +123,15 @@ export function formatDate(iso: string, locale: keyof typeof DATE_LOCALES, withT
     year: "numeric",
     ...(withTime && { hour: "2-digit", minute: "2-digit" }),
   }).format(new Date(iso));
+}
+
+/** Mirrors `PointsView` (GET /me/points). */
+export interface PointsView {
+  balance: number;
+  pointValue: number;
+  worth: number;
+  earnPer: number;
+  expiryDays: number | null;
+  items: { id: string; type: "EARN" | "REDEEM" | "EXPIRE" | "ADJUST"; points: number; note: string | null; orderNumber: string | null; expiresAt: string | null; createdAt: string }[];
+  nextCursor: string | null;
 }

@@ -1,11 +1,23 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { MAX_CART_QUANTITY } from '@talad/shared';
+import { commissionOf, MAX_CART_QUANTITY, type Commission } from '@talad/shared';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { MediaService } from '../media/media.service.js';
 import { flashPrice, FlashSalePricingService, type FlashDiscount } from '../promotions/flash-sale-pricing.service.js';
 
 const MAX_LINES = 100;
+
+type CommissionColumns = { commissionRate: Prisma.Decimal | null; commissionFixed: Prisma.Decimal | null };
+
+/** The first level (most specific first) that sets a commission (§2.3). */
+export function resolveCommission(levels: CommissionColumns[]): Commission | null {
+  // Product → its category → the parent category → the shop.
+  for (const l of levels) {
+    const c = commissionOf(l.commissionRate?.toNumber(), l.commissionFixed?.toNumber());
+    if (c) return c;
+  }
+  return null;
+}
 
 const lineInclude = {
   product: {
@@ -19,7 +31,9 @@ const lineInclude = {
       stock: true,
       status: true,
       images: { orderBy: { sortOrder: 'asc' }, take: 1, select: { key: true } },
-      category: { select: { commissionRate: true } },
+      commissionRate: true,
+      commissionFixed: true,
+      category: { select: { commissionRate: true, commissionFixed: true, parent: { select: { commissionRate: true, commissionFixed: true } } } },
       shop: {
         select: {
           id: true,
@@ -28,6 +42,7 @@ const lineInclude = {
           status: true,
           ownerId: true,
           commissionRate: true,
+          commissionFixed: true,
           paymentWindowHrs: true,
         },
       },
@@ -61,7 +76,8 @@ export interface CartLine {
   lineTotal: number;
   shop: { id: string; slug: string; name: string };
   /** Checkout-only details, not sent to clients. */
-  internal: { commissionRate: number | null; paymentWindowHrs: number };
+  /** `commission`: the product's own (approved), else its category's, else the shop's; null = platform default. */
+  internal: { commission: Commission | null; paymentWindowHrs: number };
 }
 
 export interface CartShopGroup {
@@ -234,7 +250,7 @@ export class CartService {
       lineTotal: unitPrice * r.quantity,
       shop: { id: product.shop.id, slug: product.shop.slug, name: product.shop.name },
       internal: {
-        commissionRate: (product.shop.commissionRate ?? product.category.commissionRate)?.toNumber() ?? null,
+        commission: resolveCommission([product, product.category, ...(product.category.parent ? [product.category.parent] : []), product.shop]),
         paymentWindowHrs: product.shop.paymentWindowHrs,
       },
     };

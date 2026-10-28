@@ -37,6 +37,9 @@ enum ShopStatus {
 enum KycDocumentType {
   BUSINESS_LICENSE
   NATIONAL_ID
+  /// The owner holding their ID card or passport (required with NATIONAL_ID).
+  ID_SELFIE
+  /// No longer asked for; older uploads were moved to OTHER.
   TAX_CERTIFICATE
   OTHER
 }
@@ -74,6 +77,13 @@ enum PaymentStatus {
   FAILED
   REFUNDED
   EXPIRED
+}
+
+/// Taladonline's check of a customer's transfer slip.
+enum SlipStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum DiscountType {
@@ -220,8 +230,9 @@ model Shop {
   longitude            Decimal?   @db.Decimal(9, 6)
   businessHours        Json?
   socialLinks          Json?
-  /// Overrides the platform default when set (§2.3).
+  /// Overrides the platform default when set (§2.3): a percent, or a fixed kip amount per unit sold.
   commissionRate       Decimal?   @db.Decimal(5, 2)
+  commissionFixed      Decimal?   @db.Decimal(14, 2)
   /// Order deadline policy (§3.6), in hours.
   paymentWindowHrs     Int        @default(24)
   autoConfirmHrs       Int        @default(168)
@@ -237,6 +248,8 @@ model Shop {
   codTermsAcceptedAt   DateTime?
   /// The shop's own urgent delivery: { enabled, eta, zones: [{ province, districts[], fee }] } (@talad/shared UrgentDelivery).
   urgentDelivery       Json?
+  /// Customers may choose to collect their order at the shop (at `address`), free of delivery.
+  pickupEnabled        Boolean    @default(false)
   ratingAvg            Decimal    @default(0) @db.Decimal(3, 2)
   ratingCount          Int        @default(0)
   /// Customers following the shop (denormalized from ShopFollow).
@@ -245,21 +258,22 @@ model Shop {
   createdAt            DateTime   @default(now())
   updatedAt            DateTime   @updatedAt
 
-  owner         Customer?          @relation("ShopOwner", fields: [ownerId], references: [id], onDelete: Restrict)
-  kycDocuments  ShopKycDocument[]
-  followers     ShopFollow[]
-  products      Product[]
-  orders        ShopOrder[]
-  coupons       Coupon[]
-  flashSales    FlashSale[]
-  payouts       Payout[]
-  customerNotes ShopCustomerNote[]
+  owner              Customer?           @relation("ShopOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  kycDocuments       ShopKycDocument[]
+  followers          ShopFollow[]
+  products           Product[]
+  orders             ShopOrder[]
+  coupons            Coupon[]
+  flashSales         FlashSale[]
+  payouts            Payout[]
+  customerNotes      ShopCustomerNote[]
   /// Private conversations with customers (Seller Center → Messages).
-  conversations ShopConversation[]
-  pushSubscriptions PushSubscription[]
+  conversations      ShopConversation[]
+  pushSubscriptions  PushSubscription[]
   /// Questions and answers the shop's chat bot replies with (Seller Center → Chat Bot).
-  faqs          ShopFaq[]
-  chatOrders    ChatOrder[]
+  faqs               ShopFaq[]
+  chatOrders         ChatOrder[]
+  commissionRequests CommissionRequest[]
 }
 
 model ShopKycDocument {
@@ -301,6 +315,8 @@ model Payout {
   status           PayoutStatus @default(SCHEDULED)
   paidAt           DateTime?
   reference        String?
+  /// Photo of Taladonline's transfer slip (private storage key), shown to admins and the shop.
+  slipKey          String?
   createdAt        DateTime     @default(now())
 
   shop   Shop        @relation(fields: [shopId], references: [id])
@@ -340,6 +356,9 @@ model Customer {
   wishlist          WishlistItem[]
   /// Shops this customer follows.
   follows           ShopFollow[]
+  /// Other customers this one follows (for their feed videos), and who follows this one.
+  following         CustomerFollow[]      @relation("CustomerFollowing")
+  followers         CustomerFollow[]      @relation("CustomerFollowers")
   /// Videos the customer posted to the feed, and the posts they liked.
   feedPosts         FeedPost[]
   feedPostLikes     FeedPostLike[]
@@ -398,18 +417,20 @@ model CustomerBankAccount {
 // ─── Catalog (§2.5, §2.6, §3.3) ─────────────────────────────────────────────
 
 model Category {
-  id             String   @id @default(uuid(7))
-  parentId       String?
-  slug           String   @unique
+  id              String   @id @default(uuid(7))
+  parentId        String?
+  slug            String   @unique
   /// Localized names: { "lo": "...", "en": "..." }
-  name           Json
-  iconUrl        String?
-  imageUrl       String?
-  sortOrder      Int      @default(0)
-  isActive       Boolean  @default(true)
-  commissionRate Decimal? @db.Decimal(5, 2)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  name            Json
+  iconUrl         String?
+  imageUrl        String?
+  sortOrder       Int      @default(0)
+  isActive        Boolean  @default(true)
+  /// For products in this category; wins over the shop's own (§2.3). Percent, or kip per unit.
+  commissionRate  Decimal? @db.Decimal(5, 2)
+  commissionFixed Decimal? @db.Decimal(14, 2)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
   children Category[] @relation("CategoryTree")
@@ -458,19 +479,24 @@ model Product {
   ratingAvg         Decimal       @default(0) @db.Decimal(3, 2)
   ratingCount       Int           @default(0)
   publishedAt       DateTime?
+  /// The product's own commission, set when an admin approves the shop's request; wins over
+  /// its category and shop. Percent, or kip per unit.
+  commissionRate    Decimal?      @db.Decimal(5, 2)
+  commissionFixed   Decimal?      @db.Decimal(14, 2)
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
-  shop          Shop             @relation(fields: [shopId], references: [id])
-  category      Category         @relation(fields: [categoryId], references: [id])
-  unit          Unit             @relation(fields: [unitId], references: [id])
-  images        ProductImage[]
-  variants      ProductVariant[]
-  cartItems     CartItem[]
-  orderItems    OrderItem[]
-  wishlistBy    WishlistItem[]
-  flashSales    FlashSaleItem[]
-  videoComments VideoComment[]
+  shop               Shop                @relation(fields: [shopId], references: [id])
+  category           Category            @relation(fields: [categoryId], references: [id])
+  unit               Unit                @relation(fields: [unitId], references: [id])
+  images             ProductImage[]
+  variants           ProductVariant[]
+  cartItems          CartItem[]
+  orderItems         OrderItem[]
+  wishlistBy         WishlistItem[]
+  flashSales         FlashSaleItem[]
+  videoComments      VideoComment[]
+  commissionRequests CommissionRequest[]
 
   @@unique([shopId, sku])
   @@unique([shopId, slug])
@@ -545,11 +571,32 @@ model Order {
   note            String?
   createdAt       DateTime @default(now())
 
-  customer   Customer    @relation(fields: [customerId], references: [id])
+  customer   Customer      @relation(fields: [customerId], references: [id])
   shopOrders ShopOrder[]
   payments   Payment[]
+  slips      PaymentSlip[]
 
   @@index([customerId, createdAt])
+}
+
+/// A transfer slip for a whole order (all its shops), paid into Taladonline's account. An admin
+/// approves (the shops then get the order, paid) or rejects (the customer sends new ones).
+model PaymentSlip {
+  id           String     @id @default(uuid(7))
+  orderId      String
+  /// Private storage key (customer payments folder).
+  key          String
+  status       SlipStatus @default(PENDING)
+  /// Why it was rejected, shown to the customer.
+  rejectReason String?
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime   @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, status])
+  @@index([status, createdAt])
 }
 
 model ShopOrder {
@@ -560,8 +607,11 @@ model ShopOrder {
   status             OrderStatus @default(PENDING)
   subtotal           Decimal     @db.Decimal(14, 2)
   discountTotal      Decimal     @default(0) @db.Decimal(14, 2)
-  /// The part of `discountTotal` Taladonline funds (platform coupons): paid back to the shop with its payout.
+  /// The part of `discountTotal` Taladonline funds (platform coupons, loyalty points): paid back to the shop.
   platformDiscount   Decimal     @default(0) @db.Decimal(14, 2)
+  /// Loyalty points the customer spent on this shop order (their value is in `platformDiscount`).
+  /// Returned to the customer, and set back to 0, if the order is cancelled.
+  pointsRedeemed     Int         @default(0)
   shippingFee        Decimal     @default(0) @db.Decimal(14, 2)
   commissionAmount   Decimal     @default(0) @db.Decimal(14, 2)
   total              Decimal     @db.Decimal(14, 2)
@@ -570,7 +620,9 @@ model ShopOrder {
   /// Photo of the courier's bill the shop uploads when shipping (private storage key).
   shippingBillKey    String?
   /// Delivered by the shop itself as urgent delivery (its fee is `shippingFee`).
-  urgentDelivery     Boolean   @default(false)
+  urgentDelivery     Boolean     @default(false)
+  /// The customer collects it at the shop: no courier, no bill.
+  pickup             Boolean     @default(false)
   /// Deadline logic (§3.6): buyers may extend each deadline a limited number of times.
   paymentDueAt       DateTime?
   autoConfirmAt      DateTime?
@@ -610,6 +662,8 @@ model OrderItem {
   lineTotal        Decimal  @db.Decimal(14, 2)
   /// This item's own rate (shop override, else its category, else the platform default) and fee.
   commissionRate   Decimal? @db.Decimal(5, 2)
+  /// Set instead of the rate when the item paid a fixed amount per unit.
+  commissionFixed  Decimal? @db.Decimal(14, 2)
   commissionAmount Decimal? @db.Decimal(14, 2)
 
   shopOrder ShopOrder       @relation(fields: [shopOrderId], references: [id], onDelete: Cascade)
@@ -647,9 +701,12 @@ model Payment {
   providerRef    String?
   payload        Json?
   paidAt         DateTime?
-  /// Transfer slip uploaded by the customer (private storage key), awaiting the shop's check.
+  /// Older orders: the transfer slip checked by the shop (new orders use PaymentSlip).
   slipKey        String?
   slipUploadedAt DateTime?
+  /// A paid order that was cancelled is refunded by Taladonline; when and how (bank reference).
+  refundedAt     DateTime?
+  refundRef      String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -821,20 +878,22 @@ model Review {
 
 /// A customer's own video in the feed (no product): a moment, an unboxing, a review.
 model FeedPost {
-  id         String   @id @default(uuid(7))
-  customerId String
+  id           String   @id @default(uuid(7))
+  customerId   String
   /// Public storage key (c-<customerId>/videos/).
-  videoKey   String
-  caption    String   @default("")
+  videoKey     String
+  caption      String   @default("")
   /// Hidden by Taladonline (moderation); the author still sees it.
-  isHidden   Boolean  @default(false)
-  viewCount  Int      @default(0)
-  shareCount Int      @default(0)
-  likeCount  Int      @default(0)
-  createdAt  DateTime @default(now())
+  isHidden     Boolean  @default(false)
+  viewCount    Int      @default(0)
+  shareCount   Int      @default(0)
+  likeCount    Int      @default(0)
+  commentCount Int      @default(0)
+  createdAt    DateTime @default(now())
 
   customer Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
   likes    FeedPostLike[]
+  comments VideoComment[]
 
   @@index([createdAt])
   @@index([customerId, createdAt])
@@ -852,6 +911,19 @@ model FeedPostLike {
 }
 
 /// A customer following a shop: their updates and products can be favoured in feeds later.
+/// A customer following another customer (their profile and feed videos).
+model CustomerFollow {
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower  Customer @relation("CustomerFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  following Customer @relation("CustomerFollowers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followingId])
+  @@index([followingId, createdAt])
+}
+
 model ShopFollow {
   customerId String
   shopId     String
@@ -876,9 +948,11 @@ model WishlistItem {
 }
 
 /// Comment on a product's feed video. Replies are one level deep: `parentId` always points at a top-level comment.
+/// A comment on a feed video: a shop's product video (`productId`) or a customer's post (`postId`).
 model VideoComment {
   id         String    @id @default(uuid(7))
-  productId  String
+  productId  String?
+  postId     String?
   customerId String
   parentId   String?
   body       String
@@ -889,12 +963,14 @@ model VideoComment {
   /// Soft delete keeps reply threads intact; the body is hidden.
   deletedAt  DateTime?
 
-  product  Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product  Product?       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  post     FeedPost?      @relation(fields: [postId], references: [id], onDelete: Cascade)
   customer Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
   parent   VideoComment?  @relation("VideoCommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
   replies  VideoComment[] @relation("VideoCommentReplies")
 
   @@index([productId, parentId, createdAt])
+  @@index([postId, parentId, createdAt])
   @@index([parentId, createdAt])
 }
 
@@ -1087,4 +1163,40 @@ model ChatOrder {
 
   @@index([customerId, status])
   @@index([shopId, status])
+}
+
+// ─── Commission requests (§2.3) ─────────────────────────────────────────────
+
+enum CommissionType {
+  PERCENT
+  FIXED
+}
+
+enum CommissionRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+/// A shop asks for its own commission on one product; approved, it becomes the product's rate.
+model CommissionRequest {
+  id           String                  @id @default(uuid(7))
+  productId    String
+  shopId       String
+  type         CommissionType
+  /// Percent, or kip per unit.
+  value        Decimal                 @db.Decimal(14, 2)
+  reason       String?
+  status       CommissionRequestStatus @default(PENDING)
+  reviewNote   String?
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime                @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  shop    Shop    @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([productId, createdAt])
 }

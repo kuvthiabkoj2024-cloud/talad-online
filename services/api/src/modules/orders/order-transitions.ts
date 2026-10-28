@@ -42,6 +42,11 @@ export async function postSystemMessage(tx: Prisma.TransactionClient, shopId: st
   await tx.shopMessage.create({ data: { conversationId: conv.id, sender: 'SYSTEM', text, createdAt: now } });
 }
 
+/** Cash on delivery counts as paid once the order completes (the customer got it). */
+export async function markCodPaid(tx: Prisma.TransactionClient, shopOrderId: string): Promise<void> {
+  await tx.payment.updateMany({ where: { shopOrderId, method: 'COD', status: 'PENDING' }, data: { status: 'PAID', paidAt: new Date() } });
+}
+
 /** Completed orders count towards each product's "sold" figure. */
 export async function addSold(tx: Prisma.TransactionClient, shopOrderId: string): Promise<void> {
   const items = await tx.orderItem.groupBy({ by: ['productId'], where: { shopOrderId }, _sum: { quantity: true } });
@@ -70,13 +75,42 @@ export async function moveOrder(
   return true;
 }
 
-/** Loyalty points for a completed order (§2.4): 1 point per `earnPer` kip, expiring after `expiryDays`. */
+/** `Setting.points`: kip per point earned, kip one point is worth when spent, days until it expires. */
+export type PointRules = { earnPer?: number; redeemValue?: number; expiryDays?: number };
+export const pointRules = async (db: Pick<Prisma.TransactionClient, 'setting'>): Promise<PointRules> =>
+  ((await db.setting.findUnique({ where: { key: 'points' } }))?.value ?? {}) as PointRules;
+
+/**
+ * A cancelled order gives back the points spent on it (once: the shop order's count goes to 0).
+ * Their value stays in `platformDiscount`; a cancelled order is never paid out.
+ */
+export async function returnPoints(tx: Prisma.TransactionClient, shopOrderId: string): Promise<number> {
+  const so = await tx.shopOrder.findUnique({ where: { id: shopOrderId }, select: { pointsRedeemed: true, order: { select: { id: true, customerId: true } } } });
+  if (!so || so.pointsRedeemed <= 0) return 0;
+  const { count } = await tx.shopOrder.updateMany({ where: { id: shopOrderId, pointsRedeemed: so.pointsRedeemed }, data: { pointsRedeemed: 0 } });
+  if (!count) return 0;
+  await tx.pointTransaction.create({
+    data: { customerId: so.order.customerId, type: 'ADJUST', points: so.pointsRedeemed, orderId: so.order.id, note: 'Points returned (order cancelled)' },
+  });
+  await tx.customer.update({ where: { id: so.order.customerId }, data: { pointsBalance: { increment: so.pointsRedeemed } } });
+  return so.pointsRedeemed;
+}
+
+/** Points an order of `total` kip earns: 1 per `earnPer` kip (0 when earning is off). */
+export async function pointsFor(db: Pick<Prisma.TransactionClient, 'setting'>, total: number): Promise<number> {
+  const { earnPer } = await pointRules(db);
+  return earnPer && earnPer > 0 ? Math.floor(total / earnPer) : 0;
+}
+
+/**
+ * Loyalty points (§2.4): 1 point per `earnPer` kip, expiring after `expiryDays`. Only when the
+ * customer confirms they received the order — one that completes on its own earns nothing.
+ */
 export async function awardPoints(tx: Prisma.TransactionClient, shopOrderId: string): Promise<number> {
-  const [order, setting] = await Promise.all([
+  const [order, rules] = await Promise.all([
     tx.shopOrder.findUnique({ where: { id: shopOrderId }, select: { total: true, order: { select: { id: true, customerId: true } } } }),
-    tx.setting.findUnique({ where: { key: 'points' } }),
+    pointRules(tx),
   ]);
-  const rules = (setting?.value ?? {}) as { earnPer?: number; expiryDays?: number };
   if (!order || !rules.earnPer || rules.earnPer <= 0) return 0;
   const points = Math.floor(order.total.toNumber() / rules.earnPer);
   if (points <= 0) return 0;

@@ -4,8 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@talad/ui/components/c
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@talad/ui/components/table'
 import { cn } from '@talad/ui/lib/utils'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { ImageOff, ReceiptText, ScanSearch, TriangleAlert } from 'lucide-react'
+import { Banknote, HandCoins, ImageOff, Landmark, ReceiptText, ScanSearch, TriangleAlert } from 'lucide-react'
 import { Link, useParams } from 'react-router'
+import { can, useAuth } from '@/auth/context'
 import { OrderStatusBadge } from '@/components/badges'
 import { FilterTabs, Pager, SearchBox } from '@/components/list-controls'
 import { PageBody, PageIntro, TopBar } from '@/components/page-header'
@@ -16,21 +17,33 @@ import { api } from '@/lib/api'
 import { fill, formatDate, formatMoney, formatNumber } from '@/lib/format'
 import { openPrivateFile } from '@/lib/private-file'
 import type { OrderDetail, OrderList } from '@/lib/types'
+import { PaymentCheckPanel } from '@/pages/payments'
 
 const TABS = Object.keys(SHOP_ORDER_TABS) as ShopOrderTab[]
+const METHODS = ['transfer', 'cod'] as const
+type Method = (typeof METHODS)[number]
 
-/** Every order on the platform, read-only (support). `?status=<tab>&q=` */
+/**
+ * Every order on the platform, in two tabs: transfers (checked by Taladonline before the shop
+ * gets them — "Check payment" opens the slips to approve) and cash on delivery.
+ * `?method=cod&status=<tab>&q=`
+ */
 export function OrdersPage() {
   const { t, locale } = useI18n()
+  const { admin } = useAuth()
   const { params, set, page } = useUrlParams()
-  const tab = isShopOrderTab(params.get('status')) ? (params.get('status') as ShopOrderTab) : 'all'
+  const method: Method = params.get('method') === 'cod' ? 'cod' : 'transfer'
+  // Cash on delivery never waits for a payment check.
+  const tabs = method === 'cod' ? TABS.filter((k) => k !== 'to-pay') : TABS
+  const tab = isShopOrderTab(params.get('status')) && tabs.includes(params.get('status') as ShopOrderTab) ? (params.get('status') as ShopOrderTab) : 'all'
   const q = params.get('q') ?? ''
   const [search, setSearch] = useSearchParamInput(q, set)
-  const query = new URLSearchParams({ page: String(page) })
+  const query = new URLSearchParams({ page: String(page), method })
   if (tab !== 'all') query.set('status', tab)
   if (q) query.set('q', q)
+  const checks = can(admin, 'payments')
   const list = useQuery({
-    queryKey: ['admin', 'orders', { tab, q, page }],
+    queryKey: ['admin', 'orders', { method, tab, q, page }],
     queryFn: () => api<OrderList>(`/admin/orders?${query}`),
     placeholderData: keepPreviousData,
   })
@@ -40,9 +53,35 @@ export function OrdersPage() {
       <TopBar title={t.orders.title} />
       <PageBody>
         <PageIntro title={t.orders.title} description={t.orders.description} />
+        <div role="tablist" className="grid grid-cols-2 gap-1 self-start rounded-xl bg-muted p-1 sm:w-80">
+          {METHODS.map((m) => {
+            const Icon = m === 'cod' ? HandCoins : Landmark
+            return (
+              <button
+                key={m}
+                type="button"
+                role="tab"
+                aria-selected={method === m}
+                onClick={() => set({ method: m === 'transfer' ? undefined : m, status: undefined, page: undefined })}
+                className={cn(
+                  'flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+                  method === m ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <Icon className="size-4" />
+                {t.orders.methodTabs[m]}
+                {!!list.data?.open?.[m] && (
+                  <span className="min-w-5 rounded-full bg-red-500 px-1.5 text-center text-[11px] font-bold leading-5 text-white tabular-nums">
+                    {list.data.open[m] > 99 ? '99+' : list.data.open[m]}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <FilterTabs
-            tabs={(['all', ...TABS] as const).map((k) => ({ key: k, label: t.orders.tabs[k], count: list.data?.counts[k] }))}
+            tabs={(['all', ...tabs] as const).map((k) => ({ key: k, label: t.orders.tabs[k], count: list.data?.counts[k] }))}
             active={tab}
             onSelect={(k) => set({ status: k === 'all' ? undefined : k, page: undefined })}
           />
@@ -77,7 +116,11 @@ export function OrdersPage() {
                           {o.number}
                         </Link>
                       </TableCell>
-                      <TableCell>{o.customer.name}</TableCell>
+                      <TableCell>
+                        <Link to={`/customers/${o.customer.id}`} className="hover:underline">
+                          {o.customer.name}
+                        </Link>
+                      </TableCell>
                       <TableCell>
                         <Link to={`/shops/${o.shop.id}`} className="hover:underline">
                           {o.shop.name}
@@ -87,9 +130,19 @@ export function OrdersPage() {
                       <TableCell className="tabular-nums">{formatMoney(o.total, locale)}</TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(o.createdAt, locale, true)}</TableCell>
                       <TableCell className="pr-4">
-                        <span className="flex items-center gap-1">
+                        <span className="flex items-center gap-2">
                           <OrderStatusBadge status={o.status} />
-                          {o.awaitingConfirmation && <ScanSearch className="size-4 text-amber-600" aria-label={t.orders.viewSlip} />}
+                          {o.status === 'PENDING' && !o.awaitingConfirmation && o.payment?.method !== 'COD' && (
+                            <span className="text-xs text-muted-foreground">{o.paymentCheck === 'rejected' ? t.orders.waitingSlips : t.orders.noSlips}</span>
+                          )}
+                          {o.awaitingConfirmation && checks && (
+                            <Button asChild size="sm" variant="outline" className="h-7 border-amber-300 text-amber-800 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-200 dark:hover:bg-amber-950">
+                              <Link to={`/orders/${o.number}`}>
+                                <ScanSearch />
+                                {t.orders.checkPayment}
+                              </Link>
+                            </Button>
+                          )}
                         </span>
                       </TableCell>
                     </TableRow>
@@ -108,6 +161,7 @@ export function OrdersPage() {
 export function OrderDetailPage() {
   const { number = '' } = useParams()
   const { t, locale } = useI18n()
+  const { admin } = useAuth()
   const order = useQuery({ queryKey: ['admin', 'orders', number], queryFn: () => api<OrderDetail>(`/admin/orders/${encodeURIComponent(number)}`) })
 
   if (order.isPending || order.isError) {
@@ -136,6 +190,10 @@ export function OrderDetailPage() {
         </div>
         {o.cancelReason && o.status === 'CANCELLED' && <Note>{fill(t.orders.cancelReason, { reason: o.cancelReason })}</Note>}
         {o.dispute && <Note danger>{fill(t.orders.disputeOpen, { reason: o.dispute.reason })}</Note>}
+        {/* A transfer waiting for Taladonline: check the slips and approve right here. */}
+        {o.status === 'PENDING' && o.payment && o.payment.method !== 'COD' && can(admin, 'payments') && (
+          <PaymentCheckPanel number={o.orderNumber} title={t.orders.paymentCheck} hint={t.orders.paymentCheckHint} />
+        )}
 
         <div className="grid gap-5 lg:grid-cols-[1fr_20rem]">
           <div className="flex min-w-0 flex-col gap-5">
@@ -203,6 +261,12 @@ export function OrderDetailPage() {
               </CardHeader>
               <CardContent className="flex flex-col gap-1.5 text-sm">
                 {o.payment && <Row label={t.orders.methods[o.payment.method]} value={t.orders.paymentStatus[o.payment.status]} />}
+                {o.payment && (
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    {o.payment.method === 'COD' ? <Banknote className="size-3.5" /> : <Landmark className="size-3.5" />}
+                    {t.orders.methodTabs[o.payment.method === 'COD' ? 'cod' : 'transfer']}
+                  </span>
+                )}
                 {o.payment?.hasSlip && (
                   <Button variant="outline" size="sm" className="mt-1 self-start" onClick={() => void openPrivateFile(`/admin/orders/${encodeURIComponent(o.number)}/slip`)}>
                     <ScanSearch />

@@ -1,5 +1,6 @@
 import {
   BotMessageSquare,
+  HandCoins,
   House,
   Megaphone,
   MessagesSquare,
@@ -38,6 +39,7 @@ export const NAV_GROUPS: { label: NavKey; items: NavItem[] }[] = [
     label: 'groupSales',
     items: [
       { to: '/orders', label: 'orders', icon: ReceiptText },
+      { to: '/cod', label: 'cod', icon: HandCoins },
       { to: '/messages', label: 'messages', icon: MessagesSquare },
       { to: '/coupons', label: 'coupons', icon: TicketPercent },
       { to: '/marketing', label: 'marketing', icon: Megaphone },

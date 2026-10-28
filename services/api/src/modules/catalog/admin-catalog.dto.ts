@@ -1,5 +1,6 @@
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, IsUUID, Length, Matches, Max, MaxLength, Min, ValidateIf, ValidateNested } from 'class-validator';
+import { CommissionDto } from './commission/commission.dto.js';
+import { IsBoolean, IsInt, IsOptional, IsString, IsUUID, Length, Matches, Max, MaxLength, Min, ValidateIf, ValidateNested } from 'class-validator';
 
 /** `{ lo, en }` display names; Lao is required (the default storefront language). */
 export class LocalizedNameDto {
@@ -49,13 +50,12 @@ export class AdminCategoryDto {
   @IsBoolean()
   isActive: boolean;
 
-  /** Overrides the platform default for products in this category. */
+  /** For products in this category (wins over the shop's own); null = none. */
   @IsOptional()
   @ValidateIf((_, v) => v !== null)
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  @Max(50)
-  commissionRate?: number | null;
+  @ValidateNested()
+  @Type(() => CommissionDto)
+  commission?: CommissionDto | null;
 }
 
 export class AdminUnitDto {

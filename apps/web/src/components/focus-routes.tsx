@@ -4,11 +4,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 
 /**
- * Pages where the customer is finishing a task, reading notifications, chatting or watching
- * the feed, so the header drops its search box and the footer is hidden. Paths are matched
+ * Pages where the customer is finishing a task, reading notifications, chatting, watching
+ * the feed or posting a video, so the header drops its search box and the footer is hidden. Paths are matched
  * after the locale (/lo/cart → /cart).
  */
-const FOCUS_ROUTES = [/^\/cart\/?$/, /^\/account\/orders\/?$/, /^\/notifications\/?$/, /^\/feed\/?$/, /^\/chat\/?$/, /^\/messages(\/.*)?$/];
+const FOCUS_ROUTES = [/^\/cart\/?$/, /^\/account\/orders\/?$/, /^\/notifications\/?$/, /^\/feed(\/new)?\/?$/, /^\/chat\/?$/, /^\/messages(\/.*)?$/];
 
 export function useFocusRoute(): boolean {
   const path = usePathname().replace(/^\/[^/]+/, "");
@@ -20,8 +20,11 @@ export function HideOnFocusRoutes({ children }: { children: React.ReactNode }) {
   return useFocusRoute() ? null : children;
 }
 
-/** Full-screen pages on phones (own header with a back button, no site header or tab bar). */
-export const FULL_SCREEN_ON_PHONES = [/^\/chat\/?$/, /^\/messages\/(?!new\b)[^/]+\/?$/];
+/**
+ * Full-screen pages on phones: no site header (chats have their own with a back button and no
+ * tab bar; the video feed and video profiles use the whole screen above the tab bar).
+ */
+export const FULL_SCREEN_ON_PHONES = [/^\/chat\/?$/, /^\/messages\/(?!new\b)[^/]+\/?$/, /^\/feed\/?$/, /^\/u\/[^/]+\/?$/];
 
 /** The site header: hidden on phones for full-screen pages (still shown from `md` up). */
 export function HideHeaderOnPhones({ children }: { children: React.ReactNode }) {
@@ -30,8 +33,11 @@ export function HideHeaderOnPhones({ children }: { children: React.ReactNode }) 
   return FULL_SCREEN_ON_PHONES.some((route) => route.test(path)) ? <div className="max-md:hidden md:contents">{children}</div> : children;
 }
 
-/** Pages that keep the full header (search, scan icon) but drop the footer: photo search results. */
-const FOOTERLESS_ROUTES = [/^\/scan\/?$/];
+/**
+ * Pages that keep the full header (search, scan icon) but drop the footer: photo search results
+ * and customers' video profiles.
+ */
+const FOOTERLESS_ROUTES = [/^\/scan\/?$/, /^\/u\/[^/]+\/?$/];
 
 /** The site footer: hidden on focus routes and footerless pages. */
 export function HideFooterOnRoutes({ children }: { children: React.ReactNode }) {

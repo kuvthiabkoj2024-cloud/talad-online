@@ -1,5 +1,5 @@
 import type { CheckoutPaymentMethod } from "@talad/shared";
-import type { DeliveryOption, ShopTransferInfo } from "./cart";
+import type { DeliveryOption, TransferAccount } from "./cart";
 import type { AddressItem } from "./profile";
 
 /** Buy by chat: what both sides see on an order card in a chat (mirrors the API). */
@@ -48,7 +48,7 @@ export interface ChatOrderView {
   delivery: { options: DeliveryOption[]; selectedId: string | null };
   paymentMethods: CheckoutPaymentMethod[];
   paymentMethod: CheckoutPaymentMethod | null;
-  transfer: ShopTransferInfo | null;
+  transfer: TransferAccount | null;
   slipAttached: boolean;
   coupon: { code: string; shopId: string | null; discount: number } | null;
   couponRemoved: boolean;

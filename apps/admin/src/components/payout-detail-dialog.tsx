@@ -11,6 +11,7 @@ import { ErrorState, LoadingState } from '@/components/states'
 import { useI18n } from '@/i18n/context'
 import { api, getToken } from '@/lib/api'
 import { fill, formatDate, formatMoney, formatNumber } from '@/lib/format'
+import { usePrivateImage } from '@/lib/private-file'
 import { PAYOUT_NEXT, type PayoutAction } from '@/lib/payouts'
 import type { PayoutDetail } from '@/lib/types'
 
@@ -97,6 +98,8 @@ export function PayoutDetailDialog({
               </div>
             </div>
 
+            {p.hasSlip && <PayoutSlip id={p.id} />}
+
             <div className="flex min-w-0 flex-col gap-2">
               <p className="text-sm font-semibold">{t.payouts.includedOrders}</p>
               <div className="max-h-72 overflow-auto rounded-xl border">
@@ -172,6 +175,34 @@ function CopyRow({ label, value, display, mono }: { label: string; value: string
         {copied ? <Check /> : <Copy />}
         {copied ? t.payouts.copied : t.payouts.copy}
       </Button>
+    </div>
+  )
+}
+
+/** Taladonline's transfer slip; tap to see it full size. */
+function PayoutSlip({ id }: { id: string }) {
+  const { t } = useI18n()
+  const slip = usePrivateImage(`/admin/payouts/${id}/slip`)
+  const [zoom, setZoom] = useState(false)
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-sm font-semibold">{t.payouts.slip}</p>
+      {slip.data ? (
+        <button type="button" onClick={() => setZoom(true)} className="self-start overflow-hidden rounded-xl border bg-muted/40 p-1">
+          <img src={slip.data} alt={t.payouts.slip} className="max-h-48 rounded-lg object-contain" />
+        </button>
+      ) : (
+        <LoaderCircle className="size-5 animate-spin text-muted-foreground" />
+      )}
+      <Dialog open={zoom} onOpenChange={setZoom}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t.payouts.slip}</DialogTitle>
+            <DialogDescription className="sr-only">{t.payouts.slip}</DialogDescription>
+          </DialogHeader>
+          {slip.data && <img src={slip.data} alt={t.payouts.slip} className="max-h-[75svh] w-full rounded-lg object-contain" />}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

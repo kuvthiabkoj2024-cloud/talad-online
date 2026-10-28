@@ -17,7 +17,8 @@ export const ORDER_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   PENDING: ['CONFIRMED', 'SHIPPED', 'CANCELLED'],
   CONFIRMED: ['PACKED', 'SHIPPED', 'CANCELLED'],
   PACKED: ['SHIPPED', 'CANCELLED'],
-  SHIPPED: ['DELIVERED'],
+  // The customer confirms receipt (or it completes on its own) straight from "sent".
+  SHIPPED: ['DELIVERED', 'COMPLETED'],
   DELIVERED: ['COMPLETED', 'RETURN_REQUESTED'],
   COMPLETED: [],
   CANCELLED: [],
@@ -60,9 +61,19 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
  */
 export const CHECKOUT_PAYMENT_METHODS = ['BANK_TRANSFER', 'COD'] as const satisfies readonly PaymentMethod[];
 
-/** Methods where the customer uploads a transfer slip for the shop to verify. */
+/** Methods where the customer uploads transfer slips for Taladonline to check. */
 export const SLIP_PAYMENT_METHODS: readonly PaymentMethod[] = ['BANK_TRANSFER', 'BCEL_ONE', 'LAPNET', 'U_MONEY'];
 export type CheckoutPaymentMethod = (typeof CHECKOUT_PAYMENT_METHODS)[number];
+
+/**
+ * Transfer payments go to Taladonline's account; an admin checks the slips before the shop
+ * sees the order. A customer sends at most this many slips at a time (one transfer can be
+ * split over several).
+ */
+export const MAX_PAYMENT_SLIPS = 3;
+
+/** A sent order completes on its own this many days after shipping, unless the customer confirms it sooner. */
+export const AUTO_COMPLETE_DAYS = 7;
 
 /** Most units of one line a customer can put in the cart. */
 export const MAX_CART_QUANTITY = 99;
@@ -86,18 +97,17 @@ export function isShopOrderTab(value: unknown): value is ShopOrderTab {
  * What a shop can do to an order, from which statuses, and where it leads. `null` keeps
  * the status (rejecting a return escalates it to Taladonline instead).
  *
- * A new order has two ways forward: `ship` (pack it and upload the courier's bill, in one
- * step; for a transfer it also accepts the slip) or `out-of-stock` (cancels it, sets the
- * stock to 0 and tells both sides in their chat). `confirm` and `pack` remain for older clients.
+ * Shops only get orders that are paid (a transfer Taladonline checked) or cash on delivery,
+ * as CONFIRMED. From there: `ship` (pack it and upload the courier's bill, in one step; the
+ * customer then confirms receipt or it completes after AUTO_COMPLETE_DAYS) or `out-of-stock`
+ * (cancels it, sets the stock to 0, tells both sides in their chat; Taladonline refunds a
+ * paid transfer). `pack` remains for older clients.
  */
 export const SHOP_ORDER_ACTIONS = {
-  confirm: { from: ['PENDING'], to: 'CONFIRMED' },
-  'reject-payment': { from: ['PENDING'], to: 'CANCELLED' },
   pack: { from: ['CONFIRMED'], to: 'PACKED' },
-  ship: { from: ['PENDING', 'CONFIRMED', 'PACKED'], to: 'SHIPPED' },
-  'out-of-stock': { from: ['PENDING', 'CONFIRMED', 'PACKED'], to: 'CANCELLED' },
-  deliver: { from: ['SHIPPED'], to: 'DELIVERED' },
-  cancel: { from: ['PENDING', 'CONFIRMED', 'PACKED'], to: 'CANCELLED' },
+  ship: { from: ['CONFIRMED', 'PACKED'], to: 'SHIPPED' },
+  'out-of-stock': { from: ['CONFIRMED', 'PACKED'], to: 'CANCELLED' },
+  cancel: { from: ['CONFIRMED', 'PACKED'], to: 'CANCELLED' },
   'approve-return': { from: ['RETURN_REQUESTED'], to: 'CANCELLED' },
   'reject-return': { from: ['RETURN_REQUESTED'], to: null },
 } as const satisfies Record<string, { from: readonly OrderStatus[]; to: OrderStatus | null }>;

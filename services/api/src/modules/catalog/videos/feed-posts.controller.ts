@@ -9,6 +9,8 @@ import type { Customer } from '../../../generated/prisma/client.js';
 import { CurrentCustomer, CustomerAuthGuard } from '../../auth/customer-auth.guard.js';
 import { tempFileStorage } from '../../media/temp-file-storage.js';
 import { FeedPostsService } from './feed-posts.service.js';
+import { VideoEngagementService } from './video-engagement.service.js';
+import { AddCommentDto, CommentPageQuery } from './videos.controller.js';
 
 const id = new ParseUUIDPipe({ version: '7' });
 
@@ -31,11 +33,24 @@ class LikeStatusQuery {
 @ApiTags('catalog')
 @Controller('feed-posts/:id')
 export class FeedPostsController {
-  constructor(private readonly posts: FeedPostsService) {}
+  constructor(
+    private readonly posts: FeedPostsService,
+    private readonly videos: VideoEngagementService,
+  ) {}
 
   @Get()
   one(@Param('id', id) postId: string) {
     return this.posts.one(postId);
+  }
+
+  @Get('comments')
+  comments(@Param('id', id) postId: string, @Query() q: CommentPageQuery) {
+    return this.videos.comments({ postId }, q.cursor, q.limit);
+  }
+
+  @Get('comments/:commentId/replies')
+  replies(@Param('id', id) postId: string, @Param('commentId', id) commentId: string, @Query() q: CommentPageQuery) {
+    return this.videos.replies({ postId }, commentId, q.cursor, q.limit);
   }
 
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
@@ -59,7 +74,17 @@ export class FeedPostsController {
 @UseGuards(CustomerAuthGuard)
 @Controller('me/feed-posts')
 export class MyFeedPostsController {
-  constructor(private readonly posts: FeedPostsService) {}
+  constructor(
+    private readonly posts: FeedPostsService,
+    private readonly videos: VideoEngagementService,
+  ) {}
+
+  /** A comment or reply on a post (deleting one: `DELETE /me/videos/comments/:id`). */
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post(':id/comments')
+  comment(@CurrentCustomer() c: Customer, @Param('id', id) postId: string, @Body() dto: AddCommentDto) {
+    return this.videos.addComment(c.id, { postId }, dto.body, dto.parentId);
+  }
 
   /** A video (MP4/MOV/WebM, ≤ MEDIA_LIMITS.maxVideoBytes) and an optional caption. */
   @Throttle({ default: { limit: 5, ttl: 60_000 } })

@@ -170,7 +170,8 @@ export class ChatOrdersService {
       delivery: quote.delivery,
       paymentMethods,
       paymentMethod,
-      transfer: quote.shops[0]?.transfer ?? null,
+      // Taladonline's account (an admin checks the slip before the shop gets the order).
+      transfer: quote.transfer,
       slipAttached: !!order.slipKey,
       coupon: quote.coupon,
       couponRemoved: order.couponCode === '',
@@ -224,7 +225,7 @@ export class ChatOrdersService {
       couponCode: card.coupon?.code,
       paymentMethod: card.paymentMethod!,
       expectedTotal,
-      slips: card.paymentMethod === 'BANK_TRANSFER' && order.slipKey ? { [order.shopId]: order.slipKey } : undefined,
+      slipKeys: card.paymentMethod === 'BANK_TRANSFER' && order.slipKey ? [order.slipKey] : undefined,
     });
     const now = new Date();
     await this.prisma.chatOrder.update({ where: { id }, data: { status: 'PLACED', orderNumber: result.shopOrders[0], placedAt: now } });

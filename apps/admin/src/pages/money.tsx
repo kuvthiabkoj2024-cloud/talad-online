@@ -10,13 +10,14 @@ import { ALERTS_KEY } from '@/nav'
 import { DisputeStatusBadge, OrderStatusBadge, PayoutStatusBadge } from '@/components/badges'
 import { ConfirmDialog, type ConfirmOptions } from '@/components/confirm-dialog'
 import { PayoutDetailDialog } from '@/components/payout-detail-dialog'
+import { PayoutPaidDialog } from '@/components/payout-paid-dialog'
 import { PAYOUT_NEXT, type PayoutAction } from '@/lib/payouts'
-import { FilterTabs, Pager } from '@/components/list-controls'
+import { FilterTabs, Pager, SearchBox } from '@/components/list-controls'
 import { PageBody, PageIntro, TopBar } from '@/components/page-header'
 import { EmptyState, ErrorState, LoadingState } from '@/components/states'
-import { useUrlParams } from '@/hooks/use-url-params'
+import { useSearchParamInput, useUrlParams } from '@/hooks/use-url-params'
 import { useI18n } from '@/i18n/context'
-import { ApiError, api, send } from '@/lib/api'
+import { api, send } from '@/lib/api'
 import { fill, formatDate, formatMoney, formatNumber } from '@/lib/format'
 import type { DisputeRow, DisputeStatus, Paged, PayoutList, PayoutStatus } from '@/lib/types'
 
@@ -132,6 +133,8 @@ export function DisputesPage() {
 }
 
 const PAYOUT_STATUSES: PayoutStatus[] = ['SCHEDULED', 'PROCESSING', 'PAID', 'FAILED']
+/** PROCESSING is no longer set; its tab only shows while older payouts are still in it. */
+const LEGACY_STATUS: PayoutStatus = 'PROCESSING'
 const NEXT = PAYOUT_NEXT
 
 /** Settle completed orders with shops (§2.3). */
@@ -141,10 +144,13 @@ export function PayoutsPage() {
   const queryClient = useQueryClient()
   const { params, set, page } = useUrlParams()
   const status = PAYOUT_STATUSES.includes(params.get('status') as PayoutStatus) ? (params.get('status') as PayoutStatus) : undefined
+  const q = params.get('q') ?? ''
+  const [search, setSearch] = useSearchParamInput(q, set)
   const query = new URLSearchParams({ page: String(page) })
   if (status) query.set('status', status)
+  if (q) query.set('q', q)
   const list = useQuery({
-    queryKey: ['admin', 'payouts', { status, page }],
+    queryKey: ['admin', 'payouts', { status, q, page }],
     queryFn: () => api<PayoutList>(`/admin/payouts?${query}`),
     placeholderData: keepPreviousData,
   })
@@ -154,27 +160,29 @@ export function PayoutsPage() {
     void queryClient.invalidateQueries({ queryKey: ALERTS_KEY })
   }
   const generate = useMutation({
-    mutationFn: () => send<{ created: number }>('POST', '/admin/payouts/generate'),
+    mutationFn: () => send<{ created: number; updated: number }>('POST', '/admin/payouts/generate'),
     onSuccess: (r) => {
-      toast.success(r.created ? fill(t.payouts.generated, { n: r.created }) : t.payouts.nothingToGenerate)
+      toast.success(r.created || r.updated ? fill(t.payouts.generated, { n: r.created, added: r.updated }) : t.payouts.nothingToGenerate)
       refresh()
     },
     onError: () => toast.error(t.common.saveError),
   })
+  const [paying, setPaying] = useState<{ id: string; shop: string } | null>(null)
   const act = (id: string, shop: string, action: PayoutAction) =>
-    setConfirm({
-      title: `${t.payouts.actions[action]} · ${shop}`,
-      description: t.payouts.confirm[action],
-      confirmLabel: t.payouts.actions[action],
-      destructive: action === 'failed',
-      field: action === 'paid' ? { label: t.payouts.reference, required: true } : action === 'failed' ? { label: t.common.reason } : undefined,
-      errorText: (e) => (e instanceof ApiError && e.code === 'REFERENCE_REQUIRED' ? t.payouts.referenceRequired : t.common.saveError),
-      onConfirm: async ({ field }) => {
-        await send('POST', `/admin/payouts/${id}/${action}`, { reference: field })
-        refresh()
-        toast.success(t.payouts.done)
-      },
-    })
+    action === 'paid'
+      ? setPaying({ id, shop })
+      : setConfirm({
+          title: `${t.payouts.actions[action]} · ${shop}`,
+          description: t.payouts.confirm[action],
+          confirmLabel: t.payouts.actions[action],
+          destructive: true,
+          field: { label: t.common.reason },
+          onConfirm: async ({ field }) => {
+            await send('POST', `/admin/payouts/${id}/${action}`, { reference: field })
+            refresh()
+            toast.success(t.payouts.done)
+          },
+        })
   const u = list.data?.unsettled
 
   return (
@@ -201,11 +209,21 @@ export function PayoutsPage() {
             </CardContent>
           </Card>
         )}
-        <FilterTabs
-          tabs={[{ key: 'all', label: t.common.all }, ...PAYOUT_STATUSES.map((s) => ({ key: s, label: t.payoutStatus[s], count: list.data?.totals[s]?.count }))]}
-          active={status ?? 'all'}
-          onSelect={(k) => set({ status: k === 'all' ? undefined : k, page: undefined })}
-        />
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <FilterTabs
+            tabs={[
+              { key: 'all', label: t.common.all },
+              ...PAYOUT_STATUSES.filter((s) => s !== LEGACY_STATUS || status === s || (list.data?.totals[s]?.count ?? 0) > 0).map((s) => ({
+                key: s,
+                label: t.payoutStatus[s],
+                count: list.data?.totals[s]?.count,
+              })),
+            ]}
+            active={status ?? 'all'}
+            onSelect={(k) => set({ status: k === 'all' ? undefined : k, page: undefined })}
+          />
+          <SearchBox value={search} onChange={setSearch} placeholder={t.payouts.searchPlaceholder} />
+        </div>
         {list.isPending ? (
           <LoadingState />
         ) : list.isError ? (
@@ -272,6 +290,15 @@ export function PayoutsPage() {
         )}
       </PageBody>
       <PayoutDetailDialog id={viewing} onClose={() => setViewing(null)} onAct={act} />
+      <PayoutPaidDialog
+        target={paying}
+        onClose={() => setPaying(null)}
+        onDone={() => {
+          refresh()
+          void queryClient.invalidateQueries({ queryKey: ['admin', 'payouts', 'detail'] })
+          toast.success(t.payouts.done)
+        }}
+      />
       <ConfirmDialog options={confirm} onClose={() => setConfirm(null)} />
     </>
   )

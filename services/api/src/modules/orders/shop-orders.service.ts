@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import {
+  AUTO_COMPLETE_DAYS,
   SHOP_ORDER_ACTIONS,
   SHOP_ORDER_TABS,
   SHOP_PROFILE_RULES,
@@ -16,15 +17,17 @@ import { MediaService } from '../media/media.service.js';
 import { filePrefix, storageFolder } from '../media/storage-keys.js';
 import { StorageService } from '../media/storage.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
-import { clearStock, moveOrder, postSystemMessage, restoreStock } from './order-transitions.js';
-import { paymentOf } from './payment-slips.service.js';
+import { clearStock, moveOrder, postSystemMessage, restoreStock, returnPoints } from './order-transitions.js';
+import { paymentCheck, paymentOf, type PaymentCheck } from './payment-slips.service.js';
 import type { ListShopOrdersQuery, ShopOrderActionDto } from './shop-orders.dto.js';
 
-const HOUR = 3_600_000;
+const DAY = 86_400_000;
 /** Where a shop's courier bills are kept; a bill key sent back must start with this. */
 const billPrefix = (shopId: string) => filePrefix(storageFolder.shopOrders(shopId), 'bill');
 /** Actions that need the seller to say why (shown to the customer). */
-const NEEDS_REASON: ShopOrderAction[] = ['cancel', 'reject-payment', 'reject-return'];
+const NEEDS_REASON: ShopOrderAction[] = ['cancel', 'reject-return'];
+/** Shops never see a transfer that Taladonline hasn't approved yet (it stays PENDING until then). */
+const SHOP_VISIBLE: Prisma.ShopOrderWhereInput = { status: { not: 'PENDING' } };
 
 const lineSelect = {
   name: true,
@@ -49,6 +52,7 @@ const orderInclude = {
       customer: { select: { id: true, name: true, phone: true } },
       shopOrders: { select: { id: true } },
       payments: { where: { shopOrderId: null }, orderBy: { createdAt: 'desc' }, take: 1 },
+      slips: { orderBy: { createdAt: 'desc' }, select: { status: true } },
     },
   },
 } satisfies Prisma.ShopOrderInclude;
@@ -73,17 +77,23 @@ export interface ShopOrderSummary {
   total: number;
   itemCount: number;
   items: ShopOrderLine[];
-  customer: { name: string };
+  customer: { id: string; name: string };
   shop: { id: string; name: string; slug: string };
   payment: { method: PaymentMethod; status: PaymentStatus; hasSlip: boolean } | null;
-  /** Transfer slip uploaded; the shop should check it and confirm. */
+  /** A transfer whose slips wait for Taladonline's check (admin console only; shops never see these). */
   awaitingConfirmation: boolean;
+  /** While unpaid: slips being checked, rejected (waiting for new ones), or none sent yet. */
+  paymentCheck: PaymentCheck;
   paymentDueAt: Date | null;
   /** Urgent delivery by the shop itself: handle these first. */
   urgent: boolean;
+  /** The customer collects it at the shop. */
+  pickup: boolean;
 }
 
 export interface ShopOrderDetail extends ShopOrderSummary {
+  /** The whole checkout (all its shops); a transfer is checked per checkout. */
+  orderNumber: string;
   subtotal: number;
   discountTotal: number;
   /** Part of the discount Taladonline funds (platform coupon), paid back to the shop. */
@@ -115,7 +125,12 @@ export interface ShopOrderList {
   total: number;
   totalPages: number;
   counts: Record<ShopOrderTab | 'all', number>;
+  /** Admin console: open orders (not completed, cancelled or in a return) per payment method. */
+  open?: { transfer: number; cod: number };
 }
+
+/** Statuses an order is still being worked on in (the tab badges count these). */
+const OPEN_STATUSES: OrderStatus[] = ['PENDING', 'CONFIRMED', 'PACKED', 'SHIPPED', 'DELIVERED'];
 
 /** Seller Center order queue and fulfilment (§3.6). */
 @Injectable()
@@ -127,11 +142,21 @@ export class ShopOrdersService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  /** `shopId` null = every shop (admin console); `customerId` narrows to one buyer. */
-  async list(shopId: string | null, query: ListShopOrdersQuery, customerId?: string): Promise<ShopOrderList> {
+  /**
+   * `shopId` null = every shop (admin console); `customerId` narrows to one buyer; `method`
+   * splits transfers (checked by Taladonline) from cash on delivery.
+   */
+  async list(shopId: string | null, query: ListShopOrdersQuery, customerId?: string, method?: 'transfer' | 'cod'): Promise<ShopOrderList> {
     const term = query.q?.trim();
+    // Older single-shop checkouts keep their payment on the whole order, not the shop order.
+    const cod: Prisma.ShopOrderWhereInput = {
+      OR: [{ payments: { some: { method: 'COD' } } }, { payments: { none: {} }, order: { payments: { some: { method: 'COD', shopOrderId: null } } } }],
+    };
+    const byMethod: Prisma.ShopOrderWhereInput = method === 'cod' ? cod : method === 'transfer' ? { NOT: cod } : {};
+    // Visibility and payment method go in AND so they never clash with the search's OR.
     const where: Prisma.ShopOrderWhereInput = {
       ...(shopId && { shopId }),
+      AND: [...(shopId ? [SHOP_VISIBLE] : []), byMethod],
       ...(customerId && { order: { customerId } }),
       ...(query.tab && { status: { in: [...SHOP_ORDER_TABS[query.tab]] } }),
       ...(term && {
@@ -142,7 +167,9 @@ export class ShopOrdersService {
         ],
       }),
     };
-    const [rows, total, byStatus] = await Promise.all([
+    const openOf = (m: Prisma.ShopOrderWhereInput) =>
+      this.prisma.shopOrder.count({ where: { status: { in: OPEN_STATUSES }, AND: [m], ...(customerId && { order: { customerId } }) } });
+    const [rows, total, byStatus, open] = await Promise.all([
       this.prisma.shopOrder.findMany({
         where,
         include: orderInclude,
@@ -153,9 +180,11 @@ export class ShopOrdersService {
       this.prisma.shopOrder.count({ where }),
       this.prisma.shopOrder.groupBy({
         by: ['status'],
-        where: { ...(shopId && { shopId }), ...(customerId && { order: { customerId } }) },
+        where: { ...(shopId && { shopId, ...SHOP_VISIBLE }), AND: [byMethod], ...(customerId && { order: { customerId } }) },
         _count: { _all: true },
       }),
+      // Only the admin console splits orders by payment method.
+      shopId ? null : Promise.all([openOf({ NOT: cod }), openOf(cod)]),
     ]);
 
     const counts = { all: 0 } as ShopOrderList['counts'];
@@ -174,6 +203,7 @@ export class ShopOrdersService {
       total,
       totalPages: Math.max(1, Math.ceil(total / query.pageSize)),
       counts,
+      ...(open && { open: { transfer: open[0], cod: open[1] } }),
     };
   }
 
@@ -190,6 +220,7 @@ export class ShopOrdersService {
     const base = this.summary(row);
     return {
       ...base,
+      orderNumber: row.order.number,
       subtotal: row.subtotal.toNumber(),
       discountTotal: row.discountTotal.toNumber(),
       platformDiscount: row.platformDiscount.toNumber(),
@@ -217,7 +248,6 @@ export class ShopOrdersService {
     };
   }
 
-  /** The customer's transfer slip, for the shop to check against its bank. */
   /** Stores the courier bill photo for `ship`; returns its key. */
   async uploadBill(shop: Shop, number: string, file: Express.Multer.File | undefined): Promise<{ billKey: string }> {
     await this.find(shop.id, number);
@@ -266,11 +296,12 @@ export class ShopOrdersService {
       throw new BadRequestException({ code: 'REASON_REQUIRED', message: 'Tell the customer why' });
     }
     // Packing and shipping are one step: the bill photo proves the parcel went out. Urgent
-    // delivery is the shop's own (no courier bill), so a photo is optional there.
+    // delivery is the shop's own and pickup has no parcel (no courier bill), so a photo is
+    // optional there; for pickup, "ship" means it is ready to collect.
     if (dto.action === 'ship' && dto.billKey && !dto.billKey.startsWith(billPrefix(shop.id))) {
       throw new BadRequestException({ code: 'BILL_REQUIRED', message: "Upload a photo of the courier's bill" });
     }
-    if (dto.action === 'ship' && !dto.billKey && !row.urgentDelivery) {
+    if (dto.action === 'ship' && !dto.billKey && !row.urgentDelivery && !row.pickup) {
       throw new BadRequestException({ code: 'BILL_REQUIRED', message: "Upload a photo of the courier's bill" });
     }
     if (dto.action === 'ship' && dto.deliveryProviderId) {
@@ -287,13 +318,25 @@ export class ShopOrdersService {
         payment ? tx.payment.update({ where: { id: payment.id }, data: { status, ...extra } }) : null;
       let moved = true;
 
+      // A paid transfer that won't be delivered is refunded by Taladonline (Admin → Refunds).
+      const paidTransfer = payment !== null && payment.method !== 'COD' && payment.status === 'PAID';
+      const refundDue = async (why: string) => {
+        if (!paidTransfer) {
+          if (payment && payment.status === 'PENDING') await setPayment('FAILED');
+          return;
+        }
+        await this.notifications.toAdmins(
+          tx,
+          'REFUND',
+          {
+            lo: { title: `ຕ້ອງຄືນເງິນ ${row.number}`, body: `${formatMoney(row.total.toNumber(), 'lo')} ໃຫ້ ${row.order.customer.name} · ${why}` },
+            en: { title: `Refund due ${row.number}`, body: `${formatMoney(row.total.toNumber(), 'en')} to ${row.order.customer.name} · ${why}` },
+          },
+          { link: '/refunds' },
+        );
+      };
+
       switch (dto.action) {
-        case 'confirm':
-          moved = await moveOrder(tx, row.id, row.status, 'CONFIRMED', {}, { ...actor, note: reason });
-          if (moved && payment && payment.method !== 'COD' && payment.status !== 'PAID') {
-            await setPayment('PAID', { paidAt: now });
-          }
-          break;
         case 'pack':
           moved = await moveOrder(tx, row.id, row.status, 'PACKED', {}, actor);
           break;
@@ -307,20 +350,18 @@ export class ShopOrdersService {
               trackingNumber: dto.trackingNumber?.trim() || null,
               shippingBillKey: dto.billKey ?? null,
               ...(dto.deliveryProviderId && { deliveryProviderId: dto.deliveryProviderId }),
+              // The customer confirms receipt, or it completes on its own after this.
+              autoConfirmAt: new Date(now.getTime() + AUTO_COMPLETE_DAYS * DAY),
             },
             { ...actor, note: dto.trackingNumber?.trim() || null },
           );
-          // Shipping a transfer that was still "to pay" accepts its slip.
-          if (moved && payment && payment.method !== 'COD' && payment.status !== 'PAID') {
-            await setPayment('PAID', { paidAt: now });
-          }
           break;
         case 'out-of-stock': {
-          const paidByTransfer = payment !== null && payment.method !== 'COD' && (payment.status === 'PAID' || payment.slipKey !== null);
           moved = await moveOrder(tx, row.id, row.status, 'CANCELLED', { cancelReason: OUT_OF_STOCK_REASON }, { ...actor, note: OUT_OF_STOCK_REASON });
           if (!moved) break;
           await clearStock(tx, row.id);
-          if (payment) await setPayment(paidByTransfer ? 'REFUNDED' : 'FAILED');
+          await returnPoints(tx, row.id);
+          await refundDue(OUT_OF_STOCK_REASON);
           // Taladonline tells both sides in their chat what happened and what comes next.
           await postSystemMessage(
             tx,
@@ -329,32 +370,19 @@ export class ShopOrdersService {
             outOfStockMessage({
               number: row.number,
               items: row.items.map((i) => i.name),
-              refund: paidByTransfer ? formatMoney(row.total.toNumber(), 'lo') : null,
+              refund: paidTransfer ? formatMoney(row.total.toNumber(), 'lo') : null,
             }),
           );
           break;
         }
-        case 'deliver':
-          moved = await moveOrder(
-            tx,
-            row.id,
-            row.status,
-            'DELIVERED',
-            { autoConfirmAt: new Date(now.getTime() + shop.autoConfirmHrs * HOUR) },
-            actor,
-          );
-          // Cash on delivery is collected on handover.
-          if (moved && payment?.method === 'COD' && payment.status !== 'PAID') await setPayment('PAID', { paidAt: now });
-          break;
         case 'cancel':
-        case 'reject-payment':
         case 'approve-return': {
           const note = reason ?? (dto.action === 'approve-return' ? 'Return approved' : null);
           moved = await moveOrder(tx, row.id, row.status, 'CANCELLED', { cancelReason: note }, { ...actor, note });
           if (!moved) break;
           await restoreStock(tx, row.id);
-          // Paid orders are refunded by the shop/platform outside the app; record it.
-          if (payment) await setPayment(payment.status === 'PAID' ? 'REFUNDED' : 'FAILED');
+          await returnPoints(tx, row.id);
+          await refundDue(note ?? 'Cancelled by the shop');
           break;
         }
         case 'reject-return':
@@ -377,6 +405,7 @@ export class ShopOrdersService {
             number: row.number,
             shopName: shop.name,
             imageKey: row.items[0]?.product.images[0]?.key,
+            pickup: row.pickup,
           },
           to,
           to === 'CANCELLED' ? (dto.action === 'out-of-stock' ? OUT_OF_STOCK_REASON : reason) : null,
@@ -387,7 +416,7 @@ export class ShopOrdersService {
   }
 
   private async find(shopId: string | null, number: string): Promise<OrderRow> {
-    const row = await this.prisma.shopOrder.findFirst({ where: { number, ...(shopId && { shopId }) }, include: orderInclude });
+    const row = await this.prisma.shopOrder.findFirst({ where: { number, ...(shopId && { shopId, ...SHOP_VISIBLE }) }, include: orderInclude });
     if (!row) throw new NotFoundException('Order not found');
     return row;
   }
@@ -410,11 +439,13 @@ export class ShopOrdersService {
         imageUrl: i.product.images[0] ? this.media.publicUrl(i.product.images[0].key) : null,
         productSlug: i.product.slug,
       })),
-      customer: { name: r.order.customer.name },
+      customer: { id: r.order.customer.id, name: r.order.customer.name },
       shop: r.shop,
       payment: payment && { method: payment.method, status: payment.status, hasSlip: payment.slipKey !== null },
       urgent: r.urgentDelivery,
-      awaitingConfirmation: r.status === 'PENDING' && !!payment?.slipKey && payment.status === 'PENDING',
+      pickup: r.pickup,
+      awaitingConfirmation: r.status === 'PENDING' && paymentCheck(r.order.slips) === 'reviewing',
+      paymentCheck: r.status === 'PENDING' ? paymentCheck(r.order.slips) : null,
       paymentDueAt: r.paymentDueAt,
     };
   }
@@ -428,11 +459,11 @@ function outOfStockMessage({ number, items, refund }: { number: string; items: s
   const list = items.join(', ');
   return [
     `⚠️ ຄຳສັ່ງຊື້ ${number} ຖືກຍົກເລີກ ເພາະສິນຄ້າໝົດ: ${list}.`,
-    `• ລູກຄ້າ: ຂໍອະໄພໃນຄວາມບໍ່ສະດວກ. ${refund ? `ຮ້ານຈະຄືນເງິນ ${refund} ໃຫ້ທ່ານ.` : 'ທ່ານບໍ່ໄດ້ຖືກເກັບເງິນ.'} ທ່ານສາມາດຖາມຮ້ານເລື່ອງສິນຄ້າທົດແທນໃນແຊັດນີ້ໄດ້.`,
-    `• ຮ້ານ: ${refund ? `ກະລຸນາຄືນເງິນ ${refund} ໃຫ້ລູກຄ້າ. ` : ''}ສະຕັອກຂອງສິນຄ້ານີ້ຖືກຕັ້ງເປັນ 0 ແລ້ວ, ອັບເດດສະຕັອກເມື່ອມີເຄື່ອງ.`,
+    `• ລູກຄ້າ: ຂໍອະໄພໃນຄວາມບໍ່ສະດວກ. ${refund ? `Taladonline ຈະຄືນເງິນ ${refund} ໃຫ້ທ່ານໂດຍກົງ.` : 'ທ່ານບໍ່ໄດ້ຖືກເກັບເງິນ.'} ທ່ານສາມາດຖາມຮ້ານເລື່ອງສິນຄ້າທົດແທນໃນແຊັດນີ້ໄດ້.`,
+    `• ຮ້ານ: ສະຕັອກຂອງສິນຄ້ານີ້ຖືກຕັ້ງເປັນ 0 ແລ້ວ, ອັບເດດສະຕັອກເມື່ອມີເຄື່ອງ.`,
     '',
     `⚠️ Order ${number} was cancelled because it is out of stock: ${list}.`,
-    `• Customer: sorry for the trouble. ${refund ? `The shop will refund ${refund} to you.` : 'You were not charged.'} You can ask the shop about an alternative here.`,
-    `• Shop: ${refund ? `please refund ${refund} to the customer. ` : ''}The stock of these items is now 0; update it when they are back.`,
+    `• Customer: sorry for the trouble. ${refund ? `Taladonline will refund ${refund} to you directly.` : 'You were not charged.'} You can ask the shop about an alternative here.`,
+    `• Shop: the stock of these items is now 0; update it when they are back.`,
   ].join('\n');
 }

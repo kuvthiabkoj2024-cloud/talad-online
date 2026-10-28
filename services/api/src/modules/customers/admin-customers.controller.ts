@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, StreamableFile, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { AdminUser } from '../../generated/prisma/client.js';
 import { AdminPageQuery, ReasonDto } from '../admins/admin.dto.js';
@@ -25,6 +25,13 @@ export class AdminCustomersController {
   @Get(':id')
   detail(@Param('id', id) customerId: string) {
     return this.customers.detail(customerId);
+  }
+
+  /** QR of a refund account (for sending a refund by scanning it). */
+  @Get(':id/bank-accounts/:accountId/qr')
+  async bankAccountQr(@Param('id', id) customerId: string, @Param('accountId', id) accountId: string) {
+    const file = await this.customers.bankAccountQr(customerId, accountId);
+    return new StreamableFile(file.body, { type: file.contentType, length: file.contentLength, disposition: 'inline' });
   }
 
   @Post(':id/suspend')

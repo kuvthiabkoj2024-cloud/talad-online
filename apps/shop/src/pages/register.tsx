@@ -84,9 +84,7 @@ export function RegisterPage() {
   return (
     <div className="min-h-svh bg-muted/40">
       <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/90 px-4 backdrop-blur">
-        <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Store className="size-4.5" strokeWidth={2.25} />
-        </span>
+        <img src="/icons/logo.png" alt="" className="size-8 rounded-lg" />
         <span className="flex-1 truncate font-semibold">
           {t.app.brand} <span className="text-muted-foreground">{t.app.name}</span>
         </span>

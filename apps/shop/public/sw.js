@@ -10,12 +10,12 @@
  *
  * Bump VERSION when this file's caching rules change.
  */
-const VERSION = "v1";
+const VERSION = "v2";
 const STATIC = `seller-static-${VERSION}`;
 const RUNTIME = `seller-runtime-${VERSION}`;
 const SHELL_URL = "/index.html";
 const OFFLINE_URL = "/offline.html";
-const PRECACHE = [OFFLINE_URL, SHELL_URL, "/icons/icon-192.png", "/icons/icon.svg"];
+const PRECACHE = [OFFLINE_URL, SHELL_URL, "/icons/icon-192.png", "/icons/logo.png"];
 const FONT_HOSTS = ["fonts.googleapis.com", "fonts.gstatic.com"];
 
 self.addEventListener("install", (event) => {

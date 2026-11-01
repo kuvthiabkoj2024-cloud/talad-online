@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { FeedView } from "@/components/feed/feed-view";
-import { apiGet, feedPath, type FeedEntry, type FeedItem, type FeedPage, type FeedPostItem } from "@/lib/api";
+import { apiGet, feedPath, type FeedEntry, type FeedItem, type FeedPage, type FeedPostItem, type FeedType } from "@/lib/api";
 import { getDictionary, getLocale } from "@/app/[lang]/dictionaries";
 
 // New videos show up within a minute; later pages are always fetched live.
@@ -33,20 +33,26 @@ async function linkedVideo({ post, video }: Params): Promise<FeedEntry | null> {
   return null;
 }
 
-/** Feed: shops' product videos and customers' own videos, newest first, one per screen (§2.5). */
+/**
+ * Feed: shops' product videos or customers' own videos (`?type=customer`), newest first, one per
+ * screen (§2.5). A linked video opens the tab it belongs to.
+ */
 export default async function FeedPage({ searchParams }: PageProps<"/[lang]/feed">) {
   const locale = await getLocale();
   const { feed: dict, cartErrors } = await getDictionary();
   const params = await searchParams;
-  const [first, linked] = await Promise.all([apiGet<FeedPage>(feedPath()), linkedVideo(params)]);
+  const linked = await linkedVideo(params);
+  const type: FeedType = (linked ? linked.kind === "post" : params.type === "customer") ? "customer" : "shop";
+  const first = await apiGet<FeedPage>(feedPath(type));
   const items = first?.items ?? [];
   // `&comment=<thread>[&reply=<id>]`: open its comments on that comment.
   const openComments = linked && isId(params.comment) ? { thread: params.comment, ...(isId(params.reply) && { reply: params.reply }) } : undefined;
 
   return (
     <FeedView
-      key={`${linked?.id ?? "feed"}:${openComments?.reply ?? openComments?.thread ?? ""}`}
+      key={`${type}:${linked?.id ?? "feed"}:${openComments?.reply ?? openComments?.thread ?? ""}`}
       locale={locale}
+      type={type}
       dict={dict}
       cartErrors={cartErrors}
       initialItems={linked ? [linked, ...items.filter((i) => i.id !== linked.id)] : items}

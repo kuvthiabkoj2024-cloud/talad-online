@@ -10,6 +10,7 @@ import { CodeInput } from '@/components/code-input'
 import type { Dict } from '@/i18n/en'
 import { useI18n } from '@/i18n/context'
 import { ApiError, send } from '@/lib/api'
+import { storefrontUrl } from '@/lib/format'
 import type { Admin } from '@/lib/types'
 
 type LoginResponse = { token: string; admin: Admin } | { twoFactor: { method: 'TOTP'; challenge: string } }
@@ -136,7 +137,8 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
   const p = t.auth.panel
   return (
     <AuthLayout
-      logo={ShieldCheck}
+      logo={<img src="/logo-transparent.png" alt="" className="size-10" />}
+      homeHref={storefrontUrl.home(locale)}
       brand={t.app.brand}
       badge={t.app.name}
       headline={p.headline}

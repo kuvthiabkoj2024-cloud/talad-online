@@ -1,7 +1,8 @@
 "use client";
 
 import type { Locale } from "@talad/shared";
-import { ArrowLeft, Camera, ChevronDown, CircleAlert, MessagesSquare, Plus, SendHorizontal, SquarePen, Store, X } from "lucide-react";
+import { ArrowLeft, Camera, ChevronDown, CircleAlert, MessagesSquare, Plus, SendHorizontal, SquarePen, X } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
@@ -419,13 +420,9 @@ export function TaladChat({
   );
 }
 
-/** The Vreview logo, as in the site header (white shop on brand green). */
+/** The Vreview logo, as in the site header (full-bleed version, so the circle crops only background). */
 function AssistantAvatar() {
-  return (
-    <span aria-hidden className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
-      <Store className="size-5.5" strokeWidth={2.25} />
-    </span>
-  );
+  return <Image src="/icons/icon-maskable-512.png" alt="" width={80} height={80} className="size-10 shrink-0 rounded-full shadow-sm" />;
 }
 
 function toDataUrl(file: Blob): Promise<string> {

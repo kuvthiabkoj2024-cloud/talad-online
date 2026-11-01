@@ -26,10 +26,7 @@ export async function generateMetadata(): Promise<Metadata> {
     // Installed-app look on iOS (Android/desktop read app/manifest.ts).
     appleWebApp: { capable: true, title: "Vreview", statusBarStyle: "default" },
     icons: {
-      icon: [
-        { url: "/icons/icon.svg", type: "image/svg+xml" },
-        { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-      ],
+      icon: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
       apple: "/icons/apple-touch-icon.png",
     },
   };

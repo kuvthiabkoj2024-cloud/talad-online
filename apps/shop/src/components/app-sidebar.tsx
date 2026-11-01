@@ -11,7 +11,6 @@ import {
   SidebarRail,
   useSidebar,
 } from '@talad/ui/components/sidebar'
-import { Store } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router'
 import { useAuth } from '@/auth/context'
 import { useMyShop, useShopBadges, useUnreadMessages } from '@/hooks/queries'
@@ -40,9 +39,13 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild tooltip={shop?.name ?? t.app.name}>
               <NavLink to="/">
-                <span className="flex aspect-square size-8 items-center justify-center overflow-hidden rounded-lg bg-white text-sidebar ring-1 ring-white/30">
-                  {shop?.logoUrl ? <img src={shop.logoUrl} alt="" className="size-full object-cover" /> : <Store className="size-4" />}
-                </span>
+                {shop?.logoUrl ? (
+                  <span className="flex aspect-square size-8 items-center justify-center overflow-hidden rounded-lg bg-white text-sidebar ring-1 ring-white/30">
+                    <img src={shop.logoUrl} alt="" className="size-full object-cover" />
+                  </span>
+                ) : (
+                  <img src="/icons/logo-transparent.png" alt="" className="aspect-square size-8" />
+                )}
                 <span className="grid flex-1 text-left leading-tight">
                   <span className="truncate font-semibold">{shop?.name ?? account?.shop?.name}</span>
                   <span className="truncate text-xs text-sidebar-foreground/70">

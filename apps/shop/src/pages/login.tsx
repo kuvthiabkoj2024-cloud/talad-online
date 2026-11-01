@@ -5,14 +5,14 @@ import { Input } from '@talad/ui/components/input'
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@talad/ui/components/input-otp'
 import { Label } from '@talad/ui/components/label'
 import { Tabs, TabsList, TabsTrigger } from '@talad/ui/components/tabs'
-import { ArrowLeft, ChartNoAxesColumnIncreasing, LoaderCircle, PackagePlus, ShieldCheck, Store, Truck } from 'lucide-react'
+import { ArrowLeft, ChartNoAxesColumnIncreasing, LoaderCircle, PackagePlus, ShieldCheck, Truck } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { useAuth } from '@/auth/context'
 import { useI18n } from '@/i18n/context'
 import { ApiError, send } from '@/lib/api'
-import { fill } from '@/lib/format'
+import { fill, storefrontUrl } from '@/lib/format'
 import type { Account } from '@/lib/types'
 
 type AuthErrorKey = keyof ReturnType<typeof useI18n>['t']['auth']['errors']
@@ -387,7 +387,8 @@ export function LoginPage() {
   const p = t.auth.panel
   return (
     <AuthLayout
-      logo={Store}
+      logo={<img src="/icons/logo-transparent.png" alt="" className="size-10" />}
+      homeHref={storefrontUrl.home(locale)}
       brand={t.app.brand}
       badge={t.app.name}
       headline={p.headline}

@@ -13,11 +13,11 @@
  *
  * Bump VERSION when this file's caching rules change.
  */
-const VERSION = "v2";
+const VERSION = "v3";
 const STATIC = `talad-static-${VERSION}`;
 const IMAGES = `talad-images-${VERSION}`;
 const OFFLINE_URL = "/offline.html";
-const PRECACHE = [OFFLINE_URL, "/icons/icon-192.png", "/icons/icon.svg"];
+const PRECACHE = [OFFLINE_URL, "/icons/icon-192.png"];
 const MAX_IMAGES = 150;
 
 self.addEventListener("install", (event) => {

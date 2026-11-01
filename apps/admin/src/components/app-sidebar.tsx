@@ -13,7 +13,6 @@ import {
   useSidebar,
 } from '@talad/ui/components/sidebar'
 import { useQuery } from '@tanstack/react-query'
-import { ShieldCheck } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router'
 import { can, isSuperAdmin, useAuth } from '@/auth/context'
 import { useI18n } from '@/i18n/context'
@@ -38,9 +37,7 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild tooltip={`${t.app.brand} ${t.app.name}`}>
               <NavLink to="/">
-                <span className="flex aspect-square size-8 items-center justify-center rounded-lg bg-white text-sidebar ring-1 ring-white/30">
-                  <ShieldCheck className="size-4" />
-                </span>
+                <img src="/logo-transparent.png" alt="" className="aspect-square size-8" />
                 <span className="grid flex-1 text-left leading-tight">
                   <span className="truncate font-semibold">{t.app.brand}</span>
                   <span className="truncate text-xs text-sidebar-foreground/70">{t.app.name}</span>

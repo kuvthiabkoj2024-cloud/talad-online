@@ -1,8 +1,9 @@
 import type { Locale } from "@talad/shared";
-import { Clapperboard, MessageCircleMore, ScanLine, Search, Store } from "lucide-react";
+import { Clapperboard, MessageCircleMore, ScanLine, Search } from "lucide-react";
 import Link from "next/link";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import { AccountMenu } from "./auth/account-menu";
+import { BrandLogo } from "./brand-logo";
 import { CartButton } from "./cart/cart-button";
 import { HeaderHeightVar, HideOnFocusRoutes } from "./focus-routes";
 import { LanguageSwitcher } from "./language-switcher";
@@ -63,7 +64,7 @@ export function SiteHeader({
             href={`/${locale}`}
             className="flex shrink-0 items-center gap-1.5 text-xl font-bold tracking-tight sm:gap-2 sm:text-2xl md:text-3xl"
           >
-            <Store className="size-7 sm:size-8 md:size-9" strokeWidth={2.25} />
+            <BrandLogo className="size-8 sm:size-9 md:size-10" />
             Vreview
           </Link>
 

@@ -206,8 +206,8 @@ export class ProductsService {
   }
 
   /**
-   * The feed: shops' product videos and customers' own videos, newest first, cursor-paged
-   * for infinite scroll. The cursor is "<ms>.<id>" of the last item; a bare product id (older
+   * The feed: shops' product videos and customers' own videos (or just one of them, `type`),
+   * newest first, cursor-paged for infinite scroll. The cursor is "<ms>.<id>" of the last item; a bare product id (older
    * clients) still works.
    */
   async feed(query: FeedQuery): Promise<FeedPage> {
@@ -216,18 +216,22 @@ export class ProductsService {
     const before = (field: 'publishedAt' | 'createdAt') =>
       at ? { OR: [{ [field]: { lt: at.time } }, { [field]: at.time, id: { lt: at.id } }] } : {};
     const [rows, posts] = await Promise.all([
-      this.prisma.product.findMany({
-        where: { ...VISIBLE, videoKey: { not: null }, videoHidden: false, ...before('publishedAt') },
-        orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
-        take: query.limit + 1,
-        select: feedSelect,
-      }),
-      this.prisma.feedPost.findMany({
-        where: { isHidden: false, customer: { isActive: true }, ...before('createdAt') },
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        take: query.limit + 1,
-        include: feedPostInclude,
-      }),
+      query.type === 'customer'
+        ? []
+        : this.prisma.product.findMany({
+            where: { ...VISIBLE, videoKey: { not: null }, videoHidden: false, ...before('publishedAt') },
+            orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
+            take: query.limit + 1,
+            select: feedSelect,
+          }),
+      query.type === 'shop'
+        ? []
+        : this.prisma.feedPost.findMany({
+            where: { isHidden: false, customer: { isActive: true }, ...before('createdAt') },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            take: query.limit + 1,
+            include: feedPostInclude,
+          }),
     ]);
     const merged = [
       ...rows.map((r) => ({ time: r.publishedAt!, id: r.id, product: r, post: undefined })),

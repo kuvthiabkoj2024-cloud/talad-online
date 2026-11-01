@@ -19,7 +19,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
-import type { FeedEntry, FeedItem, FeedPostItem, PostStats, VideoStats } from "@/lib/api";
+import type { FeedEntry, FeedItem, FeedPostItem, FeedType, PostStats, VideoStats } from "@/lib/api";
 import { loadFeed } from "@/lib/feed-actions";
 import { followedProfiles, followedShops, setFollow, setProfileFollow } from "@/lib/follow-actions";
 import { formatCount, formatPriceRange, interpolate, productPath } from "@/lib/format";
@@ -60,8 +60,8 @@ const VIEWED_KEY = "talad:feed-viewed";
 const EMPTY = new Set<string>();
 
 /**
- * Full-screen vertical video feed: shops' product videos and customers' own videos, one per
- * screen, snap scrolling.
+ * Full-screen vertical video feed: shops' product videos or customers' own videos (tabs at the
+ * top), one per screen, snap scrolling.
  * The slide on screen plays with sound (muted only until the first tap where the browser
  * refuses sound before any interaction); the next page
  * loads when the viewer is two slides from the end. `openComments` (a notification's link)
@@ -69,6 +69,7 @@ const EMPTY = new Set<string>();
  */
 export function FeedView({
   locale,
+  type,
   dict,
   cartErrors,
   initialItems,
@@ -77,6 +78,7 @@ export function FeedView({
   backHref,
 }: {
   locale: Locale;
+  type: FeedType;
   dict: Dict;
   cartErrors: Dictionary["cartErrors"];
   initialItems: FeedEntry[];
@@ -353,7 +355,7 @@ export function FeedView({
   useEffect(() => {
     if (!cursor || loading || loadFailed || active < items.length - 2) return;
     startLoading(async () => {
-      const page = await loadFeed(cursor);
+      const page = await loadFeed(type, cursor);
       if (!page) {
         setLoadFailed(true);
         return;
@@ -364,16 +366,17 @@ export function FeedView({
       });
       setCursor(page.nextCursor);
     });
-  }, [active, cursor, items.length, loading, loadFailed]);
+  }, [active, cursor, items.length, loading, loadFailed, type]);
 
   if (items.length === 0) {
     return (
       <div className={`${FEED_HEIGHT} flex flex-col items-center justify-center gap-3 px-6 text-center`}>
+        <FeedTabs locale={locale} type={type} dict={dict} />
         <span className="flex size-16 items-center justify-center rounded-2xl bg-primary-soft text-primary">
           <Clapperboard className="size-8" />
         </span>
         <h1 className="text-lg font-bold">{dict.empty}</h1>
-        <p className="max-w-xs text-sm text-muted-foreground">{dict.emptyBody}</p>
+        <p className="max-w-xs text-sm text-muted-foreground">{type === "customer" ? dict.emptyBodyCustomers : dict.emptyBody}</p>
         <div className="mt-2 flex flex-wrap justify-center gap-2">
           <Link
             href={customer ? `/${locale}/feed/new` : `/${locale}/login?next=${encodeURIComponent(`/${locale}/feed/new`)}`}
@@ -456,6 +459,7 @@ export function FeedView({
         )}
       </div>
 
+      <FeedTabs locale={locale} type={type} dict={dict} />
       {/* Post your own video (no product needed). */}
       <NewPostButton locale={locale} label={dict.newPost} signedIn={!!customer} />
       {backHref && (
@@ -466,7 +470,8 @@ export function FeedView({
           className="fixed left-3 top-[max(0.75rem,env(safe-area-inset-top))] z-20 flex h-10 items-center gap-1.5 rounded-full bg-black/50 px-3.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70 md:top-[calc(var(--header-h)+0.75rem)]"
         >
           <ArrowLeft className="size-4" />
-          <span>{dict.backToProfile}</span>
+          {/* Phones: icon only, the tabs need the room. */}
+          <span className="hidden sm:inline">{dict.backToProfile}</span>
         </Link>
       )}
 
@@ -817,6 +822,36 @@ function RailAvatar({
   );
 }
 
+/** Customers | Shops at the top centre, over the video. Each tab has its own link, so back and sharing work. */
+function FeedTabs({ locale, type, dict }: { locale: Locale; type: FeedType; dict: Dict }) {
+  const tabs = [
+    { type: "customer", label: dict.tabCustomers, href: `/${locale}/feed?type=customer` },
+    { type: "shop", label: dict.tabShops, href: `/${locale}/feed` },
+  ] as const;
+  return (
+    <nav
+      aria-label={dict.tabsLabel}
+      className="fixed left-1/2 top-[max(0.75rem,env(safe-area-inset-top))] z-20 flex h-10 -translate-x-1/2 items-center rounded-full bg-black/40 px-1.5 backdrop-blur-sm md:top-[calc(var(--header-h)+0.75rem)]"
+    >
+      {tabs.map((tab) => {
+        const on = tab.type === type;
+        return (
+          <Link
+            key={tab.type}
+            href={tab.href}
+            replace
+            aria-current={on ? "page" : undefined}
+            className={`relative whitespace-nowrap px-3 py-1.5 text-sm font-semibold transition-colors ${on ? "text-white" : "text-white/70 hover:text-white"}`}
+          >
+            {tab.label}
+            {on && <span aria-hidden className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-white" />}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
 /** Floating "+" over the feed: opens the new post page (sign in first). */
 function NewPostButton({ locale, label, signedIn }: { locale: Locale; label: string; signedIn: boolean }) {
   const href = `/${locale}/feed/new`;
@@ -828,7 +863,7 @@ function NewPostButton({ locale, label, signedIn }: { locale: Locale; label: str
       className="fixed right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-20 flex h-10 items-center gap-1.5 rounded-full bg-primary px-3.5 text-sm font-semibold text-primary-foreground shadow-lg transition hover:brightness-110 md:right-[max(0.75rem,calc(50%-14rem))] md:top-[calc(var(--header-h,4rem)+0.75rem)]"
     >
       <Plus className="size-4" />
-      <span>{label}</span>
+      <span className="hidden min-[360px]:inline">{label}</span>
     </Link>
   );
 }

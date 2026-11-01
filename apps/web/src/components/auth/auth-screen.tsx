@@ -1,9 +1,10 @@
 import type { Locale } from "@talad/shared";
 import { redirect } from "next/navigation";
-import { BadgeCheck, CreditCard, ShoppingBag, Store, Truck } from "lucide-react";
+import { BadgeCheck, CreditCard, ShoppingBag, Truck } from "lucide-react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import { safeNext } from "@/lib/customer";
 import { getCurrentCustomer } from "@/lib/session";
+import { BrandLogo } from "../brand-logo";
 import type { AuthMode } from "./auth-form";
 import { AuthPageForm } from "./auth-page-form";
 
@@ -28,7 +29,7 @@ export async function AuthScreen({
     <div className="mx-auto grid max-w-5xl gap-6 px-4 py-8 sm:py-12 lg:grid-cols-[1fr_minmax(0,28rem)] lg:gap-10">
       <aside className="relative hidden overflow-hidden rounded-3xl bg-gradient-to-br from-[#43a047] via-primary to-[#1b5e20] p-10 text-primary-foreground lg:flex lg:flex-col lg:justify-between">
         <div className="flex items-center gap-2 text-2xl font-bold">
-          <Store className="size-8" strokeWidth={2.25} />
+          <BrandLogo className="size-10" />
           Vreview
         </div>
         <div className="relative z-10">

@@ -13,7 +13,8 @@ export interface AuthHighlight {
  * highlights) beside the form on wide screens, a compact branded header on phones.
  */
 function AuthLayout({
-  logo: Logo,
+  logo,
+  homeHref,
   brand,
   badge,
   headline,
@@ -23,7 +24,9 @@ function AuthLayout({
   aside,
   children,
 }: {
-  logo: LucideIcon
+  logo: React.ReactNode
+  /** Where the logo and name link to (the storefront home page). */
+  homeHref: string
   brand: string
   badge: string
   headline: string
@@ -36,13 +39,11 @@ function AuthLayout({
   children: React.ReactNode
 }) {
   const mark = (
-    <span className="flex items-center gap-2.5 text-xl font-bold">
-      <span className="flex size-10 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/25 backdrop-blur">
-        <Logo className="size-5.5" strokeWidth={2.25} />
-      </span>
+    <a href={homeHref} className="flex w-fit items-center gap-2.5 text-xl font-bold">
+      {logo}
       {brand}
       <span className="rounded-md bg-white/20 px-1.5 py-0.5 text-xs font-semibold">{badge}</span>
-    </span>
+    </a>
   )
 
   return (

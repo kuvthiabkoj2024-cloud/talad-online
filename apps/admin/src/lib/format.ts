@@ -47,6 +47,7 @@ export function toLocalInput(d: Date): string {
 const STOREFRONT = (import.meta.env.VITE_STOREFRONT_URL ?? 'http://localhost:3000').replace(/\/$/, '')
 
 export const storefrontUrl = {
+  home: (locale: Locale) => `${STOREFRONT}/${locale}`,
   shop: (locale: Locale, slug: string) => `${STOREFRONT}/${locale}/s/${slug}`,
   product: (locale: Locale, shop: string, slug: string) => `${STOREFRONT}/${locale}/p/${shop}/${slug}`,
   page: (locale: Locale, slug: string) => `${STOREFRONT}/${locale}/pages/${slug}`,

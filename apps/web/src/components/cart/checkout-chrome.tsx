@@ -1,7 +1,8 @@
 import type { Locale } from "@talad/shared";
-import { LockKeyhole, Store } from "lucide-react";
+import { LockKeyhole } from "lucide-react";
 import Link from "next/link";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
+import { BrandLogo } from "../brand-logo";
 import { LanguageSwitcher } from "../language-switcher";
 
 /** Slim checkout header: logo, "Secure checkout" badge, language. */
@@ -18,7 +19,7 @@ export function CheckoutHeader({
     <header className="bg-primary text-primary-foreground shadow-sm">
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:py-4">
         <Link href={`/${locale}`} className="flex shrink-0 items-center gap-1.5 text-xl font-bold tracking-tight sm:text-2xl">
-          <Store className="size-7" strokeWidth={2.25} />
+          <BrandLogo className="size-8" />
           Vreview
         </Link>
         <span aria-hidden className="hidden h-6 w-px bg-white/30 sm:block" />

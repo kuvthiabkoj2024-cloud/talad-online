@@ -212,6 +212,9 @@ export interface FeedPage {
   nextCursor: string | null;
 }
 
-export function feedPath(cursor?: string): string {
-  return cursor ? `/products/feed?cursor=${encodeURIComponent(cursor)}` : "/products/feed";
+/** The feed's two tabs: shops' product videos and customers' own videos. */
+export type FeedType = "shop" | "customer";
+
+export function feedPath(type: FeedType, cursor?: string): string {
+  return `/products/feed?type=${type}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
 }

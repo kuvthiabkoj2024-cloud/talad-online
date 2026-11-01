@@ -20,6 +20,8 @@ import { CheckoutService } from './checkout.service.js';
 import { CustomerOrdersController } from './customer-orders.controller.js';
 import { CustomerOrdersService } from './customer-orders.service.js';
 import { OrderDeadlinesService } from './order-deadlines.service.js';
+import { OrderDepositsService } from './order-deposits.service.js';
+import { OrderReturnsService } from './order-returns.service.js';
 import { PaymentReviewService } from './payment-review.service.js';
 import { PaymentSlipsService } from './payment-slips.service.js';
 import { PlatformAccountService } from './platform-account.service.js';
@@ -33,7 +35,7 @@ import { ShopOrdersService } from './shop-orders.service.js';
   // OrderPaymentController (me/orders/:number/…) must be registered before the
   // catch-all GET me/orders/:number of CustomerOrdersController.
   controllers: [OrderPaymentController, CustomerOrdersController, CheckoutController, ShopCodController, ShopOrdersController, ChatOrdersController, AdminOrdersController, AdminDisputesController, AdminPayoutsController, AdminPaymentsController, AdminRefundsController, AdminPaymentAccountController],
-  providers: [CustomerOrdersService, CheckoutService, PaymentSlipsService, ShopOrdersService, OrderDeadlinesService, AdminOrdersService, ChatOrdersService, PaymentReviewService, PlatformAccountService, ShopCodService],
+  providers: [CustomerOrdersService, OrderReturnsService, OrderDepositsService, CheckoutService, PaymentSlipsService, ShopOrdersService, OrderDeadlinesService, AdminOrdersService, ChatOrdersService, PaymentReviewService, PlatformAccountService, ShopCodService],
   exports: [CheckoutService, PaymentSlipsService, ChatOrdersService, PlatformAccountService],
 })
 export class OrdersModule {}

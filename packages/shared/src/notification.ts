@@ -11,9 +11,9 @@ export type ShopNotificationType = (typeof SHOP_NOTIFICATION_TYPES)[number];
 /** What an admin notification is about. */
 /**
  * `PAYMENT`: transfer slips to check; `REFUND`: a paid order was cancelled, refund the customer;
- * `COMMISSION`: a shop asks for its own commission on a product.
+ * `COMMISSION`: a shop asks for its own commission on a product; `RETURN`: a return to decide.
  */
-export const ADMIN_NOTIFICATION_TYPES = ['SHOP_APPLICATION', 'PAYMENT', 'REFUND', 'COMMISSION', 'SYSTEM'] as const;
+export const ADMIN_NOTIFICATION_TYPES = ['SHOP_APPLICATION', 'PAYMENT', 'REFUND', 'COMMISSION', 'RETURN', 'SYSTEM'] as const;
 export type AdminNotificationType = (typeof ADMIN_NOTIFICATION_TYPES)[number];
 
 /**

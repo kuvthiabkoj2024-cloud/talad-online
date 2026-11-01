@@ -1,3 +1,4 @@
+import { customerGuarantee, type DepositType, type GuaranteeUnit } from '@talad/shared';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../../generated/prisma/client.js';
 import { PrismaService } from '../../../prisma/prisma.service.js';
@@ -67,6 +68,10 @@ export interface ProductVariantOption {
 export interface ProductDetail extends Omit<ProductCard, 'imageUrl'> {
   sku: string;
   description: string | null;
+  /** What the customer gets: already double the period the shop entered. */
+  guarantee: { duration: number; unit: GuaranteeUnit; terms: string | null } | null;
+  /** Paid to the shop before ordering with cash on delivery. */
+  deposit: { type: DepositType; value: number } | null;
   stock: number;
   imageUrls: string[];
   /** The product's short video (§2.5), shown first in the gallery; null without one. */
@@ -212,7 +217,7 @@ export class ProductsService {
       at ? { OR: [{ [field]: { lt: at.time } }, { [field]: at.time, id: { lt: at.id } }] } : {};
     const [rows, posts] = await Promise.all([
       this.prisma.product.findMany({
-        where: { ...VISIBLE, videoKey: { not: null }, ...before('publishedAt') },
+        where: { ...VISIBLE, videoKey: { not: null }, videoHidden: false, ...before('publishedAt') },
         orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
         take: query.limit + 1,
         select: feedSelect,
@@ -242,7 +247,7 @@ export class ProductsService {
 
   /** One product video, for a link to it (a notification, a share): the feed opens on it. */
   async feedVideo(productId: string): Promise<FeedItem> {
-    const row = await this.prisma.product.findFirst({ where: { id: productId, ...VISIBLE, videoKey: { not: null } }, select: feedSelect });
+    const row = await this.prisma.product.findFirst({ where: { id: productId, ...VISIBLE, videoKey: { not: null }, videoHidden: false }, select: feedSelect });
     if (!row) throw new NotFoundException({ code: 'VIDEO_NOT_FOUND', message: 'Video not found' });
     return this.toFeedItem(row, (await this.flash.discounts([row.id])).get(row.id));
   }
@@ -408,6 +413,7 @@ export class ProductsService {
             id: true,
             slug: true,
             name: true,
+            codEnabled: true,
             logoUrl: true,
             verifiedAt: true,
             _count: { select: { products: { where: { status: 'PUBLISHED' } } } },
@@ -441,6 +447,12 @@ export class ProductsService {
       sku: product.sku,
       name: product.name,
       description: product.description,
+      // What the customer gets: double the period the shop entered.
+      guarantee:
+        product.guaranteeDuration && product.guaranteeUnit
+          ? { duration: customerGuarantee(product.guaranteeDuration), unit: product.guaranteeUnit, terms: product.guaranteeTerms }
+          : null,
+      deposit: shop.codEnabled && product.depositType && product.depositValue ? { type: product.depositType, value: product.depositValue.toNumber() } : null,
       options,
       ...withFlash(
         priceRange(
@@ -457,7 +469,7 @@ export class ProductsService {
       ratingAvg: product.ratingAvg.toNumber(),
       ratingCount: product.ratingCount,
       imageUrls: product.images.map((i) => this.media.publicUrl(i.key)),
-      videoUrl: product.videoKey ? this.media.publicUrl(product.videoKey) : null,
+      videoUrl: product.videoKey && !product.videoHidden ? this.media.publicUrl(product.videoKey) : null,
       variants,
       unit: product.unit,
       category: product.category,

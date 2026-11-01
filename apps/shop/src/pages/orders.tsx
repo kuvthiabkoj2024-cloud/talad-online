@@ -2,12 +2,13 @@ import { isShopOrderTab, SHOP_ORDER_TABS, type OrderStatus, type ShopOrderTab } 
 import { Button } from '@talad/ui/components/button'
 import { cn } from '@talad/ui/lib/utils'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { Check, ChevronRight, ImageOff, LoaderCircle, Printer, ReceiptText, Store, Tag, X, Zap } from 'lucide-react'
+import { Banknote, Check, ChevronRight, ImageOff, LoaderCircle, Printer, ReceiptText, Store, Tag, TriangleAlert, X, Zap } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { toast } from 'sonner'
 import { FilterTabs, Pager, SearchBox } from '@/components/list-controls'
 import { PageBody, PageIntro, TopBar } from '@/components/page-header'
+import { ReplaceBill } from '@/components/replace-bill'
 import { EmptyState, ErrorState, LoadingState } from '@/components/states'
 import { OrderStatusBadge } from '@/components/status-badge'
 import { queryKeys, useClearBadge, useMyShop, useShopProfile } from '@/hooks/queries'
@@ -18,7 +19,7 @@ import { fill, formatDate, formatMoney } from '@/lib/format'
 import { billHtml, combineHtml, printHtml, stickerHtml } from '@/lib/print-order'
 import type { ShopOrderDetail, ShopOrderList, ShopOrderSummary } from '@/lib/types'
 
-// Unpaid transfers are Taladonline's to check; shops get orders once they are paid.
+// Unpaid transfers are Vreview's to check; shops get orders once they are paid.
 const TABS = (Object.keys(SHOP_ORDER_TABS) as ShopOrderTab[]).filter((t) => t !== 'to-pay')
 const PAGE_SIZES = [10, 20, 50]
 const DEFAULT_PAGE_SIZE = 20
@@ -208,7 +209,7 @@ function OrderCard({
   const shown = o.items.slice(0, 2)
   const className = cn(
     'flex w-full min-w-0 flex-col overflow-hidden rounded-xl border bg-card text-left transition-shadow hover:shadow-md',
-    STATUS_BORDER[o.status],
+    o.billError ? 'border-red-400 dark:border-red-600' : STATUS_BORDER[o.status],
     selecting && selected && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
   )
   const body = (
@@ -230,6 +231,18 @@ function OrderCard({
           <span className="truncate text-muted-foreground">· {o.customer.name}</span>
         </span>
         <span className="flex items-center gap-2">
+          {(o.depositStatus === 'PENDING' || o.depositStatus === 'REJECTED' || o.depositStatus === 'RETURN_DUE') && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+              <Banknote className="size-3.5" />
+              {t.orders.deposit.badge[o.depositStatus]}
+            </span>
+          )}
+          {o.billError && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-950 dark:text-red-200">
+              <TriangleAlert className="size-3.5" />
+              {t.orders.replaceBill.badge}
+            </span>
+          )}
           {o.urgent && (
             <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-950 dark:text-red-200">
               <Zap className="size-3.5" />
@@ -275,6 +288,20 @@ function OrderCard({
       </div>
     </>
   )
+  // The upload button can't sit inside the card's link, so a bill error's card wraps both.
+  if (o.billError && !selecting) {
+    return (
+      <div className={className}>
+        <Link to={`/orders/${o.number}`} className="flex min-w-0 flex-1 flex-col">
+          {body}
+        </Link>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100">
+          <span>{t.orders.replaceBill.hint}</span>
+          <ReplaceBill order={o} />
+        </div>
+      </div>
+    )
+  }
   return selecting ? (
     <button type="button" role="checkbox" aria-checked={selected} onClick={onToggle} className={className}>
       {body}

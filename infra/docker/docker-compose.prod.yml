@@ -1,10 +1,10 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Taladonline production stack, for a server that also runs other apps.
+# Vreview production stack, for a server that also runs other apps.
 # Everything listens on 127.0.0.1 only; the server's own nginx (TLS) proxies the domains:
-#   api.taladonline.la                → 127.0.0.1:4000  (api)
-#   taladonline.la, www.taladonline.la → 127.0.0.1:3010  (web)
-#   shop.taladonline.la               → 127.0.0.1:8110  (shop)
-#   admin.taladonline.la              → 127.0.0.1:8120  (admin)
+#   api.vreview.app              → 127.0.0.1:4000  (api)
+#   vreview.app, www.vreview.app → 127.0.0.1:3010  (web)
+#   shop.vreview.app             → 127.0.0.1:8110  (shop)
+#   admin.vreview.app            → 127.0.0.1:8120  (admin)
 #   Postgres 127.0.0.1:5433, Redis 127.0.0.1:6380 (for backups / admin tools only)
 #
 # Needs (none committed):

@@ -16,16 +16,16 @@ export interface CodMonth {
   /** Completed COD orders this month: what customers paid the shop in cash. */
   orders: number;
   sales: number;
-  /** Taladonline's commission on them (each item at its own rate), to transfer at month end. */
+  /** Vreview's commission on them (each item at its own rate), to transfer at month end. */
   commission: number;
   /** commission ÷ sales, in percent (one decimal). */
   rate: number;
   /**
-   * Discounts Taladonline funds on these orders (customers' points, platform coupons): the shop
+   * Discounts Vreview funds on these orders (customers' points, platform coupons): the shop
    * collected less cash, so this comes off what it owes.
    */
   credit: number;
-  /** commission − credit; negative = Taladonline owes the shop that much. */
+  /** commission − credit; negative = Vreview owes the shop that much. */
   toTransfer: number;
   /** COD orders still on their way: they count in the month they complete. */
   inProgress: { orders: number; sales: number };
@@ -38,7 +38,7 @@ export interface CodMonth {
 const monthOf = (d: Date) => new Date(d.getTime() + 7 * 3_600_000).toISOString().slice(0, 7);
 
 /**
- * Cash on delivery for the shop (§6): the shop keeps the cash, so Taladonline's commission on
+ * Cash on delivery for the shop (§6): the shop keeps the cash, so Vreview's commission on
  * COD sales is not deducted from a payout — the shop transfers it at the end of each month.
  */
 @Injectable()
@@ -76,6 +76,8 @@ export class ShopCodService {
       this.account.available(),
     ]);
     const items = rows
+      // A return that was refused completes the order again: it counts in the latest month only.
+      .filter((r) => r.history[0]!.createdAt >= from && r.history[0]!.createdAt < to)
       .map((r) => ({
         number: r.number,
         completedAt: r.history[0]!.createdAt,

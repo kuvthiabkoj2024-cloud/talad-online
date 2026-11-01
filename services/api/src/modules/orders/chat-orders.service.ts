@@ -148,8 +148,8 @@ export class ChatOrdersService {
       };
     });
     const transferOk = quote.transferAvailable && quote.paymentMethods.includes('BANK_TRANSFER');
-    // COD only where the shop has turned it on.
-    const paymentMethods = quote.paymentMethods.filter((m) => (m === 'BANK_TRANSFER' ? transferOk : m === 'COD' ? quote.codAvailable : true));
+    // COD only where the shop has turned it on. An order card has no step for a deposit slip.
+    const paymentMethods = quote.paymentMethods.filter((m) => (m === 'BANK_TRANSFER' ? transferOk : m === 'COD' ? quote.codAvailable && quote.shops.every((x) => x.deposit === 0) : true));
     const paymentMethod = order.paymentMethod && paymentMethods.includes(order.paymentMethod as CheckoutPaymentMethod) ? (order.paymentMethod as CheckoutPaymentMethod) : null;
     const missing: ChatOrderMissing[] = [];
     if (view.some((i) => i.needsOption)) missing.push('OPTION');
@@ -170,7 +170,7 @@ export class ChatOrdersService {
       delivery: quote.delivery,
       paymentMethods,
       paymentMethod,
-      // Taladonline's account (an admin checks the slip before the shop gets the order).
+      // Vreview's account (an admin checks the slip before the shop gets the order).
       transfer: quote.transfer,
       slipAttached: !!order.slipKey,
       coupon: quote.coupon,

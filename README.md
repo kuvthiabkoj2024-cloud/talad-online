@@ -1,7 +1,7 @@
-# Taladonline
+# Vreview
 
 A multi-vendor marketplace for Laos: customers buy from many shops in one cart, shops run
-their business from a Seller Center, and Taladonline staff run the platform from an admin
+their business from a Seller Center, and Vreview staff run the platform from an admin
 console. Product scope lives in [`marketplace-project-scope.md`](marketplace-project-scope.md)
 (code comments cite its sections as `§x.y`).
 
@@ -9,7 +9,7 @@ console. Product scope lives in [`marketplace-project-scope.md`](marketplace-pro
 | -------------- | -------------------------------------------- | ----------------- | ---------------------------------------------- |
 | `apps/web`     | Customer storefront (Next.js, Lao / English) | Shoppers          | http://localhost:3000                          |
 | `apps/shop`    | Seller Center (React SPA)                    | Shop owners       | http://localhost:5174                          |
-| `apps/admin`   | Admin console (React SPA)                    | Taladonline staff | http://localhost:5173                          |
+| `apps/admin`   | Admin console (React SPA)                    | Vreview staff | http://localhost:5173                          |
 | `apps/mobile`  | Customer app (Expo / React Native)           | Shoppers          | Expo, http://localhost:8081 on web             |
 | `services/api` | REST API for all of the above (NestJS)       | —                 | http://localhost:4000/api/v1 · docs at `/docs` |
 
@@ -207,7 +207,7 @@ in `services/api/.env`. The rest of the app works without it.
 | Admin console | `admin@talad.local` (Super Admin)                                     | `SEED_ADMIN_PASSWORD`, default `ChangeMe123!`                       |
 | Admin console | `support@talad.local`, `finance@talad.local`                          | same                                                                |
 | Storefront    | Demo Customer, phone `020 9999 0000`                                  | SMS code: printed in the API log and shown on screen in development |
-| Seller Center | Demo Shop Owner (owns "Taladonline Demo Shop"), phone `020 8888 0000` | same                                                                |
+| Seller Center | Demo Shop Owner (owns "Vreview Demo Shop"), phone `020 8888 0000` | same                                                                |
 
 ---
 
@@ -362,8 +362,8 @@ Every app reads its own env file. The `.env.example` files list every value with
 
 | Variable                                                                                        | Notes                                                                             |
 | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `API_URL`                                                                                       | API base URL used by the Next.js server, e.g. `https://api.taladonline.la/api/v1` |
-| `NEXT_PUBLIC_SHOP_URL`                                                                          | Seller Center URL ("Sell on Taladonline" links)                                   |
+| `API_URL`                                                                                       | API base URL used by the Next.js server, e.g. `https://api.vreview.app/api/v1` |
+| `NEXT_PUBLIC_SHOP_URL`                                                                          | Seller Center URL ("Sell on Vreview" links)                                   |
 | `NEXT_PUBLIC_MEDIA_HOST`                                                                        | Bunny pull-zone hostname (no `https://`), for optimised images                    |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `NEXT_PUBLIC_APPLE_CLIENT_ID`, `NEXT_PUBLIC_APPLE_REDIRECT_URI` | Optional social sign-in                                                           |
 
@@ -426,9 +426,9 @@ app after changing them.
 ```text
                     ┌──────────────── Bunny CDN (images, videos) ────────────────┐
                     │                                                             │
- Shoppers ─► www.taladonline.la ──► Next.js storefront (node) ──┐                 │
- Sellers ──► shop.taladonline.la ─► static files (Seller Center) │                │
- Staff ────► admin.taladonline.la ► static files (admin)         ├─► api.taladonline.la ─► NestJS API (node)
+ Shoppers ─► www.vreview.app ─────► Next.js storefront (node) ──┐                 │
+ Sellers ──► shop.vreview.app ────► static files (Seller Center) │                │
+ Staff ────► admin.vreview.app ───► static files (admin)         ├─► api.vreview.app ─► NestJS API (node)
  Mobile app ─────────────────────────────────────────────────────┘                    │
                                                                           PostgreSQL · Redis · Bunny Storage
 ```
@@ -466,13 +466,13 @@ The example domains below are placeholders; use your own.
 Production settings live in a **`.env.production`** file in each app. Git ignores these files
 (`.gitignore`): copy them to the server yourself, never commit them.
 
-| File                           | Domain                                                              |
-| ------------------------------ | ------------------------------------------------------------------- |
-| `services/api/.env.production` | api.taladonline.la (read when `NODE_ENV=production`, before `.env`) |
-| `apps/web/.env.production`     | taladonline.la and www.taladonline.la                               |
-| `apps/shop/.env.production`    | shop.taladonline.la                                                 |
-| `apps/admin/.env.production`   | admin.taladonline.la                                                |
-| `apps/mobile/.env.production`  | the mobile app's API address                                        |
+| File                           | Domain                                                           |
+| ------------------------------ | ---------------------------------------------------------------- |
+| `services/api/.env.production` | api.vreview.app (read when `NODE_ENV=production`, before `.env`) |
+| `apps/web/.env.production`     | vreview.app and www.vreview.app                                  |
+| `apps/shop/.env.production`    | shop.vreview.app                                                 |
+| `apps/admin/.env.production`   | admin.vreview.app                                                |
+| `apps/mobile/.env.production`  | the mobile app's API address                                     |
 
 Fill in every `CHANGE_ME` value: database, Redis, and Bunny. The JWT secrets and the first
 admin password are already generated. Then, on the server or in CI, with Node 24 and pnpm 12:
@@ -506,8 +506,8 @@ NODE_ENV=production pnpm db:seed     # FIRST DEPLOY ONLY: roles, the first Super
 The seed also adds a demo shop and products. On a real launch, remove or hide them afterwards:
 in the admin console, suspend the demo shop.
 
-`CORS_ORIGINS` already lists taladonline.la, www.taladonline.la, shop.taladonline.la and
-admin.taladonline.la, and `ADMIN_APP_URL` points at the admin console.
+`CORS_ORIGINS` already lists vreview.app, www.vreview.app, shop.vreview.app and
+admin.vreview.app, and `ADMIN_APP_URL` points at the admin console.
 
 ### 4. Run the API and storefront
 
@@ -544,13 +544,13 @@ Never use `pnpm dev` on a server: it starts development servers on fixed ports (
 Every container listens on **127.0.0.1 only**, on ports chosen to avoid other apps. The
 server's own nginx handles TLS and sends each domain to its port:
 
-| Domain                             | Container           | Local port                     |
-| ---------------------------------- | ------------------- | ------------------------------ |
-| api.taladonline.la                 | `api`               | 127.0.0.1:4000                 |
-| taladonline.la, www.taladonline.la | `web`               | 127.0.0.1:3010                 |
-| shop.taladonline.la                | `shop`              | 127.0.0.1:8110                 |
-| admin.taladonline.la               | `admin`             | 127.0.0.1:8120                 |
-| (backups, admin tools)             | `postgres`, `redis` | 127.0.0.1:5433, 127.0.0.1:6380 |
+| Domain                       | Container           | Local port                     |
+| ---------------------------- | ------------------- | ------------------------------ |
+| api.vreview.app              | `api`               | 127.0.0.1:4000                 |
+| vreview.app, www.vreview.app | `web`               | 127.0.0.1:3010                 |
+| shop.vreview.app             | `shop`              | 127.0.0.1:8110                 |
+| admin.vreview.app            | `admin`             | 127.0.0.1:8120                 |
+| (backups, admin tools)       | `postgres`, `redis` | 127.0.0.1:5433, 127.0.0.1:6380 |
 
 Change a port in `docker-compose.prod.yml` (and in nginx) if it's taken; `ss -tlnp` lists what's
 in use. Inside the stack the API reaches Postgres and Redis by service name. Compose sets
@@ -618,7 +618,7 @@ buffer the event streams. An nginx example:
 ```nginx
 # API
 server {
-  server_name api.taladonline.la;
+  server_name api.vreview.app;
   client_max_body_size 250m;            # product videos
   location / {
     proxy_pass http://127.0.0.1:4000;
@@ -639,7 +639,7 @@ server {
 
 # Storefront
 server {
-  server_name taladonline.la www.taladonline.la;
+  server_name vreview.app www.vreview.app;
   client_max_body_size 20m;             # payment slips, photo search
   location / { proxy_pass http://127.0.0.1:3010; proxy_set_header Host $host; }
   location /api/events {                # storefront live updates (SSE proxy)
@@ -653,18 +653,18 @@ server {
 
 # Seller Center and admin (Docker containers serve the built files)
 server {
-  server_name shop.taladonline.la;
+  server_name shop.vreview.app;
   location / { proxy_pass http://127.0.0.1:8110; proxy_set_header Host $host; }
 }
 server {
-  server_name admin.taladonline.la;
+  server_name admin.vreview.app;
   location / { proxy_pass http://127.0.0.1:8120; proxy_set_header Host $host; }
 }
 ```
 
 Without Docker, the Seller Center and admin can be served straight from `apps/shop/dist` and
 `apps/admin/dist` by nginx (`try_files $uri /index.html;`) or any static host. Add TLS with
-`certbot --nginx -d taladonline.la -d www.taladonline.la -d api.taladonline.la -d shop.taladonline.la -d admin.taladonline.la`.
+`certbot --nginx -d vreview.app -d www.vreview.app -d api.vreview.app -d shop.vreview.app -d admin.vreview.app`.
 
 ### 6. Mobile app
 

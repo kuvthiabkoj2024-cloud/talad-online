@@ -46,6 +46,8 @@ export const router = createBrowserRouter([
           { path: 'products/:id', lazy: page(() => import('@/pages/products'), (m) => m.ProductDetailPage, 'products') },
           { path: 'customers', lazy: page(() => import('@/pages/customers'), (m) => m.CustomersPage, 'customers') },
           { path: 'customers/:id', lazy: page(() => import('@/pages/customers'), (m) => m.CustomerDetailPage, 'customers') },
+          { path: 'customers/:id/videos', lazy: page(() => import('@/pages/videos'), (m) => m.CustomerVideosPage, 'videos') },
+          { path: 'videos', lazy: page(() => import('@/pages/videos'), (m) => m.VideosPage, 'videos') },
           { path: 'orders', lazy: page(() => import('@/pages/orders'), (m) => m.OrdersPage, 'orders') },
           { path: 'orders/:number', lazy: page(() => import('@/pages/orders'), (m) => m.OrderDetailPage, 'orders') },
           { path: 'disputes', lazy: page(() => import('@/pages/money'), (m) => m.DisputesPage, 'disputes') },

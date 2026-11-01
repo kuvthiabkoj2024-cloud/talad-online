@@ -9,8 +9,8 @@ const ORDER_TEXT: Record<OrderStatus, { lo: Text; en: Text }> = {
     en: { title: 'Order placed', body: 'Your order {n} has been placed. Please complete payment before the deadline.' },
   },
   CONFIRMED: {
-    lo: { title: 'ຊຳລະເງິນແລ້ວ', body: 'Taladonline ຢືນຢັນການຊຳລະຂອງຄຳສັ່ງຊື້ {n} ແລ້ວ. {shop} ກຳລັງກະກຽມສິນຄ້າ.' },
-    en: { title: 'Payment confirmed', body: 'Taladonline confirmed the payment for order {n}. {shop} is preparing it.' },
+    lo: { title: 'ຊຳລະເງິນແລ້ວ', body: 'Vreview ຢືນຢັນການຊຳລະຂອງຄຳສັ່ງຊື້ {n} ແລ້ວ. {shop} ກຳລັງກະກຽມສິນຄ້າ.' },
+    en: { title: 'Payment confirmed', body: 'Vreview confirmed the payment for order {n}. {shop} is preparing it.' },
   },
   PACKED: {
     lo: { title: 'ແພັກສິນຄ້າແລ້ວ', body: 'ຄຳສັ່ງຊື້ {n} ແພັກແລ້ວ ແລະ ລໍຖ້າຂົນສົ່ງມາຮັບ.' },
@@ -33,8 +33,8 @@ const ORDER_TEXT: Record<OrderStatus, { lo: Text; en: Text }> = {
     en: { title: 'Order cancelled', body: 'Order {n} was cancelled.' },
   },
   RETURN_REQUESTED: {
-    lo: { title: 'ສົ່ງຄຳຮ້ອງຂໍຄືນສິນຄ້າແລ້ວ', body: 'ພວກເຮົາໄດ້ຮັບຄຳຮ້ອງຂໍຄືນສິນຄ້າຂອງຄຳສັ່ງຊື້ {n} ແລ້ວ. ຮ້ານຈະຕອບກັບພາຍໃນ 48 ຊົ່ວໂມງ.' },
-    en: { title: 'Return requested', body: "We've received your return request for order {n}. The shop will reply within 48 hours." },
+    lo: { title: 'ສົ່ງຄຳຮ້ອງຂໍຄືນສິນຄ້າແລ້ວ', body: 'ພວກເຮົາໄດ້ຮັບຄຳຮ້ອງຂໍຄືນສິນຄ້າຂອງຄຳສັ່ງຊື້ {n} ແລ້ວ. Vreview ຈະກວດສອບ ແລະ ແຈ້ງໃຫ້ທ່ານຮູ້.' },
+    en: { title: 'Return requested', body: "We've received your return request for order {n}. Vreview will review it and let you know." },
   },
 };
 

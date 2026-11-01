@@ -15,7 +15,7 @@ export default function HomeScreen() {
   });
 
   return (
-    <Screen title="Taladonline">
+    <Screen title="Vreview">
       <ThemedText type="subtitle">Categories</ThemedText>
       {categories.isPending && <ActivityIndicator />}
       {categories.error && (

@@ -52,6 +52,7 @@ export default async function FeedPage({ searchParams }: PageProps<"/[lang]/feed
       initialItems={linked ? [linked, ...items.filter((i) => i.id !== linked.id)] : items}
       initialCursor={first?.nextCursor ?? null}
       openComments={openComments}
+      backHref={linked && isId(params.back) ? `/${locale}/u/${params.back}${params.tab === "liked" ? "?tab=liked" : ""}` : undefined}
     />
   );
 }

@@ -36,7 +36,7 @@ async function bootstrap() {
     const document = SwaggerModule.createDocument(
       app,
       new DocumentBuilder()
-        .setTitle('Taladonline API')
+        .setTitle('Vreview API')
         .setVersion('1.0')
         .addBearerAuth()
         .build(),

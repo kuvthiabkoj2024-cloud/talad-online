@@ -179,7 +179,7 @@ function CopyRow({ label, value, display, mono }: { label: string; value: string
   )
 }
 
-/** Taladonline's transfer slip; tap to see it full size. */
+/** Vreview's transfer slip; tap to see it full size. */
 function PayoutSlip({ id }: { id: string }) {
   const { t } = useI18n()
   const slip = usePrivateImage(`/admin/payouts/${id}/slip`)

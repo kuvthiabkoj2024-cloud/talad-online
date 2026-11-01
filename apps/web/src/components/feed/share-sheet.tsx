@@ -172,7 +172,7 @@ export function ShareSheet({
           {qr && (
             <a
               href={qr}
-              download="taladonline-qr.png"
+              download="vreview-qr.png"
               onClick={shared}
               className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
             >

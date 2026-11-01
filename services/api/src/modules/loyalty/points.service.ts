@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { sortPointTiers, type PointTier } from '@talad/shared';
 import type { PointTransactionType } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { pointRules } from '../orders/order-transitions.js';
@@ -7,11 +8,15 @@ const PAGE = 20;
 
 export interface PointsView {
   balance: number;
+  /** Points owed after a return took back ones already spent; later points pay this off first. */
+  owed: number;
   /** Kip one point is worth when spent at checkout (0 = spending is off). */
   pointValue: number;
   /** What the balance is worth now. */
   worth: number;
-  /** Kip of an order per point earned (0 = earning is off). */
+  /** Points by order total. */
+  earnTiers: PointTier[];
+  /** The older rule: kip of an order per point, while no ranges are set (else 0). */
   earnPer: number;
   expiryDays: number | null;
   items: { id: string; type: PointTransactionType; points: number; note: string | null; orderNumber: string | null; expiresAt: Date | null; createdAt: Date }[];
@@ -44,9 +49,11 @@ export class PointsService {
     const pointValue = rules.redeemValue && rules.redeemValue > 0 ? rules.redeemValue : 0;
     return {
       balance,
+      owed: Math.max(0, -(customer?.pointsBalance ?? 0)),
       pointValue,
       worth: balance * pointValue,
-      earnPer: rules.earnPer && rules.earnPer > 0 ? rules.earnPer : 0,
+      earnTiers: sortPointTiers(rules.earnTiers ?? []),
+      earnPer: !rules.earnTiers && rules.earnPer && rules.earnPer > 0 ? rules.earnPer : 0,
       expiryDays: rules.expiryDays ?? null,
       items: page.map((r) => ({
         id: r.id,

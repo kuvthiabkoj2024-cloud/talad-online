@@ -18,7 +18,7 @@ export interface SlipState {
 export const emptySlip: SlipState = { preview: null, uploading: false, attached: false, error: null };
 
 /**
- * Manual payment: Taladonline's QR + account to transfer to, the exact amount, and the slips
+ * Manual payment: Vreview's QR + account to transfer to, the exact amount, and the slips
  * (required; up to `max`, for a payment split over several transfers). An admin checks them.
  */
 export function PaymentPanel({
@@ -32,6 +32,8 @@ export function PaymentPanel({
   onRemoveSlip,
   dict,
   bare = false,
+  scanTitle,
+  scanBody,
 }: {
   title: string;
   /** Image URL of the receiving QR (null when there are only account details). */
@@ -46,6 +48,9 @@ export function PaymentPanel({
   dict: Dictionary["checkout"];
   /** No card frame of its own, for use inside another card (the chat order card). */
   bare?: boolean;
+  /** Paying someone other than Vreview (a shop's deposit). */
+  scanTitle?: string;
+  scanBody?: string;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
@@ -64,16 +69,16 @@ export function PaymentPanel({
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
         <h3 className="mt-0.5 flex items-center gap-2 font-semibold text-primary">
           <QrCode className="size-5" />
-          {dict.scanTitle}
+          {scanTitle ?? dict.scanTitle}
         </h3>
-        <p className="mt-1 text-sm text-muted-foreground">{dict.scanBody}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{scanBody ?? dict.scanBody}</p>
       </div>
 
       <div className={`flex flex-col items-center gap-3 rounded-2xl bg-muted/50 text-center ${bare ? "px-2 py-3" : "p-4"}`}>
         {qrSrc && (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element -- private image streamed per session */}
-            <img src={qrSrc} alt={dict.scanTitle} className="aspect-square w-full max-w-56 rounded-xl bg-white p-2 ring-1 ring-border sm:max-w-64" />
+            <img src={qrSrc} alt={scanTitle ?? dict.scanTitle} className="aspect-square w-full max-w-56 rounded-xl bg-white p-2 ring-1 ring-border sm:max-w-64" />
           </>
         )}
         <div>

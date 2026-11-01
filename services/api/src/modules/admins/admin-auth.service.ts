@@ -129,7 +129,7 @@ export class AdminAuthService {
     const link = `${this.config.get('ADMIN_APP_URL', { infer: true }).replace(/\/$/, '')}/reset-password?token=${token}`;
     await this.email.send(
       admin.email,
-      'Reset your Taladonline Admin password',
+      'Reset your Vreview Admin password',
       `Hi ${admin.name},\n\nOpen this link within 30 minutes to choose a new password:\n${link}\n\nIf you didn't ask for this, ignore this email.`,
     );
     await this.audit.log({ adminId: admin.id, action: 'admin.password_reset_requested', entityType: 'AdminUser', entityId: admin.id });
@@ -157,7 +157,7 @@ export class AdminAuthService {
     if (admin.twoFactorMethod === 'TOTP') throw new ConflictException({ code: 'TWO_FACTOR_ON', message: 'Turn off the authenticator first' });
     const secret = generateTotpSecret();
     await this.prisma.adminUser.update({ where: { id: admin.id }, data: { totpSecret: secret } });
-    const uri = totpUri(secret, admin.email, 'Taladonline Admin');
+    const uri = totpUri(secret, admin.email, 'Vreview Admin');
     return { secret, uri, qr: await QRCode.toDataURL(uri, { margin: 1, width: 240 }) };
   }
 

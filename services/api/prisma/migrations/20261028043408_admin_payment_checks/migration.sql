@@ -28,7 +28,7 @@ CREATE INDEX "PaymentSlip_status_createdAt_idx" ON "PaymentSlip"("status", "crea
 -- AddForeignKey
 ALTER TABLE "PaymentSlip" ADD CONSTRAINT "PaymentSlip_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- Orders still waiting with a slip the shop never checked: Taladonline checks them now.
+-- Orders still waiting with a slip the shop never checked: Vreview checks them now.
 INSERT INTO "PaymentSlip" ("id", "orderId", "key", "status", "createdAt")
 SELECT DISTINCT ON (p."slipKey") gen_random_uuid()::text, p."orderId", p."slipKey", 'PENDING', COALESCE(p."slipUploadedAt", p."createdAt")
 FROM "Payment" p

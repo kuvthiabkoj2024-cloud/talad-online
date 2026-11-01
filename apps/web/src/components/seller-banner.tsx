@@ -6,7 +6,7 @@ const dots =
   "pointer-events-none absolute opacity-40 [background-image:radial-gradient(var(--primary)_1px,transparent_1px)] [background-size:8px_8px]";
 
 /**
- * "Start your business with Taladonline" strip linking to the seller center (apps/shop).
+ * "Start your business with Vreview" strip linking to the seller center (apps/shop).
  * One row at every size: shop icon, two lines of text, pill button; tighter on phones.
  */
 export function SellerBanner({ dict }: { dict: Dictionary["home"] }) {
@@ -21,7 +21,7 @@ export function SellerBanner({ dict }: { dict: Dictionary["home"] }) {
       </span>
       <div className="relative min-w-0 flex-1">
         <p className="text-sm font-semibold leading-snug sm:text-base">
-          {dict.sellerTitle} <span className="text-primary">Taladonline</span>
+          {dict.sellerTitle} <span className="text-primary">Vreview</span>
         </p>
         <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">{dict.sellerSubtitle}</p>
       </div>

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { ChevronRight, Store, Truck } from "lucide-react";
+import { formatMoney } from "@talad/shared";
+import { Banknote, ChevronRight, ShieldCheck, Store, Truck } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { Breadcrumb } from "@/components/breadcrumb";
@@ -33,14 +34,14 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
   const { lang, shop, slug } = await props.params;
   const path = `/${lang}/p/${shop}/${slug}`;
   // Shared links show this text under the photo; without a description, the shop's name.
-  const description = product.description?.slice(0, 160) || `${product.shop.name} · Taladonline`;
+  const description = product.description?.slice(0, 160) || `${product.shop.name} · Vreview`;
   return {
     title: product.name,
     description,
     alternates: { canonical: path },
     openGraph: {
       type: "website",
-      siteName: "Taladonline",
+      siteName: "Vreview",
       url: path,
       title: product.name,
       description,
@@ -135,6 +136,29 @@ export default async function ProductPage(props: Props) {
               <p className="text-sm text-muted-foreground">{dict.deliveryDesc}</p>
             </div>
           </div>
+
+          {product.guarantee && (
+            <div className="flex items-start gap-3 self-start rounded-xl bg-primary-soft px-4 py-3">
+              <ShieldCheck className="mt-0.5 size-6 shrink-0 text-primary" />
+              <div>
+                <p className="font-semibold">{interpolate(dict.guaranteeTitle, { period: interpolate(dict.guaranteeUnits[product.guarantee.unit], { n: product.guarantee.duration }) })}</p>
+                {product.guarantee.terms && <p className="whitespace-pre-line text-sm text-muted-foreground">{product.guarantee.terms}</p>}
+              </div>
+            </div>
+          )}
+          {product.deposit && (
+            <div className="flex items-start gap-3 self-start rounded-xl bg-amber-50 px-4 py-3 text-amber-900">
+              <Banknote className="mt-0.5 size-6 shrink-0" />
+              <div>
+                <p className="font-semibold">{dict.depositTitle}</p>
+                <p className="text-sm">
+                  {interpolate(product.deposit.type === "PERCENT" ? dict.depositPercent : dict.depositAmount, {
+                    value: product.deposit.type === "PERCENT" ? String(product.deposit.value) : formatMoney(product.deposit.value, locale),
+                  })}
+                </p>
+              </div>
+            </div>
+          )}
 
           <ProductPurchase
             productId={product.id}

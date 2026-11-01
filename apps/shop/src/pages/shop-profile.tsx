@@ -190,7 +190,7 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
               <Input id="name" value={name} minLength={SHOP_RULES.nameMin} maxLength={SHOP_RULES.nameMax} required onChange={(e) => setName(e.target.value)} />
             </Field>
             <Field id="web" label={t.profile.web}>
-              <Input id="web" value={`taladonline.com/s/${p.slug}`} readOnly className="bg-muted text-muted-foreground" />
+              <Input id="web" value={`vreview.app/s/${p.slug}`} readOnly className="bg-muted text-muted-foreground" />
             </Field>
             <Field id="about" label={t.profile.about} hint={t.common.optional}>
               <Textarea id="about" rows={4} maxLength={SHOP_RULES.descriptionMax} value={description} onChange={(e) => setDescription(e.target.value)} />
@@ -528,7 +528,7 @@ function ShopLinkCard({ url, name, live }: { url: string; name: string; live: bo
 }
 
 /**
- * Cash on delivery, the shop's own choice. Turning it on opens the COD terms (Taladonline is
+ * Cash on delivery, the shop's own choice. Turning it on opens the COD terms (Vreview is
  * not responsible for COD losses), which must be ticked and accepted first.
  */
 function CodCard({

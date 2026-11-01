@@ -168,7 +168,7 @@ export class ShopBotService {
       description: shop.description,
       address: shop.address,
       hours: shop.businessHours as BusinessHours | null,
-      // Transfers go to Taladonline's account (as at checkout).
+      // Transfers go to Vreview's account (as at checkout).
       transfer: (await this.account.available()) !== null,
       cod: shop.codEnabled,
       faqs: shop.faqs,
@@ -391,7 +391,7 @@ export class ShopBotService {
 
   private async paymentMethods(shop: ShopFacts, lang: ChatLocale) {
     const { paymentMethods } = await this.cms.publicSettings();
-    // Transfers need Taladonline's account set up, COD the shop's own opt-in (as at checkout).
+    // Transfers need Vreview's account set up, COD the shop's own opt-in (as at checkout).
     const usable = paymentMethods.filter((m) => (m === 'BANK_TRANSFER' ? shop.transfer : m === 'COD' ? shop.cod : true));
     return { names: usable.map((m) => PAYMENT_NAMES[m]?.[lang] ?? m), cod: usable.includes('COD') };
   }
@@ -467,7 +467,7 @@ export class ShopBotService {
     const focus = focusId ? (await this.products.cardsByIds([focusId]))[0] : undefined;
     const focusDetail = focus ? await this.options([focus.id]) : [];
     return [
-      `You are the auto-reply assistant of "${shop.name}", a shop on Taladonline (an online marketplace in Laos), answering a customer in the shop's private chat.`,
+      `You are the auto-reply assistant of "${shop.name}", a shop on Vreview (an online marketplace in Laos), answering a customer in the shop's private chat.`,
       `Reply in the customer's language (Lao or English; default ${lang === 'lo' ? 'Lao' : 'English'}). Be short and friendly like a shop owner on a messaging app: 1–3 sentences.`,
       'First decide what the customer wants:',
       '- INFORMATION (opening hours, address, payment, delivery, promotions, policies, anything in the FAQ): answer only from the shop facts below. Do NOT search or show products.',

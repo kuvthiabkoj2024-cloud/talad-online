@@ -293,14 +293,14 @@ export function ShopChat({
             const date = new Date(m.createdAt);
             const newDay = !prev || new Date(prev.createdAt).toDateString() !== date.toDateString();
             if (m.system) {
-              // Taladonline speaking to both sides: centred, not anyone's bubble.
+              // Vreview speaking to both sides: centred, not anyone's bubble.
               return (
                 <li key={m.id} className="flex flex-col gap-1.5">
                   {newDay && <p className="my-2 self-center rounded-full bg-muted px-3 py-1 text-[11px] font-medium text-muted-foreground">{day.format(date)}</p>}
                   <div className="mx-auto my-2 w-full max-w-md rounded-2xl border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-sm">
                     <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold">
                       <ShieldCheck className="size-4" />
-                      Taladonline
+                      Vreview
                     </p>
                     <p className="whitespace-pre-line leading-relaxed">{m.text}</p>
                   </div>

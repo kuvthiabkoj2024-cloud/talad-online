@@ -1,4 +1,4 @@
-// Taladonline — marketplace data model (MVP / Phase 1).
+// Vreview — marketplace data model (MVP / Phase 1).
 // Section references (§) point to marketplace-project-scope.md.
 // Enum values must stay in sync with @talad/shared.
 
@@ -51,6 +51,28 @@ enum ProductStatus {
   REJECTED
 }
 
+enum GuaranteeUnit {
+  DAY
+  MONTH
+  YEAR
+}
+
+enum DepositType {
+  AMOUNT
+  PERCENT
+}
+
+/// PENDING: slip sent, the shop checks it. RETURN_DUE: the order fell through and the shop owes it back.
+/// KEPT: the customer didn't collect the order, so the shop keeps it.
+enum DepositStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  RETURN_DUE
+  RETURNED
+  KEPT
+}
+
 enum OrderStatus {
   PENDING
   CONFIRMED
@@ -79,7 +101,7 @@ enum PaymentStatus {
   EXPIRED
 }
 
-/// Taladonline's check of a customer's transfer slip.
+/// Vreview's check of a customer's transfer slip.
 enum SlipStatus {
   PENDING
   APPROVED
@@ -241,7 +263,7 @@ model Shop {
   paymentBankCode      String?
   paymentAccountName   String?
   paymentAccountNumber String?
-  /// Cash on delivery: each shop opts in after accepting the COD terms (Taladonline takes no
+  /// Cash on delivery: each shop opts in after accepting the COD terms (Vreview takes no
   /// part in collecting the cash and is not responsible for COD losses).
   codEnabled           Boolean    @default(false)
   /// When the owner last accepted those terms (required to turn COD on).
@@ -315,7 +337,7 @@ model Payout {
   status           PayoutStatus @default(SCHEDULED)
   paidAt           DateTime?
   reference        String?
-  /// Photo of Taladonline's transfer slip (private storage key), shown to admins and the shop.
+  /// Photo of Vreview's transfer slip (private storage key), shown to admins and the shop.
   slipKey          String?
   createdAt        DateTime     @default(now())
 
@@ -460,6 +482,13 @@ model Product {
   description       String?
   price             Decimal       @db.Decimal(14, 2)
   compareAtPrice    Decimal?      @db.Decimal(14, 2)
+  /// The guarantee the shop gives, as entered (customers get double, GUARANTEE_RULES); null = none.
+  guaranteeDuration Int?
+  guaranteeUnit     GuaranteeUnit?
+  guaranteeTerms    String?
+  /// Deposit asked for with cash on delivery: an amount per unit, or a percent of the price.
+  depositType       DepositType?
+  depositValue      Decimal?      @db.Decimal(14, 2)
   stock             Int           @default(0)
   lowStockThreshold Int           @default(5)
   /// The options variants differ by, in the seller's order: [{ name: "Colour", values: ["Red", "Blue"] }, …].
@@ -469,6 +498,10 @@ model Product {
   rejectionReason   String?
   /// The single short product video (§2.5); transcoded asset key.
   videoKey          String?
+  /// Hidden by Vreview (moderation): customers no longer see it. A new video clears this.
+  videoHidden       Boolean       @default(false)
+  videoHiddenReason String?
+  videoHiddenAt     DateTime?
   isPinned          Boolean       @default(false)
   soldCount         Int           @default(0)
   viewCount         Int           @default(0)
@@ -579,7 +612,7 @@ model Order {
   @@index([customerId, createdAt])
 }
 
-/// A transfer slip for a whole order (all its shops), paid into Taladonline's account. An admin
+/// A transfer slip for a whole order (all its shops), paid into Vreview's account. An admin
 /// approves (the shops then get the order, paid) or rejects (the customer sends new ones).
 model PaymentSlip {
   id           String     @id @default(uuid(7))
@@ -607,11 +640,23 @@ model ShopOrder {
   status             OrderStatus @default(PENDING)
   subtotal           Decimal     @db.Decimal(14, 2)
   discountTotal      Decimal     @default(0) @db.Decimal(14, 2)
-  /// The part of `discountTotal` Taladonline funds (platform coupons, loyalty points): paid back to the shop.
+  /// The part of `discountTotal` Vreview funds (platform coupons, loyalty points): paid back to the shop.
   platformDiscount   Decimal     @default(0) @db.Decimal(14, 2)
   /// Loyalty points the customer spent on this shop order (their value is in `platformDiscount`).
   /// Returned to the customer, and set back to 0, if the order is cancelled.
   pointsRedeemed     Int         @default(0)
+  /// Loyalty points the customer earned by confirming receipt; taken back if it is returned.
+  pointsEarned       Int         @default(0)
+  /// The amount loyalty points are earned on: goods not on promotion, 0 with a coupon. Fixed at
+  /// checkout, as prices and sales change later. Null on older orders, which earn on `total`.
+  pointsBase         Decimal?    @db.Decimal(14, 2)
+  /// Paid to the shop before the order goes ahead (cash on delivery); the rest is collected on delivery.
+  depositAmount      Decimal     @default(0) @db.Decimal(14, 2)
+  depositStatus      DepositStatus?
+  depositSlipKey     String?
+  depositRejectReason String?
+  /// The order cancels if the deposit is still unconfirmed by then.
+  depositDueAt       DateTime?
   shippingFee        Decimal     @default(0) @db.Decimal(14, 2)
   commissionAmount   Decimal     @default(0) @db.Decimal(14, 2)
   total              Decimal     @db.Decimal(14, 2)
@@ -619,6 +664,8 @@ model ShopOrder {
   trackingNumber     String?
   /// Photo of the courier's bill the shop uploads when shipping (private storage key).
   shippingBillKey    String?
+  /// The customer said the bill is wrong; cleared when the shop uploads a new one.
+  billIssueAt        DateTime?
   /// Delivered by the shop itself as urgent delivery (its fee is `shippingFee`).
   urgentDelivery     Boolean     @default(false)
   /// The customer collects it at the shop: no courier, no bill.
@@ -660,6 +707,10 @@ model OrderItem {
   regularPrice     Decimal? @db.Decimal(14, 2)
   quantity         Int
   lineTotal        Decimal  @db.Decimal(14, 2)
+  /// Snapshot of the guarantee the customer got (already doubled), for the certificate.
+  guaranteeDuration Int?
+  guaranteeUnit     GuaranteeUnit?
+  guaranteeTerms    String?
   /// This item's own rate (shop override, else its category, else the platform default) and fee.
   commissionRate   Decimal? @db.Decimal(5, 2)
   /// Set instead of the rate when the item paid a fixed amount per unit.
@@ -704,7 +755,7 @@ model Payment {
   /// Older orders: the transfer slip checked by the shop (new orders use PaymentSlip).
   slipKey        String?
   slipUploadedAt DateTime?
-  /// A paid order that was cancelled is refunded by Taladonline; when and how (bank reference).
+  /// A paid order that was cancelled is refunded by Vreview; when and how (bank reference).
   refundedAt     DateTime?
   refundRef      String?
   createdAt      DateTime      @default(now())
@@ -724,6 +775,7 @@ model Dispute {
   raisedBy     ActorType
   reason       String
   details      String?
+  /// Photos and video clips sent with the request (private storage keys).
   evidenceKeys String[]
   status       DisputeStatus @default(OPEN)
   refundAmount Decimal?      @db.Decimal(14, 2)
@@ -883,8 +935,10 @@ model FeedPost {
   /// Public storage key (c-<customerId>/videos/).
   videoKey     String
   caption      String   @default("")
-  /// Hidden by Taladonline (moderation); the author still sees it.
+  /// Hidden by Vreview (moderation): gone from the feed, the profile and shared links.
   isHidden     Boolean  @default(false)
+  hiddenReason String?
+  hiddenAt     DateTime?
   viewCount    Int      @default(0)
   shareCount   Int      @default(0)
   likeCount    Int      @default(0)
@@ -1092,7 +1146,7 @@ model ShopConversation {
 model ShopMessage {
   id             String   @id @default(uuid(7))
   conversationId String
-  /// "CUSTOMER" | "SHOP" | "BOT" (the shop's auto-reply) | "SYSTEM" (a Taladonline notice to both sides)
+  /// "CUSTOMER" | "SHOP" | "BOT" (the shop's auto-reply) | "SYSTEM" (a Vreview notice to both sides)
   sender         String
   text           String   @default("")
   /// Private photo (storage key); served only to the conversation's two sides.

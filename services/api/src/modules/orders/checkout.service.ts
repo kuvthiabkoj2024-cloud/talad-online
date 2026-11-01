@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
-import { formatMoney, MAX_PAYMENT_SLIPS, parseUrgentDelivery, urgentFee, type CheckoutPaymentMethod, type UrgentDelivery } from '@talad/shared';
+import { customerGuarantee, DEPOSIT_NOTES, DEPOSIT_RULES, formatMoney, lineDeposit, MAX_PAYMENT_SLIPS, parseUrgentDelivery, urgentFee, type CheckoutPaymentMethod, type UrgentDelivery } from '@talad/shared';
 import { randomInt } from 'node:crypto';
 import { Prisma, type OrderStatus } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
@@ -12,6 +12,7 @@ import {
   couponProblem,
   itemCommissions,
   normalizeCouponCode,
+  pointsBase,
   type CouponErrorCode,
   type CouponRule,
 } from './checkout-pricing.js';
@@ -28,7 +29,7 @@ export interface QuoteIssue {
 
 /**
  * Courier the customer can pick. No courier has an API yet, so there is no price:
- * the delivery fee is paid to the courier, outside Taladonline.
+ * the delivery fee is paid to the courier, outside Vreview.
  */
 export interface DeliveryOption {
   id: string;
@@ -58,8 +59,10 @@ export interface PlaceOrderInput extends CheckoutSelection {
   addressId: string;
   paymentMethod: CheckoutPaymentMethod;
   expectedTotal: number;
-  /** BANK_TRANSFER: 1–MAX_PAYMENT_SLIPS slip keys for the whole order (one transfer to Taladonline). */
+  /** BANK_TRANSFER: 1–MAX_PAYMENT_SLIPS slip keys for the whole order (one transfer to Vreview). */
   slipKeys?: string[];
+  /** COD: the deposit slip (a key from the slip upload) for each shop asking for one. */
+  depositSlips?: Record<string, string>;
   note?: string;
 }
 
@@ -80,7 +83,7 @@ export class CheckoutService {
 
   /**
    * Totals for the selected cart lines, split per shop, with the coupon discount and where to
-   * transfer (Taladonline's account, for the whole order). Delivery isn't priced (paid to the courier). An unusable coupon is
+   * transfer (Vreview's account, for the whole order). Delivery isn't priced (paid to the courier). An unusable coupon is
    * reported in `couponError`, not thrown.
    */
   async quote(customerId: string, selection: CheckoutSelection) {
@@ -97,7 +100,7 @@ export class CheckoutService {
     }
 
     const groups = groupByShop(lines);
-    const [transfer, { cod, pickup }, urgentSettings, address, options] = await Promise.all([
+    const [transfer, { cod, pickup, accounts }, urgentSettings, address, options] = await Promise.all([
       this.account.available(),
       this.shopOptions(groups.map((g) => g.shop.id)),
       this.urgentSettings(groups.map((g) => g.shop.id)),
@@ -134,7 +137,7 @@ export class CheckoutService {
         cod: cod.has(g.shop.id),
       };
     });
-    // Loyalty points pay part (or all) of the order; Taladonline pays their value back to the
+    // Loyalty points pay part (or all) of the order; Vreview pays their value back to the
     // shops like a platform coupon. Spread over the shops in proportion to what each costs.
     const [rules, customer] = await Promise.all([pointRules(this.prisma), this.prisma.customer.findUnique({ where: { id: customerId }, select: { pointsBalance: true } })])
     const pointValue = rules.redeemValue && rules.redeemValue > 0 ? rules.redeemValue : 0;
@@ -145,7 +148,21 @@ export class CheckoutService {
     const pointShares = allocateDiscount(used, shops.map((s) => ({ id: s.shop.id, subtotal: s.total })));
     const priced = shops.map((s) => {
       const points = pointShares.get(s.shop.id) ?? 0;
-      return { ...s, points, pointsDiscount: points * pointValue, total: s.total - points * pointValue };
+      const total = s.total - points * pointValue;
+      // Paid to the shop before ordering with COD, out of what the order costs.
+      const asked = lines.filter((l) => l.shop.id === s.shop.id).reduce((n, l) => n + lineDeposit(l, l.internal.deposit), 0);
+      const deposit = Math.min(asked, total);
+      const depositAccount = accounts.get(s.shop.id) ?? null;
+      return {
+        ...s,
+        points,
+        pointsDiscount: points * pointValue,
+        total,
+        deposit,
+        depositAccount: deposit > 0 ? depositAccount : null,
+        // A shop can't take a deposit without a QR to pay it to.
+        cod: s.cod && (deposit === 0 || depositAccount?.hasQr === true),
+      };
     });
     const subtotal = priced.reduce((n, s) => n + s.subtotal, 0);
     const discountTotal = priced.reduce((n, s) => n + s.discount, 0);
@@ -166,7 +183,7 @@ export class CheckoutService {
         delivery: { options, selectedId: courier?.id ?? null, needed: priced.some((s) => !s.urgentSelected && !s.pickupSelected) },
         coupon: coupon ? { code: coupon.code, shopId: coupon.shopId, discount: discountTotal } : null,
         couponError,
-        // Transfers go to Taladonline's account (checked by an admin), once one is set up.
+        // Transfers go to Vreview's account (checked by an admin), once one is set up.
         transfer: transfer as PlatformAccount | null,
         transferAvailable: transfer !== null,
         // Likewise COD: every shop in the order must have turned it on.
@@ -200,6 +217,12 @@ export class CheckoutService {
     if (input.paymentMethod === 'COD' && !quote.codAvailable) {
       throw new BadRequestException({ code: 'COD_UNAVAILABLE', message: 'A shop in this order does not offer cash on delivery' });
     }
+    // Each shop asking for a deposit needs its own slip, sent before the order is placed.
+    const depositSlips = input.paymentMethod === 'COD' ? quote.shops.filter((s) => s.deposit > 0).map((s) => [s.shop.id, input.depositSlips?.[s.shop.id]] as const) : [];
+    if (depositSlips.some(([, key]) => !key || !key.startsWith(slipPrefix(customerId)))) {
+      throw new BadRequestException({ code: 'DEPOSIT_SLIP_REQUIRED', message: 'Attach the deposit slip' });
+    }
+    const slipFor = new Map(depositSlips);
     // Points can cover the whole order: then there is nothing to transfer or check.
     const paidByPoints = quote.total === 0 && quote.points.used > 0;
     const isTransfer = input.paymentMethod === 'BANK_TRANSFER' && !paidByPoints;
@@ -221,7 +244,7 @@ export class CheckoutService {
     const defaultRate = await this.defaultCommissionRate();
     const now = new Date();
     // COD (and an order paid in full with points) goes straight to the shops. A transfer waits in
-    // "to pay" until Taladonline checks the slips.
+    // "to pay" until Vreview checks the slips.
     const status: OrderStatus = isTransfer ? 'PENDING' : 'CONFIRMED';
     const note = input.note?.trim() || null;
     const shippingAddress = {
@@ -295,7 +318,7 @@ export class CheckoutService {
           const shopOrders: string[] = [];
           for (const [i, group] of quote.shops.entries()) {
             const groupLines = lines.filter((l) => l.shop.id === group.shop.id);
-            // A shop coupon is the shop's own discount; a platform coupon is funded by Taladonline.
+            // A shop coupon is the shop's own discount; a platform coupon is funded by Vreview.
             const shopDiscount = couponRule?.shopId ? group.discount : 0;
             const platformDiscount = couponRule && !couponRule.shopId ? group.discount : 0;
             const commissions = new Map(groupLines.map((l) => [l.id, l.internal.commission ?? { type: 'PERCENT' as const, value: defaultRate }]));
@@ -313,10 +336,17 @@ export class CheckoutService {
                 // Unpaid orders are cancelled when the shop's payment window ends (OrderDeadlinesService).
                 paymentDueAt: status === 'PENDING' ? new Date(now.getTime() + groupLines[0].internal.paymentWindowHrs * 3_600_000) : null,
                 subtotal: group.subtotal,
-                // Points are Taladonline's discount too (paid back to the shop).
+                // Points are Vreview's discount too (paid back to the shop).
                 discountTotal: group.discount + group.pointsDiscount,
                 platformDiscount: platformDiscount + group.pointsDiscount,
                 pointsRedeemed: group.points,
+                pointsBase: pointsBase(groupLines, group.discount, group.pointsDiscount),
+                ...(slipFor.has(group.shop.id) && {
+                  depositAmount: group.deposit,
+                  depositStatus: 'PENDING' as const,
+                  depositSlipKey: slipFor.get(group.shop.id),
+                  depositDueAt: new Date(now.getTime() + DEPOSIT_RULES.reviewHours * 3_600_000),
+                }),
                 // Each item at its own rate (shop override, else its category, else the default).
                 commissionAmount: [...fees.values()].reduce((n, f) => n + f, 0),
                 total: group.total,
@@ -335,6 +365,11 @@ export class CheckoutService {
                     regularPrice: l.regularPrice,
                     quantity: l.quantity,
                     lineTotal: l.lineTotal,
+                    ...(l.internal.guarantee && {
+                      guaranteeDuration: customerGuarantee(l.internal.guarantee.duration),
+                      guaranteeUnit: l.internal.guarantee.unit,
+                      guaranteeTerms: l.internal.guarantee.terms,
+                    }),
                     ...(commissions.get(l.id)!.type === 'FIXED'
                       ? { commissionFixed: commissions.get(l.id)!.value }
                       : { commissionRate: commissions.get(l.id)!.value }),
@@ -363,14 +398,28 @@ export class CheckoutService {
                     ...(isTransfer
                       ? []
                       : [{ fromStatus: 'PENDING' as const, toStatus: 'CONFIRMED' as const, note: paidByPoints ? 'Paid with points' : 'Cash on delivery', createdAt: now }]),
+                    ...(slipFor.has(group.shop.id)
+                      ? [{ fromStatus: 'CONFIRMED' as const, toStatus: 'CONFIRMED' as const, actorType: 'CUSTOMER' as const, actorId: customerId, note: DEPOSIT_NOTES.submitted, createdAt: now }]
+                      : []),
                   ],
                 },
               },
             });
             shopOrders.push(shopNumber);
             // Cash on delivery: the shop hears about it right away (live, with a sound). A
-            // transfer reaches the shop only once Taladonline approves the payment.
-            if (!isTransfer) {
+            // transfer reaches the shop only once Vreview approves the payment.
+            if (slipFor.has(group.shop.id)) {
+              await this.notifications.toShop(
+                tx,
+                group.shop.id,
+                'ORDER',
+                {
+                  lo: { title: `ກວດເງິນມັດຈຳ ${shopNumber}`, body: `ລູກຄ້າໂອນມັດຈຳ ${formatMoney(group.deposit, 'lo')}. ກວດບັນຊີຂອງທ່ານ ແລະ ຢືນຢັນພາຍໃນ ${DEPOSIT_RULES.reviewHours} ຊົ່ວໂມງ.` },
+                  en: { title: `Check the deposit for ${shopNumber}`, body: `The customer sent a ${formatMoney(group.deposit, 'en')} deposit. Check your account and confirm it within ${DEPOSIT_RULES.reviewHours} hours.` },
+                },
+                { link: `/orders/${shopNumber}` },
+              );
+            } else if (!isTransfer) {
               const units = groupLines.reduce((n, l) => n + l.quantity, 0);
               await this.notifications.toShop(
                 tx,
@@ -509,9 +558,23 @@ export class CheckoutService {
   private async shopOptions(shopIds: string[]) {
     const shops = await this.prisma.shop.findMany({
       where: { id: { in: shopIds } },
-      select: { id: true, codEnabled: true, pickupEnabled: true, address: true, latitude: true, longitude: true },
+      select: {
+        id: true,
+        codEnabled: true,
+        pickupEnabled: true,
+        address: true,
+        latitude: true,
+        longitude: true,
+        paymentQrKey: true,
+        paymentBankCode: true,
+        paymentAccountName: true,
+        paymentAccountNumber: true,
+      },
     });
     return {
+      accounts: new Map(
+        shops.map((s) => [s.id, { bankCode: s.paymentBankCode, accountName: s.paymentAccountName, accountNumber: s.paymentAccountNumber, hasQr: s.paymentQrKey !== null }] as const),
+      ),
       cod: new Set(shops.filter((s) => s.codEnabled).map((s) => s.id)),
       pickup: new Map(
         shops

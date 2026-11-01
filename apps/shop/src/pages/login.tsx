@@ -45,7 +45,7 @@ type Step =
   | { kind: 'twoFactor'; challenge: Challenge }
 
 /**
- * Seller Center sign-in or sign-up (§3.1): one Taladonline account shops and sells. Sign in
+ * Seller Center sign-in or sign-up (§3.1): one Vreview account shops and sells. Sign in
  * with an SMS code or a password; accounts with two-step verification enter a second code.
  */
 export function LoginPage() {

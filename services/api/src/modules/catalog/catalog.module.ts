@@ -1,3 +1,5 @@
+import { AdminVideosController } from './videos/admin-videos.controller.js';
+import { AdminVideosService } from './videos/admin-videos.service.js';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
 import { CmsModule } from '../cms/cms.module.js';
@@ -30,14 +32,15 @@ import { FeedPostsController, MyFeedPostsController } from './videos/feed-posts.
 import { FeedPostsService } from './videos/feed-posts.service.js';
 import { VideoEngagementService } from './videos/video-engagement.service.js';
 import { MyVideosController, ShopVideosController, VideosController } from './videos/videos.controller.js';
-import { MyProfileFollowsController, ProfilesController } from './videos/profiles.controller.js';
+import { MyLikedVideosController, MyProfileFollowsController, ProfilesController } from './videos/profiles.controller.js';
 import { ProfilesService } from './videos/profiles.service.js';
 
 /** Categories, units, products, variants and moderation (§2.5, §2.6, §3.3). */
 @Module({
   imports: [AuthModule, CmsModule, MediaModule, PromotionsModule, NotificationsModule, OrdersModule],
-  controllers: [ChatController, PhotoSearchController, CategoriesController, UnitsController, ProductsController, ShopProductsController, AdminProductsController, AdminCatalogController, VideosController, MyVideosController, ShopVideosController, FeedPostsController, MyFeedPostsController, ProfilesController, MyProfileFollowsController, ShopCommissionController, AdminCommissionController],
+  controllers: [AdminVideosController, ChatController, PhotoSearchController, CategoriesController, UnitsController, ProductsController, ShopProductsController, AdminProductsController, AdminCatalogController, VideosController, MyVideosController, ShopVideosController, FeedPostsController, MyFeedPostsController, ProfilesController, MyProfileFollowsController, MyLikedVideosController, ShopCommissionController, AdminCommissionController],
   providers: [
+    AdminVideosService,
     CommissionRequestsService,
     CategoriesService,
     ProductsService,

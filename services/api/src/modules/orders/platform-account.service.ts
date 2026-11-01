@@ -11,7 +11,7 @@ import { StorageService } from '../media/storage.service.js';
 const KEY = 'paymentAccount';
 const qrPrefix = () => filePrefix(storageFolder.platformPayments(), 'payment-qr');
 
-/** Taladonline's account that customers transfer to (`Setting.paymentAccount`). */
+/** Vreview's account that customers transfer to (`Setting.paymentAccount`). */
 export interface PlatformAccount {
   bankCode: BankCode | null;
   accountName: string | null;
@@ -22,7 +22,7 @@ export interface PlatformAccount {
 type Stored = { bankCode?: BankCode | null; accountName?: string | null; accountNumber?: string | null; qrKey?: string | null };
 
 /**
- * Where customers pay transfers: one Taladonline account (QR and/or bank details) for every
+ * Where customers pay transfers: one Vreview account (QR and/or bank details) for every
  * order. Admins check the slips against it and pay shops their share as payouts.
  */
 @Injectable()

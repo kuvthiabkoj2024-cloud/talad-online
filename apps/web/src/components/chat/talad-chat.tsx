@@ -419,7 +419,7 @@ export function TaladChat({
   );
 }
 
-/** The Taladonline logo, as in the site header (white shop on brand green). */
+/** The Vreview logo, as in the site header (white shop on brand green). */
 function AssistantAvatar() {
   return (
     <span aria-hidden className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">

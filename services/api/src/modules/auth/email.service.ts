@@ -18,7 +18,7 @@ export class EmailService {
     const host = config.get('SMTP_HOST', { infer: true });
     const port = config.get('SMTP_PORT', { infer: true });
     const user = config.get('SMTP_USER', { infer: true });
-    this.from = config.get('SMTP_FROM', { infer: true }) || user || 'Taladonline <no-reply@taladonline.la>';
+    this.from = config.get('SMTP_FROM', { infer: true }) || user || 'Vreview <no-reply@vreview.app>';
     this.transport = host
       ? nodemailer.createTransport({
           host,

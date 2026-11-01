@@ -1,3 +1,4 @@
+import type { DepositType, GuaranteeUnit } from "@talad/shared";
 import "server-only";
 
 export const API_URL = process.env.API_URL ?? "http://localhost:4000/api/v1";
@@ -60,6 +61,10 @@ export interface ProductVariantOption {
 export interface ProductDetail extends Omit<ProductCard, "imageUrl" | "shop"> {
   sku: string;
   description: string | null;
+  /** What the customer gets: already double the period the shop entered. */
+  guarantee: { duration: number; unit: GuaranteeUnit; terms: string | null } | null;
+  /** Paid to the shop before ordering with cash on delivery. */
+  deposit: { type: DepositType; value: number } | null;
   stock: number;
   imageUrls: string[];
   /** The product's short video, shown first in the gallery; null without one. */
@@ -174,6 +179,23 @@ export interface CustomerProfile {
 export interface ProfileVideoPage {
   items: FeedPostItem[];
   nextCursor: string | null;
+}
+
+/** A video the viewer liked: a customer's post, or a shop's product video they saved. */
+export interface LikedVideo {
+  kind: "post" | "product";
+  id: string;
+  videoUrl: string;
+  posterUrl: string | null;
+  title: string;
+  stats: { views: number; likes: number; comments: number; shares: number };
+  likedAt: string;
+}
+
+export interface LikedVideoPage {
+  items: LikedVideo[];
+  nextCursor: string | null;
+  total: number;
 }
 
 export interface ProfileFollowerPage {

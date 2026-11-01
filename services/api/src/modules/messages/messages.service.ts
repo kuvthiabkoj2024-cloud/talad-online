@@ -126,7 +126,7 @@ export class MessagesService {
         mine: mine(side, m.sender),
         /** The shop's auto-reply. */
         bot: m.sender === 'BOT',
-        /** A Taladonline notice to both sides (e.g. an order out of stock), shown centred. */
+        /** A Vreview notice to both sides (e.g. an order out of stock), shown centred. */
         system: m.sender === 'SYSTEM',
         text: m.text,
         hasPhoto: !!m.imageKey,
@@ -255,7 +255,7 @@ export class MessagesService {
   }
 }
 
-/** Whether `sender` is the viewer's side (the shop's bot counts as the shop; Taladonline is neither). */
+/** Whether `sender` is the viewer's side (the shop's bot counts as the shop; Vreview is neither). */
 const mine = (side: Side, sender: string) =>
   sender !== 'SYSTEM' && (side.kind === 'customer' ? sender === 'CUSTOMER' : sender !== 'CUSTOMER');
 

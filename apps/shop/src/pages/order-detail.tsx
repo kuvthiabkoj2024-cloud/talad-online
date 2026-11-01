@@ -1,4 +1,4 @@
-import { formatPhone, provinceName, type Locale, type ShopOrderAction } from '@talad/shared'
+import { ORDER_SIDE_NOTES, formatPhone, provinceName, type Locale, type ShopOrderAction } from '@talad/shared'
 import { Button } from '@talad/ui/components/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@talad/ui/components/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@talad/ui/components/dialog'
@@ -8,11 +8,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@talad/ui/components/textarea'
 import { cn } from '@talad/ui/lib/utils'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Camera, Check, ChevronDown, CircleCheckBig, Clock3, ImageOff, Images, LoaderCircle, MapPin, MoreHorizontal, PackageCheck, Phone, Printer, ReceiptText, Tag, TriangleAlert, Store, Truck, UserRound, Zap } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Check, ChevronDown, CircleCheckBig, Clock3, ImageOff, LoaderCircle, MapPin, MoreHorizontal, PackageCheck, Phone, Printer, ReceiptText, ShieldCheck, Tag, TriangleAlert, Store, Truck, UserRound, Zap } from 'lucide-react'
+import { useState } from 'react'
 import { useParams } from 'react-router'
 import { toast } from 'sonner'
+import { BillPhotoField } from '@/components/bill-photo-field'
+import { DepositReview } from '@/components/deposit-review'
+import { NotCollectedReport } from '@/components/not-collected-report'
 import { PageBody, TopBar } from '@/components/page-header'
+import { ReplaceBill } from '@/components/replace-bill'
 import { ErrorState, LoadingState } from '@/components/states'
 import { OrderStatusBadge } from '@/components/status-badge'
 import { queryKeys, useDeliveryProviders, useMyShop, useShopProfile } from '@/hooks/queries'
@@ -68,7 +72,7 @@ export function OrderDetailPage() {
   const actions = o.actions
     .filter((a) => !HIDDEN.includes(a))
     .sort((a, b) => Number(PRIMARY.includes(b)) - Number(PRIMARY.includes(a)))
-  // The shop's next step, shown on top of the timeline (a rejected return waits on Taladonline).
+  // The shop's next step, shown on top of the timeline (a rejected return waits on Vreview).
   const next =
     o.status === 'CONFIRMED' || o.status === 'PACKED'
       ? t.orders.next.ship
@@ -77,7 +81,7 @@ export function OrderDetailPage() {
         : o.status === 'RETURN_REQUESTED' && !o.dispute
           ? t.orders.next.return
           : null
-  // A platform coupon is Taladonline's discount: it's paid back to the shop.
+  // A platform coupon is Vreview's discount: it's paid back to the shop.
   const net = o.total + o.platformDiscount - o.commissionAmount
   // Printed on bills and stickers: the profile has the address, the shop the logo and contacts.
   const printShop = {
@@ -138,9 +142,20 @@ export function OrderDetailPage() {
         )}
         {o.dispute && (
           <Notice tone="danger" icon={TriangleAlert}>
-            {fill(t.orders.disputeOpen, { reason: o.dispute.reason })}
+            {fill(t.orders.disputeOpen, { reason: t.orders.returnReasons[o.dispute.reason as keyof typeof t.orders.returnReasons] ?? o.dispute.reason })}
           </Notice>
         )}
+        <DepositReview order={o} />
+        {o.billIssueAt && o.billReplaceable && (
+          <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
+            <p className="flex items-start gap-2">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+              {fill(t.orders.replaceBill.reported, { date: formatDate(o.billIssueAt, locale, true) })}
+            </p>
+            <ReplaceBill order={o} />
+          </div>
+        )}
+        {o.returnable && <NotCollectedReport number={o.number} />}
 
         <div className="grid gap-5 lg:grid-cols-[1fr_20rem]">
           <div className="flex min-w-0 flex-col gap-5">
@@ -157,6 +172,12 @@ export function OrderDetailPage() {
                         <span className="font-mono">{i.sku}</span>
                         {i.variant && ` · ${i.variant}`}
                       </span>
+                      {i.guarantee && (
+                        <span className="mt-0.5 flex items-center gap-1 text-xs font-medium text-primary">
+                          <ShieldCheck className="size-3.5" />
+                          {i.guarantee.duration} {t.editor.guarantee.units[i.guarantee.unit]}
+                        </span>
+                      )}
                     </span>
                     <span className="text-right text-sm tabular-nums">
                       <span className="block text-muted-foreground">
@@ -271,6 +292,13 @@ export function OrderDetailPage() {
                     {o.payment.paidAt && <p className="text-xs text-muted-foreground">{fill(t.orders.paidAt, { date: formatDate(o.payment.paidAt, locale, true) })}</p>}
                   </>
                 )}
+                {o.deposit && (
+                  <>
+                    <Row label={t.orders.deposit.title} value={formatMoney(o.deposit.amount, locale)} />
+                    <p className="text-right text-xs text-muted-foreground">{t.orders.deposit.status[o.deposit.status]}</p>
+                    {(o.deposit.status === 'PENDING' || o.deposit.status === 'CONFIRMED') && <Row label={t.orders.deposit.rest} value={formatMoney(o.collectOnDelivery, locale)} strong />}
+                  </>
+                )}
                 {o.status === 'PENDING' && o.paymentDueAt && (
                   <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Clock3 className="size-3.5" />
@@ -317,6 +345,7 @@ export function OrderDetailPage() {
                   {o.deliveryProvider && <Row label={t.orders.courier} value={o.deliveryProvider.name} />}
                   {o.trackingNumber && <Row label={t.orders.tracking} value={<span className="font-mono">{o.trackingNumber}</span>} />}
                   {o.hasShippingBill && <ShippingBill number={o.number} label={t.orders.viewBill} />}
+                  {o.billReplaceable && !o.billIssueAt && <ReplaceBill order={o} />}
                   {(o.status === 'SHIPPED' || o.status === 'DELIVERED') && o.autoConfirmAt && (
                     <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
                       <Truck className="mt-0.5 size-3.5 shrink-0" />
@@ -361,12 +390,8 @@ function ActionDialog({ order, action, onClose }: { order: ShopOrderDetail; acti
   const providers = useDeliveryProviders()
   const [reason, setReason] = useState('')
   const [providerId, setProviderId] = useState(order.deliveryProvider?.id ?? '')
-  const cameraInput = useRef<HTMLInputElement>(null)
-  const galleryInput = useRef<HTMLInputElement>(null)
   const [bill, setBill] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const billPreview = useMemo(() => (bill ? URL.createObjectURL(bill) : null), [bill])
-  useEffect(() => () => void (billPreview && URL.revokeObjectURL(billPreview)), [billPreview])
 
   const run = useMutation({
     mutationFn: async (a: ShopOrderAction) => {
@@ -392,12 +417,6 @@ function ActionDialog({ order, action, onClose }: { order: ShopOrderDetail; acti
       setError(code && code in t.orders.errors ? t.orders.errors[code as keyof Dict['orders']['errors']] : t.common.saveError)
     },
   })
-
-  function pickBill(e: React.ChangeEvent<HTMLInputElement>) {
-    setBill(e.target.files?.[0] ?? null)
-    setError(null)
-    e.target.value = ''
-  }
 
   function close() {
     setReason('')
@@ -432,36 +451,7 @@ function ActionDialog({ order, action, onClose }: { order: ShopOrderDetail; acti
           {/* Pickup has no parcel: no courier or bill to add. */}
           {action === 'ship' && !order.pickup && (
             <>
-              <div className="flex flex-col gap-1.5">
-                <Label required={!order.urgentDelivery}>
-                  {t.orders.bill}
-                  {order.urgentDelivery && <span className="font-normal text-muted-foreground"> ({t.common.optional})</span>}
-                </Label>
-                {billPreview ? (
-                  <div className="h-48 overflow-hidden rounded-xl border bg-muted/40 p-1">
-                    <img src={billPreview} alt={t.orders.bill} className="size-full rounded-lg object-contain" />
-                  </div>
-                ) : (
-                  <div className="flex h-24 flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed bg-muted/40 text-sm text-muted-foreground">
-                    <ReceiptText className="size-7" />
-                    {t.orders.addBill}
-                  </div>
-                )}
-                {/* Phones: take the photo now, or pick one already in the gallery. */}
-                <div className="grid grid-cols-2 gap-2">
-                  <Button type="button" variant="outline" onClick={() => cameraInput.current?.click()}>
-                    <Camera />
-                    {t.orders.takePhoto}
-                  </Button>
-                  <Button type="button" variant="outline" onClick={() => galleryInput.current?.click()}>
-                    <Images />
-                    {t.orders.fromGallery}
-                  </Button>
-                </div>
-                <input ref={cameraInput} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only" onChange={pickBill} />
-                <input ref={galleryInput} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={pickBill} />
-                <p className="text-xs text-muted-foreground">{billPreview ? t.orders.changeBill : t.orders.billHint}</p>
-              </div>
+              <BillPhotoField file={bill} onChange={(file) => (setBill(file), setError(null))} required={!order.urgentDelivery} />
               <div className="flex flex-col gap-1.5">
                 <Label>{t.orders.courier}</Label>
                 <Select value={providerId} onValueChange={setProviderId}>
@@ -574,13 +564,14 @@ function OrderSteps({ order: o }: { order: ShopOrderDetail }) {
   ]
   const reached = steps.findIndex((s) => s.statuses.includes(o.status))
   // When each step was reached (the latest history entry into it).
-  const at = (i: number) => [...o.history].reverse().find((h) => steps[i].statuses.includes(h.status))?.at
+  const at = (i: number) =>
+    [...o.history].reverse().find((h) => steps[i].statuses.includes(h.status) && !ORDER_SIDE_NOTES.includes(h.note ?? ''))?.at
   return (
     <Card className="py-4">
       <CardContent className="px-4">
         <ol className="grid grid-cols-3">
           {steps.map((step, i) => {
-            // Reached: green check. Next: amber, in progress. A return request waits on Taladonline.
+            // Reached: green check. Next: amber, in progress. A return request waits on Vreview.
             const done = i <= reached
             const progressing = i === reached + 1 && o.status !== 'RETURN_REQUESTED'
             const Icon = STEP_ICONS[i]

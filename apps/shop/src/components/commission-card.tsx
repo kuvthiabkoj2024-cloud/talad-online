@@ -16,7 +16,7 @@ import { fill, formatDate } from '@/lib/format'
 import type { ProductCommission } from '@/lib/types'
 
 /**
- * Taladonline's commission on this product, and a request for its own rate (§2.3): a percent,
+ * Vreview's commission on this product, and a request for its own rate (§2.3): a percent,
  * or a fixed amount per unit for high-cost goods. Approved, the product pays only that.
  */
 export function CommissionCard({ productId }: { productId: string }) {

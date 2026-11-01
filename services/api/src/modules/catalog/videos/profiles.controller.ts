@@ -1,7 +1,7 @@
 import { Controller, Delete, Get, Param, ParseUUIDPipe, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsUUID } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { ArrayMaxSize, IsArray, IsInt, IsOptional, IsUUID, Matches, Max, Min } from 'class-validator';
 import type { Customer } from '../../../generated/prisma/client.js';
 import { CurrentCustomer, CustomerAuthGuard } from '../../auth/customer-auth.guard.js';
 import { ProfilesService } from './profiles.service.js';
@@ -37,6 +37,39 @@ export class ProfilesController {
   @Get('followers')
   followers(@Param('customerId', id) customerId: string, @Query() q: CommentPageQuery) {
     return this.profiles.followers(customerId, q.cursor, q.limit);
+  }
+
+  @Get('following')
+  following(@Param('customerId', id) customerId: string, @Query() q: CommentPageQuery) {
+    return this.profiles.following(customerId, q.cursor, q.limit);
+  }
+}
+
+class LikedVideosQuery {
+  /** "<ms>.<id>" from the previous page. */
+  @IsOptional()
+  @Matches(/^\d+\.[0-9a-f-]{36}$/i)
+  cursor?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit: number = 18;
+}
+
+/** The videos the signed-in customer liked: only they see these. */
+@ApiTags('catalog')
+@ApiBearerAuth()
+@UseGuards(CustomerAuthGuard)
+@Controller('me/liked-videos')
+export class MyLikedVideosController {
+  constructor(private readonly profiles: ProfilesService) {}
+
+  @Get()
+  list(@CurrentCustomer() c: Customer, @Query() q: LikedVideosQuery) {
+    return this.profiles.liked(c.id, q.cursor, q.limit);
   }
 }
 

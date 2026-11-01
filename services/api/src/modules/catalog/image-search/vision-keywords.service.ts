@@ -46,7 +46,7 @@ export class VisionKeywordsService {
   async describe(bytes: Uint8Array, mediaType: string, categories: { slug: string; name: string }[]): Promise<PhotoDescription | null> {
     if (!this.enabled || !(MEDIA_TYPES as readonly string[]).includes(mediaType)) return null;
     const prompt = [
-      'A shopper photographed something they want to buy on Taladonline, a marketplace in Laos.',
+      'A shopper photographed something they want to buy on Vreview, a marketplace in Laos.',
       'Identify the main product in the photo. Reply with JSON only, no prose:',
       '{"label": "short product name in English", "keywords_en": ["3-6 search words, most specific first"], "keywords_lo": ["the same in Lao"], "category": "one slug from the list or null"}',
       'Use generic product words (e.g. "coffee beans", "silk skirt", "earbuds"), not brand guesses.',

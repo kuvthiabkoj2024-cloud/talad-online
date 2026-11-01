@@ -1,4 +1,4 @@
-import { formatMoney } from "@talad/shared";
+import { formatMoney, pointTierRanges } from "@talad/shared";
 import { Coins, Gift, ShoppingBag } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -21,7 +21,9 @@ export default async function PointsPage() {
   const { account: dict } = await getDictionary();
   await requireCustomer(locale, `/${locale}/account/points`);
   const points = await apiGetAsCustomer<PointsView>("/me/points");
-  const p = points ?? { balance: 0, pointValue: 0, worth: 0, earnPer: 0, expiryDays: null, items: [], nextCursor: null };
+  const p = points ?? { balance: 0, owed: 0, pointValue: 0, worth: 0, earnTiers: [], earnPer: 0, expiryDays: null, items: [], nextCursor: null };
+  // A range worth no points isn't a promise to show.
+  const ranges = pointTierRanges(p.earnTiers).filter((r) => r.points > 0);
 
   return (
     <>
@@ -30,6 +32,7 @@ export default async function PointsPage() {
         <Coins aria-hidden strokeWidth={1.25} className="absolute -bottom-6 -right-4 size-40 text-white/10" />
         <p className="text-sm text-white/80">{dict.pointsBalanceLabel}</p>
         <p className="mt-1 text-4xl font-bold tabular-nums">{p.balance.toLocaleString("en-US")}</p>
+        {p.owed > 0 && <p className="mt-1 text-sm font-medium">{interpolate(dict.pointsOwed, { n: p.owed.toLocaleString("en-US") })}</p>}
         {p.pointValue > 0 && <p className="mt-1 text-sm font-medium">{interpolate(dict.pointsWorth, { amount: formatMoney(p.worth, locale) })}</p>}
         <Link
           href={`/${locale}`}
@@ -47,6 +50,26 @@ export default async function PointsPage() {
             {interpolate(dict.pointsHowEarn, { amount: formatMoney(p.earnPer, locale) })}
           </li>
         )}
+        {ranges.length > 0 && (
+          <li className="flex items-start gap-2">
+            <Gift className="mt-0.5 size-4 shrink-0 text-primary" />
+            <span>
+              {dict.pointsTiersTitle}
+              <span className="mt-1 flex flex-col gap-0.5 font-medium">
+                {ranges.map((r) => (
+                  <span key={r.upTo ?? "open"}>
+                    {interpolate(r.upTo === null ? (r.over ? dict.pointsTierAbove : dict.pointsTierAny) : r.over ? dict.pointsTierRange : dict.pointsTierUpTo, {
+                      min: formatMoney(r.over, locale),
+                      max: r.upTo === null ? "" : formatMoney(r.upTo, locale),
+                      n: r.points.toLocaleString("en-US"),
+                    })}
+                  </span>
+                ))}
+              </span>
+            </span>
+          </li>
+        )}
+        {(ranges.length > 0 || p.earnPer > 0) && <li className="pl-6 text-xs text-muted-foreground">{dict.pointsExcluded}</li>}
         {p.pointValue > 0 && (
           <li className="flex items-start gap-2">
             <Coins className="mt-0.5 size-4 shrink-0 text-primary" />

@@ -36,6 +36,10 @@ export function RealtimeBridge() {
         refresh()
         // The shops list shows the new application straight away.
         if (event.type === 'SHOP_APPLICATION') void queryClient.invalidateQueries({ queryKey: ['admin', 'shops'] })
+        if (event.type === 'RETURN') {
+          void queryClient.invalidateQueries({ queryKey: ['admin', 'disputes'] })
+          void queryClient.invalidateQueries({ queryKey: ALERTS_KEY })
+        }
         // A transfer to check or a refund to make: the queues, order lists and sidebar badges update.
         if (event.type === 'PAYMENT' || event.type === 'REFUND') {
           void queryClient.invalidateQueries({ queryKey: ['admin', 'payments'] })

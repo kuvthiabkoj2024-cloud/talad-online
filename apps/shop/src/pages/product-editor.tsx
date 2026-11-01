@@ -1,9 +1,10 @@
-import { MEDIA_LIMITS, PRODUCT_RULES, type ProductSaveIntent } from '@talad/shared'
+import { MEDIA_LIMITS, PRODUCT_RULES, type ProductSaveIntent, DEPOSIT_RULES, DEPOSIT_TYPES, GUARANTEE_RULES, GUARANTEE_UNITS, customerGuarantee, type DepositType, type GuaranteeUnit } from '@talad/shared'
 import { Button } from '@talad/ui/components/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@talad/ui/components/card'
 import { Input } from '@talad/ui/components/input'
 import { MoneyInput } from '@talad/ui/components/money-input'
 import { Label, RequiredMark } from '@talad/ui/components/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@talad/ui/components/select'
 import { Switch } from '@talad/ui/components/switch'
 import { Textarea } from '@talad/ui/components/textarea'
 import { cn } from '@talad/ui/lib/utils'
@@ -11,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, ImagePlus, Info, LoaderCircle, Shuffle, Trash2, TriangleAlert, Video, X } from 'lucide-react'
 import { useId, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
+import { Link } from 'react-router'
 import { toast } from 'sonner'
 import { CommissionCard } from '@/components/commission-card'
 import { PageBody, TopBar } from '@/components/page-header'
@@ -18,7 +20,7 @@ import { ProductOptionsEditor } from '@/components/product-options'
 import { SearchSelect } from '@/components/search-select'
 import { ErrorState, LoadingState } from '@/components/states'
 import { ProductStatusBadge } from '@/components/status-badge'
-import { queryKeys, useCategories, useUnits } from '@/hooks/queries'
+import { queryKeys, useCategories, useShopProfile, useUnits } from '@/hooks/queries'
 import type { Dict } from '@/i18n/en'
 import { useI18n } from '@/i18n/context'
 import { ApiError, api, send, upload } from '@/lib/api'
@@ -46,6 +48,13 @@ interface FormState {
   compareAtPrice: string
   stock: string
   lowStockThreshold: string
+  guaranteeOn: boolean
+  guaranteeDuration: string
+  guaranteeUnit: GuaranteeUnit
+  guaranteeTerms: string
+  depositOn: boolean
+  depositType: DepositType
+  depositValue: string
   hasOptions: boolean
   /** Up to two options (e.g. colour and size), values in order. */
   options: OptionGroup[]
@@ -68,6 +77,13 @@ function fromProduct(p?: ShopProductDetail): FormState {
     compareAtPrice: p?.compareAtPrice != null ? String(p.compareAtPrice) : '',
     stock: p ? String(p.stock) : '0',
     lowStockThreshold: p ? String(p.lowStockThreshold) : '5',
+    guaranteeOn: p?.guarantee != null,
+    guaranteeDuration: p?.guarantee ? String(p.guarantee.duration) : '',
+    guaranteeUnit: p?.guarantee?.unit ?? 'MONTH',
+    guaranteeTerms: p?.guarantee?.terms ?? '',
+    depositOn: p?.deposit != null,
+    depositType: p?.deposit?.type ?? 'PERCENT',
+    depositValue: p?.deposit ? String(p.deposit.value) : '',
     hasOptions: (p?.variants.length ?? 0) > 0,
     options: (p?.options ?? []).map((o) => ({ uid: uid(), name: o.name, values: [...o.values] })),
     cells: Object.fromEntries(
@@ -132,6 +148,7 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
   const [images, setImages] = useState<Media[]>(() => product?.images.map(toMedia) ?? [])
   const [video, setVideo] = useState<Media | null>(() => (product?.video ? toMedia(product.video) : null))
   const [errors, setErrors] = useState<Partial<Record<string, ErrorKey>>>({})
+  const profile = useShopProfile()
   const imageInput = useRef<HTMLInputElement>(null)
   const videoInput = useRef<HTMLInputElement>(null)
 
@@ -212,6 +229,8 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
     if (form.compareAtPrice.trim() && !(num(form.compareAtPrice) > num(form.price))) e.compareAtPrice = 'compareAt'
     if (!PRODUCT_RULES.skuPattern.test(form.sku.trim())) e.sku = 'sku'
     if (!isWhole(form.lowStockThreshold)) e.lowStockThreshold = 'stock'
+    if (form.guaranteeOn && !(isWhole(form.guaranteeDuration) && num(form.guaranteeDuration) >= 1 && num(form.guaranteeDuration) <= GUARANTEE_RULES.durationMax)) e.guarantee = 'guarantee'
+    if (form.depositOn && !(num(form.depositValue) >= 1 && (form.depositType === 'AMOUNT' || num(form.depositValue) <= DEPOSIT_RULES.percentMax))) e.deposit = 'deposit'
     if (form.hasOptions) {
       const names = form.options.map((o) => o.name.trim().toLowerCase())
       if (names.some((n) => !n)) e.options = 'optionName'
@@ -247,6 +266,8 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
         sku: form.sku.trim(),
         price: num(form.price),
         compareAtPrice: form.compareAtPrice.trim() ? num(form.compareAtPrice) : null,
+        guarantee: form.guaranteeOn ? { duration: num(form.guaranteeDuration), unit: form.guaranteeUnit, terms: form.guaranteeTerms.trim() || undefined } : null,
+        deposit: form.depositOn ? { type: form.depositType, value: num(form.depositValue) } : null,
         stock: options ? 0 : Number(form.stock),
         lowStockThreshold: Number(form.lowStockThreshold),
         imageKeys: images.map((i) => i.key!),
@@ -587,6 +608,105 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
               </div>
             </CardContent>
           </Card>
+
+          <Card className="xl:self-stretch">
+            <CardHeader className="flex flex-row items-center justify-between gap-3">
+              <div>
+                <CardTitle>{t.editor.guarantee.title}</CardTitle>
+                <CardDescription>{t.editor.guarantee.hint}</CardDescription>
+              </div>
+              <Switch aria-label={t.editor.guarantee.title} checked={form.guaranteeOn} onCheckedChange={(on) => set('guaranteeOn', on)} />
+            </CardHeader>
+            {form.guaranteeOn && (
+              <CardContent className="flex flex-col gap-4">
+                <Field label={t.editor.guarantee.period} htmlFor="guaranteeDuration" required error={err('guarantee')}>
+                  <div className="grid grid-cols-[minmax(0,1fr)_8rem] gap-2">
+                    <Input id="guaranteeDuration" inputMode="numeric" value={form.guaranteeDuration} onChange={(e) => set('guaranteeDuration', e.target.value.replace(/\D/g, ''))} {...field('guarantee')} />
+                    <Select value={form.guaranteeUnit} onValueChange={(v) => set('guaranteeUnit', v as GuaranteeUnit)}>
+                      <SelectTrigger aria-label={t.editor.guarantee.period} className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {GUARANTEE_UNITS.map((u) => (
+                          <SelectItem key={u} value={u}>
+                            {t.editor.guarantee.units[u]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </Field>
+                {isWhole(form.guaranteeDuration) && num(form.guaranteeDuration) >= 1 && (
+                  <p className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+                    <Info className="mt-0.5 size-4 shrink-0" />
+                    {fill(t.editor.guarantee.doubled, {
+                      entered: `${form.guaranteeDuration} ${t.editor.guarantee.units[form.guaranteeUnit]}`,
+                      given: `${customerGuarantee(num(form.guaranteeDuration))} ${t.editor.guarantee.units[form.guaranteeUnit]}`,
+                    })}
+                  </p>
+                )}
+                <Field label={t.editor.guarantee.terms} htmlFor="guaranteeTerms" hint={t.editor.guarantee.termsHint}>
+                  <Textarea id="guaranteeTerms" rows={3} maxLength={GUARANTEE_RULES.termsMax} value={form.guaranteeTerms} onChange={(e) => set('guaranteeTerms', e.target.value)} />
+                </Field>
+              </CardContent>
+            )}
+          </Card>
+
+          {/* Only for a shop taking cash on delivery; a saved deposit waits while COD is off. */}
+          {profile.data?.cod.enabled && (
+            <Card className="xl:self-stretch">
+              <CardHeader className="flex flex-row items-center justify-between gap-3">
+                <div>
+                  <CardTitle>{t.editor.deposit.title}</CardTitle>
+                  <CardDescription>{t.editor.deposit.hint}</CardDescription>
+                </div>
+                <Switch aria-label={t.editor.deposit.title} checked={form.depositOn} onCheckedChange={(on) => set('depositOn', on)} />
+              </CardHeader>
+              {form.depositOn && (
+                <CardContent className="flex flex-col gap-4">
+                  {!profile.data.payment.hasQr && (
+                    <p className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-900 dark:bg-red-950/40 dark:text-red-100">
+                      <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+                      <span>
+                        {t.editor.errors.DEPOSIT_QR_REQUIRED}{' '}
+                        <Link to="/profile" className="font-medium underline">
+                          {t.editor.deposit.addQr}
+                        </Link>
+                      </span>
+                    </p>
+                  )}
+                  <Field label={t.editor.deposit.value} htmlFor="depositValue" required error={err('deposit')}>
+                    <div className="grid grid-cols-[minmax(0,1fr)_8rem] gap-2">
+                      {form.depositType === 'AMOUNT' ? (
+                        <MoneyInput id="depositValue" value={form.depositValue} onValueChange={(v) => set('depositValue', v)} {...field('deposit')} />
+                      ) : (
+                        <Input id="depositValue" inputMode="numeric" value={form.depositValue} onChange={(e) => set('depositValue', e.target.value.replace(/\D/g, ''))} {...field('deposit')} />
+                      )}
+                      <Select
+                        value={form.depositType}
+                        onValueChange={(v) => {
+                          set('depositType', v as DepositType)
+                          set('depositValue', '')
+                        }}
+                      >
+                        <SelectTrigger aria-label={t.editor.deposit.value} className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DEPOSIT_TYPES.map((d) => (
+                            <SelectItem key={d} value={d}>
+                              {t.editor.deposit.types[d]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </Field>
+                  <p className="text-xs text-muted-foreground">{t.editor.deposit.terms}</p>
+                </CardContent>
+              )}
+            </Card>
+          )}
 
           <Card className="xl:col-span-2">
             <CardHeader className="flex flex-row items-center justify-between gap-3">

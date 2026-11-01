@@ -2,6 +2,7 @@
 
 import { formatMoney, type Locale } from "@talad/shared";
 import {
+  ArrowLeft,
   Check,
   Clapperboard,
   Eye,
@@ -73,6 +74,7 @@ export function FeedView({
   initialItems,
   initialCursor,
   openComments,
+  backHref,
 }: {
   locale: Locale;
   dict: Dict;
@@ -80,6 +82,8 @@ export function FeedView({
   initialItems: FeedEntry[];
   initialCursor: string | null;
   openComments?: Focus;
+  /** Opened from a profile: a way back to it. */
+  backHref?: string;
 }) {
   const router = useRouter();
   const { customer } = useSession();
@@ -454,6 +458,17 @@ export function FeedView({
 
       {/* Post your own video (no product needed). */}
       <NewPostButton locale={locale} label={dict.newPost} signedIn={!!customer} />
+      {backHref && (
+        <Link
+          href={backHref}
+          aria-label={dict.backToProfile}
+          title={dict.backToProfile}
+          className="fixed left-3 top-[max(0.75rem,env(safe-area-inset-top))] z-20 flex h-10 items-center gap-1.5 rounded-full bg-black/50 px-3.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70 md:top-[calc(var(--header-h)+0.75rem)]"
+        >
+          <ArrowLeft className="size-4" />
+          <span>{dict.backToProfile}</span>
+        </Link>
+      )}
 
       {/* Each sheet mounts when it opens, so it starts fresh and loads live data. */}
       {sheet?.kind === "comments" && (

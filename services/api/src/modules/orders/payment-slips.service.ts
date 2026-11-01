@@ -44,7 +44,7 @@ export function paymentCheck(slips: { status: SlipStatus }[]): PaymentCheck {
   return slips[0].status === 'APPROVED' ? 'approved' : 'rejected';
 }
 
-/** Tells the admins a payment is waiting for them (they check it against Taladonline's account). */
+/** Tells the admins a payment is waiting for them (they check it against Vreview's account). */
 export async function tellAdminsToCheck(
   notifications: NotificationsService,
   db: Prisma.TransactionClient,
@@ -63,7 +63,7 @@ export async function tellAdminsToCheck(
 }
 
 /**
- * Manual transfers (§6): customers pay Taladonline's QR/account and upload up to
+ * Manual transfers (§6): customers pay Vreview's QR/account and upload up to
  * MAX_PAYMENT_SLIPS slips per round; an admin checks them (PaymentReviewService).
  */
 @Injectable()
@@ -103,7 +103,7 @@ export class PaymentSlipsService {
       const total = formatMoney(o.grandTotal.toNumber(), 'en');
       const subject = `${again ? 'New slips' : 'New transfer order'} ${o.number} · ${total}`;
       const text = [
-        again ? 'The customer sent new payment slips. Check the transfer and approve it.' : 'A customer paid by transfer. Check it against Taladonline’s account and approve it — the shop gets the order only after that.',
+        again ? 'The customer sent new payment slips. Check the transfer and approve it.' : 'A customer paid by transfer. Check it against Vreview’s account and approve it — the shop gets the order only after that.',
         '',
         `Order: ${o.number}`,
         `Amount to receive: ${total}`,
@@ -124,7 +124,7 @@ export class PaymentSlipsService {
     return { slipKey: await this.store(customerId, file) };
   }
 
-  /** Taladonline's receiving QR, shown to signed-in customers. */
+  /** Vreview's receiving QR, shown to signed-in customers. */
   platformQr() {
     return this.account.qr();
   }

@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Taladonline — Shop local",
+    "title": "Vreview — Shop local",
     "description": "Shop from local sellers across Laos. Fast delivery, secure payments."
   },
   "header": {
@@ -61,14 +61,14 @@
     "privacy": "Privacy Policy",
     "faq": "FAQ",
     "help": "Help",
-    "sell": "Sell on Taladonline",
+    "sell": "Sell on Vreview",
     "payments": "Payment methods",
     "delivery": "Delivery services",
     "follow": "Follow us",
     "getApp": "Download the app",
     "rights": "All rights reserved.",
-    "contactUs": "Contact Taladonline",
-    "aboutTaladonline": "About Taladonline",
+    "contactUs": "Contact Vreview",
+    "aboutVreview": "About Vreview",
     "banks": "Banks",
     "wallets": "E-Wallet",
     "appSoon": "The mobile app is coming soon"
@@ -107,7 +107,16 @@
     "soundOn": "Turn sound on",
     "soundOff": "Turn sound off",
     "ownProduct": "This product is from your shop",
-    "ownProductBody": "You can't buy from your own shop. Manage it in the Seller Center."
+    "ownProductBody": "You can't buy from your own shop. Manage it in the Seller Center.",
+    "guaranteeTitle": "Guarantee: {period}",
+    "guaranteeUnits": {
+      "DAY": "{n} days",
+      "MONTH": "{n} months",
+      "YEAR": "{n} years"
+    },
+    "depositTitle": "Deposit for cash on delivery",
+    "depositPercent": "Pay {value}% of the price to the shop before ordering, and the rest on delivery.",
+    "depositAmount": "Pay {value} per item to the shop before ordering, and the rest on delivery."
   },
   "auth": {
     "signIn": "Sign in",
@@ -216,6 +225,13 @@
     "deliveryTitle": "Delivery",
     "shippingAddress": "Shipping address",
     "tracking": "Tracking no.",
+    "billReport": {
+      "action": "Wrong bill? Tell the shop",
+      "confirm": "Tell the shop this bill is wrong and ask for a new one?",
+      "yes": "Tell the shop",
+      "reported": "The shop has been told. It will upload a new bill here.",
+      "error": "Couldn't tell the shop. Please try again."
+    },
     "shippingBill": "View the courier's bill",
     "urgentDelivery": "Urgent delivery by the shop",
     "pickup": "Pick up at the shop",
@@ -236,8 +252,44 @@
     "payBefore": "Please pay before {date}, otherwise the order will be cancelled.",
     "autoConfirmOn": "This order will be marked as received on {date} unless you report a problem.",
     "cancelledTitle": "This order was cancelled",
+    "returns": {
+      "title": "Problem with your order?",
+      "body": "Send the reason with photos or a video clip. Vreview reviews it directly and tells you the outcome.",
+      "until": "You can ask for a return until {date}.",
+      "open": "Request a return",
+      "reason": "Reason",
+      "reasons": {
+        "WRONG_ITEM": "Wrong model, colour or size",
+        "DAMAGED": "Damaged or broken",
+        "NOT_AS_DESCRIBED": "Not as described",
+        "MISSING_ITEMS": "Items missing",
+        "NOT_WORKING": "Doesn't work",
+        "OTHER": "Other"
+      },
+      "details": "What happened? (optional)",
+      "files": "Photos or video clip",
+      "filesHint": "At least 1. Up to {files} files, with 1 video of up to {mb} MB.",
+      "addFiles": "Add",
+      "remove": "Remove",
+      "send": "Send to Vreview",
+      "uploading": "Sending… {percent}%",
+      "errors": {
+        "generic": "Couldn't send it. Please try again.",
+        "REASON_REQUIRED": "Choose a reason.",
+        "EVIDENCE_REQUIRED": "Add at least one photo or video clip.",
+        "TOO_MANY_FILES": "Too many files: up to 5, with 1 video.",
+        "FILE_TOO_LARGE": "That file is too large: photos up to 10 MB, videos up to 90 MB.",
+        "INVALID_FILE": "Use a JPG, PNG or WebP photo, or an MP4, MOV or WebM video.",
+        "RETURN_NOT_ALLOWED": "This order can no longer be returned here. Please contact us.",
+        "RETURN_ALREADY_REQUESTED": "A return was already requested for this order."
+      },
+      "notCollectedTitle": "The shop reported this order as not collected",
+      "notCollectedBody": "Vreview is reviewing it. Contact us if you did receive this order.",
+      "rejectedTitle": "Your return wasn't approved",
+      "pointsNote": "If this return is approved, the {n} points you earned from this order are removed."
+    },
     "refundTitle": "Return/refund requested",
-    "refundBody": "The shop is reviewing your request. We'll let you know when there's an update.",
+    "refundBody": "Vreview is reviewing your request. We'll let you know when there's an update.",
     "chatWithShop": "Chat with shop",
     "buyAgain": "Buy again",
     "orderStatus": {
@@ -346,7 +398,7 @@
     "phoneLocked": "Your phone number is used to sign in, so it can't be changed here.",
     "saved": "Saved",
     "myShop": "My shop",
-    "myShopDescription": "You can sell on Taladonline and still shop from other stores with this account.",
+    "myShopDescription": "You can sell on Vreview and still shop from other stores with this account.",
     "viewStorefront": "View storefront",
     "manageShop": "Manage in Seller Center",
     "shopStatus": {
@@ -358,18 +410,18 @@
     "viewAllOrders": "View all",
     "backToAccount": "Back to Profile",
     "openShop": "Open your shop",
-    "openShopDescription": "Sell on Taladonline with this account — free to join.",
+    "openShopDescription": "Sell on Vreview with this account — free to join.",
     "messages": "Messages",
     "receiveTitle": "Got your order?",
     "receive": "I received it",
-    "receiveConfirm": "Confirm you received everything in this order. It will be completed and can no longer be returned through the app.",
+    "receiveConfirm": "Confirm you received everything in this order. It will be completed; you then have 3 days to report a problem.",
     "receiveYes": "Yes, I received it",
     "receiveError": "Couldn't confirm. Please try again.",
     "autoComplete": "Completes automatically on {date} if you don't confirm.",
     "timelineNext": {
       "pickup": "Ready: collect it at the shop, then confirm you received it",
       "payment": "Waiting for your payment",
-      "reviewing": "Taladonline is checking your payment",
+      "reviewing": "Vreview is checking your payment",
       "rejected": "Send new payment slips",
       "preparing": "The shop is preparing your order",
       "receive": "Waiting for you to confirm you received it",
@@ -377,15 +429,22 @@
     },
     "timelineNotes": {
       "Payment slip submitted": "Payment slip sent",
-      "Payment checked by Taladonline": "Payment checked by Taladonline",
+      "Payment checked by Vreview": "Payment checked by Vreview",
       "Cash on delivery": "Cash on delivery",
       "Received by customer": "You confirmed you received it",
       "Confirmed automatically": "Completed automatically",
       "Payment not received in time": "Payment wasn't received in time",
       "Return approved": "Return approved",
       "Cancelled by the shop": "Cancelled by the shop",
+      "Customer reported the wrong bill": "You told the shop the bill is wrong",
+      "Shop uploaded a new bill": "The shop uploaded a new bill",
       "slipRejected": "Payment slip rejected: {reason}",
-      "Cancelled by customer": "You cancelled the order"
+      "Cancelled by customer": "You cancelled the order",
+      "Deposit slip submitted": "Deposit slip sent to the shop",
+      "Deposit confirmed by the shop": "The shop confirmed your deposit",
+      "Deposit slip rejected": "The shop rejected the deposit slip",
+      "Deposit not confirmed in time": "The deposit wasn't confirmed in time",
+      "Deposit returned by the shop": "The shop returned your deposit"
     },
     "pointsWarning": "Tap \"I received it\" to earn {n} points. If the order completes automatically, you won't get any points.",
     "stepWaitingPayment": "Awaiting payment",
@@ -395,6 +454,13 @@
     "pointsTitle": "My points",
     "pointsBalanceLabel": "Points balance",
     "pointsWorth": "Worth {amount} at checkout",
+    "pointsTiersTitle": "Earn points on each order, by its total — tap \"I received it\" when it arrives to get them:",
+    "pointsTierUpTo": "Up to {max}: {n} points",
+    "pointsTierRange": "Over {min}, up to {max}: {n} points",
+    "pointsTierAbove": "Over {min}: {n} points",
+    "pointsTierAny": "Any order: {n} points",
+    "pointsExcluded": "Products on promotion or discount don't earn points, and neither does an order that uses a coupon.",
+    "noPointsNote": "This order doesn't earn points: its products are on promotion or discount, it used a coupon, or it was paid for with points.",
     "pointsHowEarn": "Earn 1 point for every {amount} you spend — tap \"I received it\" when an order arrives to get them.",
     "pointsHowUse": "Use them at checkout: 1 point = {value}.",
     "pointsExpire": "Points expire {days} days after you earn them.",
@@ -415,7 +481,54 @@
     "cancelOrderConfirm": "Cancel this order? Every item in this checkout is cancelled and any points you used come back to you.",
     "cancelOrderYes": "Yes, cancel it",
     "keepOrder": "Keep the order",
-    "cancelOrderError": "Couldn't cancel. Please try again."
+    "cancelOrderError": "Couldn't cancel. Please try again.",
+    "guarantee": {
+      "label": "Guarantee: {period}",
+      "view": "View guarantee certificate",
+      "title": "Guarantee certificate",
+      "product": "Product",
+      "quantity": "Quantity",
+      "sku": "SKU",
+      "order": "Order number",
+      "shop": "Shop",
+      "customer": "Customer",
+      "period": "Guarantee period",
+      "starts": "Starts",
+      "ends": "Ends",
+      "terms": "Guarantee terms",
+      "print": "Print",
+      "back": "Back to the order",
+      "footer": "Honoured by {shop}. Keep this certificate and your order number for any claim.",
+      "units": {
+        "DAY": "{n} days",
+        "MONTH": "{n} months",
+        "YEAR": "{n} years"
+      }
+    },
+    "deposit": {
+      "paid": "Deposit",
+      "rest": "To pay on delivery",
+      "viewSlip": "View deposit slip",
+      "pendingTitle": "Waiting for the shop to confirm your {amount} deposit",
+      "pendingBody": "The shop checks its account, then prepares your order. If it isn't confirmed by {date}, the order is cancelled and the shop must return the deposit.",
+      "rejectedTitle": "The shop couldn't confirm your deposit slip",
+      "rejectedBody": "Send a new slip by {date}, or the order is cancelled.",
+      "returnDueTitle": "The shop must return your {amount} deposit",
+      "returnDueBody": "{shop} pays it back to you directly. Contact the shop in chat if you need to arrange it.",
+      "returnedTitle": "Deposit of {amount} returned",
+      "returnedBody": "The shop says it sent this back to you. If you didn't get it, contact the shop or Vreview.",
+      "keptTitle": "The shop kept your {amount} deposit",
+      "keptBody": "The order wasn't collected, so the deposit isn't returned.",
+      "status": {
+        "PENDING": "Waiting for the shop",
+        "CONFIRMED": "Confirmed by the shop",
+        "REJECTED": "Slip rejected",
+        "RETURN_DUE": "To be returned by the shop",
+        "RETURNED": "Returned by the shop",
+        "KEPT": "Kept by the shop"
+      }
+    },
+    "pointsOwed": "You owe {n} points from a returned order. New points pay this off first."
   },
   "cart": {
     "title": "Cart",
@@ -469,11 +582,11 @@
       "BCEL_ONE": "Pay with the BCEL One app",
       "LAPNET": "Pay by LAPNet QR from any member bank",
       "U_MONEY": "Pay with your U-Money wallet",
-      "BANK_TRANSFER": "Transfer to Taladonline's QR with any bank app, then upload the slip"
+      "BANK_TRANSFER": "Transfer to Vreview's QR with any bank app, then upload the slip"
     },
     "payShop": "Pay {shop}",
-    "scanTitle": "Scan QR to pay Taladonline",
-    "scanBody": "Scan with BCEL One or any bank app and transfer the exact amount below to Taladonline. Keep your transfer slip.",
+    "scanTitle": "Scan QR to pay Vreview",
+    "scanBody": "Scan with BCEL One or any bank app and transfer the exact amount below to Vreview. Keep your transfer slip.",
     "amountToPay": "Amount to pay",
     "downloadQr": "Download QR",
     "saveQrHint": "Screenshot or download the QR",
@@ -500,7 +613,7 @@
     "noteLabel": "Note (optional)",
     "notePlaceholder": "Colour, size or other instructions",
     "verifying": "Checking your payment",
-    "slipReceived": "We've received your slip. Taladonline is checking the transfer — your order goes to the shop once it's confirmed.",
+    "slipReceived": "We've received your slip. Vreview is checking the transfer — your order goes to the shop once it's confirmed.",
     "payNowTitle": "Pay for this order",
     "viewSlip": "View slip",
     "slipSentOn": "Slip sent {date}",
@@ -518,9 +631,9 @@
     "addSlip": "Add slip",
     "removeSlip": "Remove slip",
     "slipFailed": "Upload failed",
-    "payTaladonline": "Pay Taladonline",
+    "payVreview": "Pay Vreview",
     "slipRejectedTitle": "Payment not confirmed",
-    "slipRejectedBody": "Taladonline couldn't confirm your transfer: {reason}. Please send new slips (up to {n}).",
+    "slipRejectedBody": "Vreview couldn't confirm your transfer: {reason}. Please send new slips (up to {n}).",
     "sendSlips": "Send slips",
     "sendingSlips": "Sending…",
     "slipsSent": "Slips sent {date}",
@@ -529,14 +642,19 @@
       "APPROVED": "Approved",
       "REJECTED": "Rejected"
     },
-    "paymentConfirmed": "Payment confirmed by Taladonline",
-    "refundPending": "Taladonline will refund {amount} to you.",
+    "paymentConfirmed": "Payment confirmed by Vreview",
+    "refundPending": "Vreview will refund {amount} to you.",
     "refundDone": "Refunded {amount} on {date}.",
     "pointsTitle": "Loyalty points",
     "pointsUse": "Use {n} points (−{amount})",
     "pointsBalance": "You have {n} points · 1 point = {value}",
     "pointsCoverAll": "Your points pay for the whole order — nothing to transfer.",
-    "pointsLine": "Points ({n})"
+    "pointsLine": "Points ({n})",
+    "depositFor": "Deposit for {shop}",
+    "depositScanTitle": "Scan to pay the deposit to {shop}",
+    "depositScanBody": "This goes straight to the shop's own account, not Vreview. Transfer the exact amount below and keep your slip.",
+    "depositTerms": "The shop checks your deposit before preparing the order. Pay the remaining {rest} in cash on delivery. If you don't collect the order, the shop keeps the deposit. If the shop cancels it, or the order is returned, the shop gives it back to you directly.",
+    "depositRequired": "Please attach the deposit slip before confirming the order."
   },
   "cartErrors": {
     "OPTION_REQUIRED": "Please choose an option",
@@ -565,7 +683,8 @@
     "COUPON_MIN_ORDER": "Your order doesn't reach this coupon's minimum spend.",
     "SHOP_BLOCKED": "This shop isn't accepting orders from your account.",
     "PAYMENT_METHOD_DISABLED": "This payment method isn't available right now. Please choose another.",
-    "TOO_MANY_SLIPS": "You can send up to 3 slips at a time."
+    "TOO_MANY_SLIPS": "You can send up to 3 slips at a time.",
+    "DEPOSIT_SLIP_REQUIRED": "Please attach the deposit slip."
   },
   "shop": {
     "verified": "Verified",
@@ -661,7 +780,8 @@
     "ownProduct": "This is your shop's product, so you can't buy it.",
     "close": "Close",
     "shopBadge": "Shop",
-    "follow": "Follow {name}"
+    "follow": "Follow {name}",
+    "backToProfile": "Back to profile"
   },
   "profile": {
     "videos": "Videos",
@@ -684,7 +804,13 @@
     "shares": "Shares",
     "joined": "Joined {date}",
     "shareProfile": "Share profile",
-    "shareTitle": "Share this profile"
+    "shareTitle": "Share this profile",
+    "liked": "Liked",
+    "noLiked": "No liked videos yet",
+    "noLikedHint": "Videos you like or save in the feed appear here.",
+    "likedPrivate": "Only you can see this list.",
+    "noFollowing": "Not following anyone yet",
+    "backToProfile": "Back to profile"
   },
   "feedPost": {
     "title": "Post a video",
@@ -693,7 +819,7 @@
     "changeVideo": "Choose another video",
     "caption": "Caption",
     "captionPlaceholder": "Say something about your video…",
-    "rules": "Only post your own videos, nothing offensive, dangerous or misleading. Taladonline may remove videos that break the rules.",
+    "rules": "Only post your own videos, nothing offensive, dangerous or misleading. Vreview may remove videos that break the rules.",
     "uploading": "Uploading… {n}%",
     "post": "Post",
     "errors": {
@@ -706,7 +832,7 @@
   },
   "notifications": {
     "title": "Notifications",
-    "description": "Order updates, promotions and news from Taladonline.",
+    "description": "Order updates, promotions and news from Vreview.",
     "markAllRead": "Mark all as read",
     "all": "All",
     "orders": "Orders",
@@ -727,7 +853,7 @@
     "pushEnabled": "Notifications are on for this device",
     "pushTurnOff": "Turn off",
     "pushDenied": "Notifications are blocked. Allow them in your browser's site settings.",
-    "pushInstall": "On iPhone and iPad, add Taladonline to your Home Screen first to get notifications.",
+    "pushInstall": "On iPhone and iPad, add Vreview to your Home Screen first to get notifications.",
     "pushFailed": "Couldn't turn them on. Please try again."
   },
   "catalog": {
@@ -741,14 +867,15 @@
   },
   "pages": {
     "updated": "Last updated {date}",
+    "contents": "Contents",
     "missing": "This page isn’t available yet."
   },
   "pwa": {
-    "title": "Get the Taladonline app",
+    "title": "Get the Vreview app",
     "body": "Install it on your phone for faster shopping and order updates — no app store needed.",
     "install": "Install",
     "later": "Not now",
-    "iosTitle": "Add Taladonline to your Home Screen",
+    "iosTitle": "Add Vreview to your Home Screen",
     "iosStep1": "Tap {icon} Share in Safari",
     "iosStep2": "Choose {icon} Add to Home Screen"
   },

@@ -23,6 +23,7 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
@@ -33,6 +34,7 @@ import type { Customer } from '../../generated/prisma/client.js';
 import { CurrentCustomer, CustomerAuthGuard } from '../auth/customer-auth.guard.js';
 import type { StoredObject } from '../media/storage.service.js';
 import { CheckoutService } from './checkout.service.js';
+import { OrderDepositsService } from './order-deposits.service.js';
 import { PaymentSlipsService } from './payment-slips.service.js';
 import { ShopOrdersService } from './shop-orders.service.js';
 
@@ -97,6 +99,11 @@ class PlaceOrderDto extends CheckoutSelectionDto {
   @MaxLength(200, { each: true })
   slipKeys?: string[];
 
+  /** COD: a slip key from POST /me/checkout/slips for each shop asking for a deposit, by shop id. */
+  @IsOptional()
+  @IsObject()
+  depositSlips?: Record<string, string>;
+
   @IsOptional()
   @IsString()
   @MaxLength(500)
@@ -116,6 +123,7 @@ export class CheckoutController {
   constructor(
     private readonly checkout: CheckoutService,
     private readonly slips: PaymentSlipsService,
+    private readonly deposits: OrderDepositsService,
   ) {}
 
   @Post('quote')
@@ -139,7 +147,13 @@ export class CheckoutController {
     return this.slips.uploadCheckoutSlip(c.id, file);
   }
 
-  /** Taladonline's receiving QR (LAO QR) for transfers. */
+  /** The shop's own QR, to pay its deposit to. */
+  @Get('shops/:shopId/deposit-qr')
+  async depositQr(@Param('shopId', new ParseUUIDPipe()) shopId: string) {
+    return image(await this.deposits.shopQr(shopId));
+  }
+
+  /** Vreview's receiving QR (LAO QR) for transfers. */
   @Get('payment-qr')
   async platformQr() {
     return image(await this.slips.platformQr());
@@ -154,7 +168,23 @@ export class OrderPaymentController {
   constructor(
     private readonly slips: PaymentSlipsService,
     private readonly shopOrders: ShopOrdersService,
+    private readonly deposits: OrderDepositsService,
   ) {}
+
+  @Get('deposit-slip')
+  async depositSlip(@CurrentCustomer() c: Customer, @Param('number') number: string) {
+    return image(await this.deposits.slipForCustomer(c.id, number));
+  }
+
+  /** A new deposit slip after the shop rejected one. Multipart field `file`. */
+  @Post('deposit-slip')
+  @HttpCode(200)
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(uploadSlip)
+  async resendDeposit(@CurrentCustomer() c: Customer, @Param('number') number: string, @UploadedFile() file?: Express.Multer.File) {
+    await this.deposits.resubmit(c.id, number, file);
+    return { ok: true };
+  }
 
   /** The courier bill photo the shop uploaded when it shipped this order. */
   @Get('shipping-bill')
@@ -162,7 +192,7 @@ export class OrderPaymentController {
     return image(await this.shopOrders.bill(null, number, c.id));
   }
 
-  /** The order's slips and whether Taladonline approved or rejected them. */
+  /** The order's slips and whether Vreview approved or rejected them. */
   @Get('payment-slips')
   slipList(@CurrentCustomer() c: Customer, @Param('number') number: string) {
     return this.slips.slips(c.id, number);

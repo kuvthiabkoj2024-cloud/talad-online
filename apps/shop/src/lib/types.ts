@@ -9,6 +9,9 @@ import type {
   ShopOrderTab,
   SocialLink,
   UrgentDelivery,
+  DepositStatus,
+  DepositType,
+  GuaranteeUnit,
 } from '@talad/shared'
 
 export type LocalizedText = Partial<Record<Locale, string>>
@@ -94,6 +97,9 @@ export interface ShopProductRow {
 /** Mirrors `ShopVideoView` / `ShopVideoList` (API `me/shop/videos`). */
 export interface ShopVideo {
   productId: string
+  /** Vreview hid it from customers; a new video clears this. */
+  hidden: boolean
+  hiddenReason: string | null
   name: string
   slug: string
   status: ProductStatus
@@ -162,6 +168,9 @@ export interface ShopProductDetail {
   sku: string
   price: number
   compareAtPrice: number | null
+  /** The period the shop gives; customers get double. */
+  guarantee: { duration: number; unit: GuaranteeUnit; terms: string | null } | null
+  deposit: { type: DepositType; value: number } | null
   stock: number
   lowStockThreshold: number
   images: MediaFile[]
@@ -206,6 +215,8 @@ export interface OrderLine {
   lineTotal: number
   imageUrl: string | null
   productSlug: string
+  /** What the customer got (already double what the shop entered). */
+  guarantee: { duration: number; unit: GuaranteeUnit } | null
 }
 
 /** Mirrors `ShopOrderSummary` (services/api orders). */
@@ -224,6 +235,11 @@ export interface ShopOrderSummary {
   urgent: boolean
   /** The customer collects it at the shop (no courier, no bill). */
   pickup: boolean
+  deliveryProvider: { id: string; name: string } | null
+  /** The customer reported the courier's bill as wrong: upload a new one. */
+  billError: boolean
+  /** Null without a deposit. */
+  depositStatus: DepositStatus | null
 }
 
 export interface ShopOrderList {
@@ -249,16 +265,19 @@ export interface ShopOrderDetail extends Omit<ShopOrderSummary, 'customer' | 'pa
   subtotal: number
   discountTotal: number
   shippingFee: number
-  /** Part of the discount Taladonline funds (platform coupon), paid back to the shop. */
+  /** Part of the discount Vreview funds (platform coupon), paid back to the shop. */
   platformDiscount: number
   commissionAmount: number
   note: string | null
   customer: { id: string; name: string; phone: string | null }
   shippingAddress: ShippingAddress | null
-  deliveryProvider: { id: string; name: string } | null
   trackingNumber: string | null
   /** A courier bill photo was uploaded when shipping. */
   hasShippingBill: boolean
+  /** When the customer reported the bill as wrong, until a new one is uploaded. */
+  billIssueAt: string | null
+  /** The parcel is on its way, so its bill can still be replaced. */
+  billReplaceable: boolean
   /** Delivered by the shop itself as urgent delivery (fee in `shippingFee`). */
   urgentDelivery: boolean
   autoConfirmAt: string | null
@@ -272,6 +291,11 @@ export interface ShopOrderDetail extends Omit<ShopOrderSummary, 'customer' | 'pa
     | null
   history: { status: OrderStatus; note: string | null; actor: 'SHOP' | 'CUSTOMER' | 'ADMIN' | null; at: string }[]
   dispute: { status: string; reason: string; createdAt: string } | null
+  /** A cash-on-delivery order the shop can report as never collected. */
+  returnable: boolean
+  deposit: { amount: number; status: DepositStatus; rejectReason: string | null; dueAt: string | null } | null
+  /** What's left to collect in cash on delivery (the total less a confirmed deposit). */
+  collectOnDelivery: number
   actions: ShopOrderAction[]
 }
 
@@ -336,21 +360,33 @@ export interface ShopFinance {
   }
   inProgress: { orders: number; amount: number }
   refunded: { orders: number; amount: number }
-  balance: number
-  payouts: {
-    id: string
-    periodStart: string
-    periodEnd: string
-    gross: number
-    commission: number
-    refunds: number
-    net: number
-    status: 'SCHEDULED' | 'PROCESSING' | 'PAID' | 'FAILED'
-    paidAt: string | null
-    reference: string | null
-    /** Taladonline's transfer slip (GET /me/shop/finance/payouts/:id/slip). */
-    hasSlip: boolean
-  }[]
+  /** Everything Vreview still has to pay the shop, whatever the period. */
+  pending: {
+    count: number
+    amount: number
+    /** Batches made but not paid yet. */
+    payouts: ShopPayout[]
+    /** Completed orders in no batch yet (newest first, the list may be cut short). */
+    orders: { number: string; completedAt: string | null; net: number; readyAt: string | null; ready: boolean }[]
+    ordersTotal: number
+  }
+  /** Payouts paid or failed. */
+  payouts: ShopPayout[]
+}
+
+export interface ShopPayout {
+  id: string
+  periodStart: string
+  periodEnd: string
+  gross: number
+  commission: number
+  refunds: number
+  net: number
+  status: 'SCHEDULED' | 'PROCESSING' | 'PAID' | 'FAILED'
+  paidAt: string | null
+  reference: string | null
+  /** Vreview's transfer slip (GET /me/shop/finance/payouts/:id/slip). */
+  hasSlip: boolean
 }
 
 /** Mirrors `ShopStats`. */
@@ -452,7 +488,7 @@ export interface ChatMessage {
   mine: boolean
   /** The shop's chat bot replied automatically. */
   bot: boolean
-  /** A Taladonline notice to both sides (e.g. an order out of stock). */
+  /** A Vreview notice to both sides (e.g. an order out of stock). */
   system?: boolean
   /** A shared location (e.g. where the customer wants delivery). */
   location?: { lat: number; lng: number } | null
@@ -530,7 +566,7 @@ export interface InboxPage {
   nextCursor: string | null
 }
 
-/** A month of cash-on-delivery sales and the commission owed to Taladonline (`GET /me/shop/cod`). */
+/** A month of cash-on-delivery sales and the commission owed to Vreview (`GET /me/shop/cod`). */
 export interface CodMonth {
   month: string
   from: string
@@ -540,16 +576,16 @@ export interface CodMonth {
   commission: number
   /** commission ÷ sales, percent */
   rate: number
-  /** Taladonline-funded discounts (coupons, points) on these orders: off what the shop owes. */
+  /** Vreview-funded discounts (coupons, points) on these orders: off what the shop owes. */
   credit: number
-  /** commission − credit; negative = Taladonline owes the shop. */
+  /** commission − credit; negative = Vreview owes the shop. */
   toTransfer: number
   inProgress: { orders: number; sales: number }
   items: { number: string; completedAt: string; customer: string; sales: number; commission: number }[]
   account: { bankCode: string | null; accountName: string | null; accountNumber: string | null; hasQr: boolean } | null
 }
 
-/** Taladonline's commission on one product and the shop's latest request for its own (§2.3). */
+/** Vreview's commission on one product and the shop's latest request for its own (§2.3). */
 export interface ProductCommission {
   current: { commission: Commission; source: 'PRODUCT' | 'CATEGORY' | 'SHOP' | 'DEFAULT' }
   request: {

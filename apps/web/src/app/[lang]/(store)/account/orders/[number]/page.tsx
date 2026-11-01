@@ -1,5 +1,5 @@
-import { formatMoney, formatPhone, provinceName, SLIP_PAYMENT_METHODS } from "@talad/shared";
-import { ArrowLeft, Check, CircleAlert, CircleX, Clock, CreditCard, LoaderCircle, MapPin, MessageCircleMore, MessageSquareText, RotateCcw, Store, TriangleAlert, Truck, Zap } from "lucide-react";
+import { billCorrectable, BILL_REPLACED_NOTE, formatMoney, formatPhone, provinceName, SLIP_PAYMENT_METHODS } from "@talad/shared";
+import { ArrowLeft, Banknote, Check, CircleAlert, CircleX, Clock, CreditCard, LoaderCircle, MapPin, MessageCircleMore, MessageSquareText, RotateCcw, ShieldCheck, Store, TriangleAlert, Truck, Zap } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -7,7 +7,10 @@ import { OrderProgress } from "@/components/account/order-progress";
 import { OrderStatusBadge } from "@/components/account/order-status-badge";
 import { OrderThumb } from "@/components/account/order-thumb";
 import { CancelOrderButton } from "@/components/account/cancel-order-button";
+import { DepositResend } from "@/components/account/deposit-resend";
 import { ReceiveOrderButton } from "@/components/account/receive-order-button";
+import { ReportBillButton } from "@/components/account/report-bill-button";
+import { ReturnRequest } from "@/components/account/return-request";
 import { ShippingBill } from "@/components/account/shipping-bill";
 import { OrderPayment } from "@/components/cart/order-payment";
 import { interpolate, productPath } from "@/lib/format";
@@ -41,6 +44,7 @@ const PAYMENT_TONE: Record<PaymentStatus, string> = {
 export default async function OrderDetailPage({ params }: Props) {
   const locale = await getLocale();
   const { account: dict, checkout: checkoutDict, cartErrors, auth } = await getDictionary();
+  const period = (g: { duration: number; unit: keyof typeof dict.guarantee.units }) => interpolate(dict.guarantee.units[g.unit], { n: g.duration });
   const { number } = await params;
   await requireCustomer(locale, `/${locale}/account/orders/${number}`);
 
@@ -48,10 +52,16 @@ export default async function OrderDetailPage({ params }: Props) {
   if (!order) notFound();
 
   const address = order.shippingAddress;
-  const refundNote = order.history.findLast((h) => h.status === "RETURN_REQUESTED")?.note;
+  const returned = order.returnRequest;
+  const returnReason = returned && (dict.returns.reasons as Record<string, string>)[returned.reason];
   const first = order.items[0];
+  const deposit = order.deposit;
+  const hasGuarantee = order.items.some((i) => i.guarantee);
+  // The address stays the same when the shop replaces the bill, so the new photo needs a new one.
+  const billVersion = order.history.findLast((h) => h.note === BILL_REPLACED_NOTE)?.at;
+  const billSrc = `/api/orders/${encodeURIComponent(order.number)}/shipping-bill${billVersion ? `?v=${encodeURIComponent(billVersion)}` : ""}`;
   const payment = order.payment;
-  // Manual transfer still open: the customer pays Taladonline (QR + slips) or sends new slips.
+  // Manual transfer still open: the customer pays Vreview (QR + slips) or sends new slips.
   const payable =
     order.status === "PENDING" &&
     payment?.status === "PENDING" &&
@@ -140,14 +150,54 @@ export default async function OrderDetailPage({ params }: Props) {
                 {interpolate(dict.pointsWarning, { n: order.pointsOnReceive })}
               </span>
             )}
+            {order.noPoints && <span className="text-xs text-muted-foreground">{dict.noPointsNote}</span>}
             <ReceiveOrderButton orderNumber={order.number} labels={dict} />
           </span>
+        </Notice>
+      )}
+      {deposit?.status === "PENDING" && (
+        <Notice tone="amber" icon={Clock} title={interpolate(dict.deposit.pendingTitle, { amount: formatMoney(deposit.amount, locale) })}>
+          {deposit.dueAt && interpolate(dict.deposit.pendingBody, { date: formatDate(deposit.dueAt, locale, true) })}
+        </Notice>
+      )}
+      {deposit?.status === "REJECTED" && (
+        <>
+          <Notice tone="orange" icon={TriangleAlert} title={dict.deposit.rejectedTitle}>
+            {deposit.rejectReason}
+            {deposit.dueAt && <span className="mt-1 block font-medium">{interpolate(dict.deposit.rejectedBody, { date: formatDate(deposit.dueAt, locale, true) })}</span>}
+          </Notice>
+          {deposit.account && (
+            <DepositResend
+              orderNumber={order.number}
+              shopId={deposit.shopId}
+              shopName={order.shop.name}
+              amount={formatMoney(deposit.amount, locale)}
+              account={deposit.account}
+              dict={checkoutDict}
+              cartErrors={cartErrors}
+            />
+          )}
+        </>
+      )}
+      {deposit?.status === "RETURN_DUE" && (
+        <Notice tone="amber" icon={Banknote} title={interpolate(dict.deposit.returnDueTitle, { amount: formatMoney(deposit.amount, locale) })}>
+          {interpolate(dict.deposit.returnDueBody, { shop: order.shop.name })}
+        </Notice>
+      )}
+      {deposit?.status === "RETURNED" && (
+        <Notice tone="grey" icon={Banknote} title={interpolate(dict.deposit.returnedTitle, { amount: formatMoney(deposit.amount, locale) })}>
+          {dict.deposit.returnedBody}
+        </Notice>
+      )}
+      {deposit?.status === "KEPT" && (
+        <Notice tone="grey" icon={Banknote} title={interpolate(dict.deposit.keptTitle, { amount: formatMoney(deposit.amount, locale) })}>
+          {dict.deposit.keptBody}
         </Notice>
       )}
       {order.status === "CANCELLED" && (
         <Notice tone="grey" icon={CircleX} title={dict.cancelledTitle}>
           {order.cancelReason && noteText(order.cancelReason, dict.timelineNotes)}
-          {/* A paid transfer: Taladonline sends the money back. */}
+          {/* A paid transfer: Vreview sends the money back. */}
           {payment && payment.method !== "COD" && (payment.status === "PAID" || payment.refundedAt) && (
             <span className="mt-1 block font-medium text-foreground">
               {payment.refundedAt
@@ -158,10 +208,23 @@ export default async function OrderDetailPage({ params }: Props) {
         </Notice>
       )}
       {order.status === "RETURN_REQUESTED" && (
-        <Notice tone="orange" icon={RotateCcw} title={dict.refundTitle}>
-          {refundNote && <span className="font-medium">“{refundNote}” · </span>}
-          {dict.refundBody}
+        <Notice tone="orange" icon={RotateCcw} title={returned?.raisedBy === "SHOP" ? dict.returns.notCollectedTitle : dict.refundTitle}>
+          {returnReason && returned?.raisedBy !== "SHOP" && <span className="font-medium">{returnReason} · </span>}
+          {returned?.raisedBy === "SHOP" ? dict.returns.notCollectedBody : dict.refundBody}
         </Notice>
+      )}
+      {returned?.status === "RESOLVED_REJECTED" && (
+        <Notice tone="grey" icon={RotateCcw} title={dict.returns.rejectedTitle}>
+          {returned.resolution}
+        </Notice>
+      )}
+      {order.returnable && (
+        <ReturnRequest
+          orderNumber={order.number}
+          deadline={order.returnDeadline && formatDate(order.returnDeadline, locale)}
+          pointsNote={order.pointsEarned > 0 ? interpolate(dict.returns.pointsNote, { n: order.pointsEarned.toLocaleString("en-US") }) : null}
+          labels={{ ...dict.returns, cancel: dict.cancel }}
+        />
       )}
 
       {order.status !== "CANCELLED" && (
@@ -215,6 +278,12 @@ export default async function OrderDetailPage({ params }: Props) {
                       {item.name}
                     </Link>
                     {item.variant && <p className="text-xs text-muted-foreground">{item.variant}</p>}
+                    {item.guarantee && (
+                      <p className="mt-0.5 flex items-center gap-1 text-xs font-medium text-primary">
+                        <ShieldCheck className="size-3.5" />
+                        {interpolate(dict.guarantee.label, { period: period(item.guarantee) })}
+                      </p>
+                    )}
                     <div className="mt-auto flex items-end justify-between gap-2 pt-1">
                       <p className="text-xs text-muted-foreground">
                         {formatMoney(item.unitPrice, locale)} x{item.quantity}
@@ -225,6 +294,16 @@ export default async function OrderDetailPage({ params }: Props) {
                 </li>
               ))}
             </ul>
+            {/* The guarantee runs from the day the order completed. */}
+            {hasGuarantee && order.completedAt && (
+              <Link
+                href={`/${locale}/guarantee/${encodeURIComponent(order.number)}`}
+                className="flex items-center justify-center gap-1.5 border-t border-border px-4 py-3 text-sm font-semibold text-primary hover:bg-primary-soft"
+              >
+                <ShieldCheck className="size-4" />
+                {dict.guarantee.view}
+              </Link>
+            )}
           </Card>
 
           <Card className="px-4 py-4">
@@ -311,7 +390,14 @@ export default async function OrderDetailPage({ params }: Props) {
                   <Row label={dict.tracking} value={<span className="font-mono">{order.trackingNumber}</span>} />
                 )}
                 {order.hasShippingBill && (
-                  <ShippingBill src={`/api/orders/${encodeURIComponent(order.number)}/shipping-bill`} label={dict.shippingBill} closeLabel={auth.close} />
+                  <ShippingBill src={billSrc} label={dict.shippingBill} closeLabel={auth.close} />
+                )}
+                {order.billReportable && <ReportBillButton orderNumber={order.number} labels={{ ...dict.billReport, cancel: dict.cancel }} />}
+                {order.billIssueAt && billCorrectable(order.status) && (
+                  <p className="flex items-start gap-1.5 rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-200">
+                    <Clock className="mt-0.5 size-3.5 shrink-0" />
+                    {dict.billReport.reported}
+                  </p>
                 )}
               </dl>
             )}
@@ -336,6 +422,16 @@ export default async function OrderDetailPage({ params }: Props) {
                 <p className="mt-1 text-xs text-muted-foreground">
                   {interpolate(dict.paidOn, { date: formatDate(order.payment.paidAt, locale, true) })}
                 </p>
+              )}
+              {deposit && (
+                <dl className="mt-3 space-y-1.5 border-t border-border pt-3 text-sm">
+                  <Row label={dict.deposit.paid} value={formatMoney(deposit.amount, locale)} />
+                  <p className="text-right text-xs text-muted-foreground">{dict.deposit.status[deposit.status]}</p>
+                  {(deposit.status === "PENDING" || deposit.status === "CONFIRMED") && <Row label={dict.deposit.rest} value={<span className="font-semibold">{formatMoney(order.collectOnDelivery, locale)}</span>} />}
+                  <a href={`/api/orders/${encodeURIComponent(order.number)}/deposit-slip`} target="_blank" rel="noreferrer" className="block text-xs font-medium text-primary hover:underline">
+                    {dict.deposit.viewSlip}
+                  </a>
+                </dl>
               )}
             </Card>
           )}

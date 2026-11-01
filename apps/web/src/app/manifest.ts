@@ -4,8 +4,8 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Taladonline",
-    short_name: "Taladonline",
+    name: "Vreview",
+    short_name: "Vreview",
     description: "Shop local products from verified shops across Laos — ຕະຫຼາດອອນລາຍຂອງລາວ",
     // Locale-less paths redirect to the visitor's language (proxy.ts).
     start_url: "/?source=pwa",

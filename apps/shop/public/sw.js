@@ -1,5 +1,5 @@
 /*
- * Taladonline Seller Center service worker (installable PWA + offline shell).
+ * Vreview Seller Center service worker (installable PWA + offline shell).
  *
  * - Navigations are network-first; the last good index.html is kept so the app still opens
  *   offline (its screens then show "check your connection"), else /offline.html.

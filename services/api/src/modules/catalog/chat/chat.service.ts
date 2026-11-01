@@ -58,7 +58,7 @@ const SUGGESTIONS: Record<ChatLocale, string[]> = {
 const SEARCH_TOOL: Tool = {
   name: 'search_products',
   description:
-    'Search the Taladonline catalog. Always call this before recommending products. Give search words in BOTH English and Lao (product names may be in either language). Returns the best matches, marked exact or related.',
+    'Search the Vreview catalog. Always call this before recommending products. Give search words in BOTH English and Lao (product names may be in either language). Returns the best matches, marked exact or related.',
   input_schema: {
     type: 'object',
     properties: {
@@ -474,7 +474,7 @@ export class ChatService {
       return `${c.slug} (${n.en ?? ''} / ${n.lo ?? ''})`;
     });
     return [
-      'You are "Market Chat" (ແຊັດຕະຫຼາດ in Lao), the friendly shopping assistant of Taladonline, an online marketplace for local shops in Laos.',
+      'You are "Market Chat" (ແຊັດຕະຫຼາດ in Lao), the friendly shopping assistant of Vreview, an online marketplace for local shops in Laos.',
       `Reply in the customer's language: Lao if they write in Lao, English if they write in English (app language: ${lang === 'lo' ? 'Lao' : 'English'}).`,
       'Keep replies short and chatty, like a helpful shop assistant on a messaging app: 1–3 sentences, an emoji at most.',
       'For any product question, call search_products first, with words in both English and Lao. Never invent products, prices or shops — only mention what the tool returned.',
@@ -482,7 +482,7 @@ export class ChatService {
       'If results are only "related", say you could not find exactly that and suggest the related ones. If nothing is found, say so and suggest other words or sending a photo.',
       'Follow-ups refer to the conversation ("in pink?" = the product discussed). If a requested colour, size or option is not available, just say sorry, it is not available (and which options exist) — do not suggest unrelated products.',
       'The app shows the product cards under your message, so mention at most 3 products by name (with price in kip, ₭) instead of listing them all.',
-      'You may ask one short question to narrow down (size, budget, use). Politely decline topics unrelated to shopping on Taladonline.',
+      'You may ask one short question to narrow down (size, budget, use). Politely decline topics unrelated to shopping on Vreview.',
       `Catalog categories: ${list.join('; ')}`,
     ].join('\n');
   }

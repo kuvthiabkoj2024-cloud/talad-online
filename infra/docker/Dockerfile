@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 # ─────────────────────────────────────────────────────────────────────────────
-# Taladonline images, one target per app (built by infra/docker/docker-compose.prod.yml):
+# Vreview images, one target per app (built by infra/docker/docker-compose.prod.yml):
 #   api    NestJS API                 node, port 4000
 #   web    Next.js storefront         node, port 3000
 #   shop   Seller Center (static)     nginx, port 80

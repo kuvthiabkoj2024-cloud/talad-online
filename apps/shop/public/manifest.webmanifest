@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Taladonline Seller Center",
+  "name": "Vreview Seller Center",
   "short_name": "Seller Center",
-  "description": "Run your Taladonline shop: products, orders, payments and stats — ສູນຜູ້ຂາຍ Taladonline",
+  "description": "Run your Vreview shop: products, orders, payments and stats — ສູນຜູ້ຂາຍ Vreview",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",

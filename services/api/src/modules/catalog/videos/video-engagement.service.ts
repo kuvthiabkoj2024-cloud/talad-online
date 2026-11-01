@@ -26,6 +26,9 @@ export interface VideoCommentView {
 
 /** A shop's video with its numbers, for Seller Center. */
 export interface ShopVideoView {
+  /** Vreview hid it from customers; a new video clears this. */
+  hidden: boolean;
+  hiddenReason: string | null;
   productId: string;
   name: string;
   slug: string;
@@ -73,7 +76,7 @@ export interface VideoCommentPage {
 }
 
 /** Only published products from approved shops have a public video. */
-const VISIBLE = { status: 'PUBLISHED', shop: { status: 'APPROVED' }, videoKey: { not: null } } as const;
+const VISIBLE = { status: 'PUBLISHED', shop: { status: 'APPROVED' }, videoKey: { not: null }, videoHidden: false } as const;
 
 const commentSelect = {
   id: true,
@@ -322,6 +325,8 @@ export class VideoEngagementService {
           status: true,
           price: true,
           videoKey: true,
+          videoHidden: true,
+          videoHiddenReason: true,
           videoViewCount: true,
           videoShareCount: true,
           videoCommentCount: true,
@@ -339,6 +344,8 @@ export class VideoEngagementService {
         slug: p.slug,
         status: p.status,
         videoUrl: this.media.publicUrl(p.videoKey!),
+        hidden: p.videoHidden,
+        hiddenReason: p.videoHiddenReason,
         imageUrl: p.images[0] ? this.media.publicUrl(p.images[0].key) : null,
         price: p.price.toNumber(),
         views: p.videoViewCount,

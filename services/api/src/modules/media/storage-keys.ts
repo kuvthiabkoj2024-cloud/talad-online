@@ -6,11 +6,13 @@
  *   c-<customerId>/payments/  slip-<uuid>.<ext>, refund-qr-<uuid>.<ext>
  *   c-<customerId>/kyc/       kyc-<uuid>.<ext> (shop application documents; private)
  *   c-<customerId>/videos/    video-<uuid>.<ext> (the customer's own feed videos; public)
+ *   c-<customerId>/returns/   evidence-<uuid>.<ext> (photos and clips sent with a return; private)
  *   s-<shopId>/profile/       payment-qr-<uuid>.<ext> (logo, cover)
  *   s-<shopId>/products/      image-<uuid>.<ext>, video-<uuid>.<ext>
  *   s-<shopId>/orders/        bill-<uuid>.<ext> (courier bills photographed when shipping; private)
+ *   s-<shopId>/returns/       evidence-<uuid>.<ext> (photos and clips sent with a return; private)
  *   p-<zero uuid>/media/      image-<uuid>.<ext> (platform banners, category icons; public)
- *   p-<zero uuid>/payments/   payment-qr-<uuid>.<ext> (Taladonline's receiving QR; private)
+ *   p-<zero uuid>/payments/   payment-qr-<uuid>.<ext> (Vreview's receiving QR; private)
  *   m-<conversationId>/photos/ photo-<uuid>.<ext> (customer ↔ shop chat photos; private)
  */
 export const storageFolder = {
@@ -19,15 +21,18 @@ export const storageFolder = {
   customerKyc: (customerId: string) => `c-${customerId}/kyc/`,
   /** Videos the customer posts to the feed (public, like product videos). */
   customerVideos: (customerId: string) => `c-${customerId}/videos/`,
+  /** Evidence sent with a return (served to admins only). */
+  customerReturns: (customerId: string) => `c-${customerId}/returns/`,
+  shopReturns: (shopId: string) => `s-${shopId}/returns/`,
   shopProfile: (shopId: string) => `s-${shopId}/profile/`,
   shopProducts: (shopId: string) => `s-${shopId}/products/`,
   /** Courier bills uploaded when shipping (served to the shop and that order's customer). */
   shopOrders: (shopId: string) => `s-${shopId}/orders/`,
-  /** Taladonline's transfer slips for the shop's payouts (served to admins and that shop). */
+  /** Vreview's transfer slips for the shop's payouts (served to admins and that shop). */
   shopPayouts: (shopId: string) => `s-${shopId}/payouts/`,
   /** Platform-owned public media uploaded in the admin console. */
   platformMedia: () => 'p-00000000-0000-0000-0000-000000000000/media/',
-  /** Taladonline's receiving QR, shown to signed-in customers at checkout. */
+  /** Vreview's receiving QR, shown to signed-in customers at checkout. */
   platformPayments: () => 'p-00000000-0000-0000-0000-000000000000/payments/',
   /** Photos in one customer ↔ shop conversation (served only to its two sides). */
   conversation: (conversationId: string) => `m-${conversationId}/photos/`,

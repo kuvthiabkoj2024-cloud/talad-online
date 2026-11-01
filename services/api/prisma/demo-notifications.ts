@@ -64,8 +64,8 @@ const EXTRAS: Extra[] = [
   {
     type: 'SYSTEM',
     ageHours: 21 * 24,
-    lo: { title: 'ຍິນດີຕ້ອນຮັບສູ່ Taladonline!', body: 'ບັນຊີຂອງທ່ານພ້ອມແລ້ວ. ເພີ່ມທີ່ຢູ່ຈັດສົ່ງເພື່ອສັ່ງຊື້ໄດ້ໄວຂຶ້ນ.' },
-    en: { title: 'Welcome to Taladonline!', body: 'Your account is ready. Add a delivery address to check out faster.' },
+    lo: { title: 'ຍິນດີຕ້ອນຮັບສູ່ Vreview!', body: 'ບັນຊີຂອງທ່ານພ້ອມແລ້ວ. ເພີ່ມທີ່ຢູ່ຈັດສົ່ງເພື່ອສັ່ງຊື້ໄດ້ໄວຂຶ້ນ.' },
+    en: { title: 'Welcome to Vreview!', body: 'Your account is ready. Add a delivery address to check out faster.' },
     link: '/account/addresses',
   },
 ];

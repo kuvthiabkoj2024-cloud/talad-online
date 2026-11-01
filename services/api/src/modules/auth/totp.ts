@@ -66,7 +66,7 @@ export function verifyTotp(secret: string, code: string, now = Date.now()): bool
 }
 
 /** `otpauth://` link the authenticator app scans (shown as a QR code). */
-export function totpUri(secret: string, account: string, issuer = 'Taladonline'): string {
+export function totpUri(secret: string, account: string, issuer = 'Vreview'): string {
   const label = encodeURIComponent(`${issuer}:${account}`);
   return `otpauth://totp/${label}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=${DIGITS}&period=${STEP_SECONDS}`;
 }

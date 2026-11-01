@@ -6,18 +6,20 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import type { ProfileFollowerPage } from "@/lib/api";
-import { loadProfileFollowers } from "@/lib/profile-actions";
+import { loadProfilePeople } from "@/lib/profile-actions";
 import { initialsOf } from "./profile-header";
 
 type Dict = Dictionary["profile"];
 
-/** Who follows the customer, newest first; each leads to that person's profile. */
+/** Who follows the customer, or who they follow, newest first; each leads to that person's profile. */
 export function ProfileFollowers({
+  list,
   customerId,
   initial,
   locale,
   dict,
 }: {
+  list: "followers" | "following";
   customerId: string;
   initial: ProfileFollowerPage;
   locale: Locale;
@@ -32,7 +34,7 @@ export function ProfileFollowers({
     if (!cursor) return;
     setFailed(false);
     startLoading(async () => {
-      const page = await loadProfileFollowers(customerId, cursor);
+      const page = await loadProfilePeople(list, customerId, cursor);
       if (!page) return setFailed(true);
       setItems((list) => [...list, ...page.items.filter((p) => !list.some((x) => x.id === p.id))]);
       setCursor(page.nextCursor);
@@ -45,7 +47,7 @@ export function ProfileFollowers({
         <span className="mb-1 flex size-16 items-center justify-center rounded-full bg-primary-soft text-primary">
           <Users className="size-8" strokeWidth={1.75} />
         </span>
-        <p className="font-semibold">{dict.noFollowers}</p>
+        <p className="font-semibold">{list === "following" ? dict.noFollowing : dict.noFollowers}</p>
       </div>
     );
   }

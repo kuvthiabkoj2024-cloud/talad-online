@@ -31,7 +31,7 @@ export class ChatbotService {
         products: published,
         hours: Object.keys(hours).length > 0,
         address: !!shop.address,
-        // Customers pay by transfer to Taladonline's account (set up by the admins).
+        // Customers pay by transfer to Vreview's account (set up by the admins).
         transfer: (await this.account.available()) !== null,
         description: !!shop.description,
       },

@@ -68,7 +68,7 @@ const EDITABLE: ShopStatus[] = ['PENDING', 'REJECTED']
 
 /**
  * Open a shop (§3.1): business details, pickup address and KYC documents. The shop is
- * PENDING until Taladonline approves it; pending or rejected applications can be edited.
+ * PENDING until Vreview approves it; pending or rejected applications can be edited.
  */
 export function RegisterPage() {
   const { account } = useAuth()
@@ -270,7 +270,7 @@ function ApplicationForm({ account, application }: { account: Account; applicati
                   errors.slug && 'border-destructive',
                 )}
               >
-                <span className="border-r bg-muted px-3 py-2 text-sm whitespace-nowrap text-muted-foreground">taladonline.com/s/</span>
+                <span className="border-r bg-muted px-3 py-2 text-sm whitespace-nowrap text-muted-foreground">vreview.app/s/</span>
                 <input
                   id="slug"
                   value={effectiveSlug}
@@ -498,7 +498,7 @@ function ShopPreview({ name, slug, description }: { name: string; slug: string; 
             <span className="truncate">{name.trim() || t.register.previewName}</span>
             <span className="shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300">{t.register.newShop}</span>
           </p>
-          <p className="truncate font-mono text-xs text-muted-foreground">taladonline.com/s/{slug || '…'}</p>
+          <p className="truncate font-mono text-xs text-muted-foreground">vreview.app/s/{slug || '…'}</p>
         </div>
         <p className="line-clamp-2 text-sm text-muted-foreground">{description.trim() || t.register.previewAbout}</p>
         <p className="border-t pt-2 text-[11px] tracking-wide text-muted-foreground uppercase">

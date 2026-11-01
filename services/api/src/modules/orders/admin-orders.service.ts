@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { SHOP_PROFILE_RULES } from '@talad/shared';
+import { NOT_COLLECTED_REASON, SHOP_PROFILE_RULES } from '@talad/shared';
 import { randomUUID } from 'node:crypto';
 import type { AdminUser, DisputeStatus, PayoutStatus, Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
@@ -8,8 +8,10 @@ import { detectImage } from '../media/image-type.js';
 import { filePrefix, storageFolder } from '../media/storage-keys.js';
 import { StorageService } from '../media/storage.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
-import { addSold, moveOrder, restoreStock, returnPoints } from './order-transitions.js';
+import { evidenceKind } from './order-returns.service.js';
+import { addSold, markCodPaid, moveOrder, removeSold, restoreStock, returnPoints, revokeEarnedPoints, settleableOrders } from './order-transitions.js';
 import { shopNet } from './checkout-pricing.js';
+import { settleDeposit } from './order-deposits.service.js';
 import { paymentOf } from './payment-slips.service.js';
 
 export type DisputeDecision = 'review' | 'refund' | 'reject';
@@ -44,8 +46,12 @@ export class AdminOrdersService {
               number: true,
               status: true,
               total: true,
+              depositAmount: true,
+              depositStatus: true,
+              pointsEarned: true,
               shop: { select: { id: true, name: true } },
               order: { select: { customer: { select: { id: true, name: true, phone: true } } } },
+              payments: { orderBy: { createdAt: 'desc' }, take: 1, select: { method: true } },
             },
           },
         },
@@ -60,6 +66,7 @@ export class AdminOrdersService {
         raisedBy: d.raisedBy,
         reason: d.reason,
         details: d.details,
+        evidence: d.evidenceKeys.map((key, index) => ({ index, kind: evidenceKind(key) })),
         refundAmount: d.refundAmount?.toNumber() ?? null,
         resolution: d.resolution,
         resolvedAt: d.resolvedAt,
@@ -70,6 +77,9 @@ export class AdminOrdersService {
           total: num(d.shopOrder.total),
           shop: d.shopOrder.shop,
           customer: d.shopOrder.order.customer,
+          paymentMethod: d.shopOrder.payments[0]?.method ?? null,
+          pointsEarned: d.shopOrder.pointsEarned,
+          deposit: d.shopOrder.depositStatus && { amount: num(d.shopOrder.depositAmount), status: d.shopOrder.depositStatus },
         },
       })),
       page: filter.page,
@@ -81,8 +91,8 @@ export class AdminOrdersService {
   }
 
   /**
-   * review → in review; refund → order cancelled and refunded (stock back);
-   * reject → the return is closed and the order completes.
+   * review → in review; refund → order cancelled and refunded (stock back), so no commission;
+   * reject → the return is closed and the order completes (and counts for commission).
    */
   async decideDispute(admin: AdminUser, id: string, decision: DisputeDecision, resolution: string | null, ip?: string) {
     const dispute = await this.prisma.dispute.findUnique({
@@ -109,6 +119,10 @@ export class AdminOrdersService {
     const so = dispute.shopOrder;
     const target = { customerId: so.order.customerId, number: so.number, shopName: so.shop.name, imageKey: so.items[0]?.product.images[0]?.key };
     const actor = { actorType: 'ADMIN' as const, actorId: admin.id };
+    // Completed before the return was asked for: sold count and points were already applied.
+    const wasCompleted = (await this.prisma.orderStatusHistory.count({ where: { shopOrderId: so.id, toStatus: 'COMPLETED' } })) > 0;
+    // A shop's "never collected": no cash changed hands, whatever an automatic completion recorded.
+    const neverPaid = dispute.reason === NOT_COLLECTED_REASON;
 
     await this.prisma.$transaction(async (tx) => {
       if (decision === 'review') {
@@ -121,11 +135,18 @@ export class AdminOrdersService {
         if (so.status !== 'CANCELLED' && (await moveOrder(tx, so.id, so.status, 'CANCELLED', { cancelReason: resolution }, { ...actor, note: resolution }))) {
           await restoreStock(tx, so.id);
           await returnPoints(tx, so.id);
+          // Not collected: the shop keeps the deposit. Any other return gives it back.
+          await settleDeposit(tx, this.notifications, so.id, neverPaid ? 'KEPT' : 'RETURN_DUE');
+          if (wasCompleted) {
+            await removeSold(tx, so.id);
+            const points = await revokeEarnedPoints(tx, so.id);
+            if (points) await this.tellPointsRemoved(tx, so.order.customerId, so.number, points);
+          }
         }
-        // A paid transfer joins Refunds (Taladonline sends the money and marks it done there).
+        // A paid transfer joins Refunds (Vreview sends the money and marks it done there).
         const payment = paymentOf(so);
         if (payment && !(payment.method !== 'COD' && payment.status === 'PAID')) {
-          await tx.payment.update({ where: { id: payment.id }, data: { status: 'REFUNDED' } });
+          await tx.payment.update({ where: { id: payment.id }, data: { status: neverPaid || payment.status === 'PENDING' ? 'FAILED' : 'REFUNDED' } });
         }
         await this.notifications.notifyOrder(tx, target, 'CANCELLED', resolution);
       } else {
@@ -133,23 +154,63 @@ export class AdminOrdersService {
           where: { id },
           data: { status: 'RESOLVED_REJECTED', resolution, resolvedById: admin.id, resolvedAt: new Date() },
         });
-        if (so.status === 'RETURN_REQUESTED' && (await moveOrder(tx, so.id, 'RETURN_REQUESTED', 'COMPLETED', {}, { ...actor, note: resolution }))) {
+        if (so.status === 'RETURN_REQUESTED' && (await moveOrder(tx, so.id, 'RETURN_REQUESTED', 'COMPLETED', {}, { ...actor, note: resolution })) && !wasCompleted) {
           // The customer asked to return it rather than confirming it: no loyalty points.
+          await markCodPaid(tx, so.id);
           await addSold(tx, so.id);
         }
-        await this.notifications.notifyOrder(tx, target, 'COMPLETED', null);
+        await this.notifications.notifyOrder(tx, target, 'COMPLETED', resolution);
       }
       if (decision !== 'review' && so.shop.ownerId) {
         const refunded = decision === 'refund';
         await this.notifications.send(tx, so.shop.ownerId, 'SYSTEM', {
-          lo: { title: refunded ? 'Taladonline ອະນຸມັດການຄືນເງິນ' : 'Taladonline ປະຕິເສດການຄືນສິນຄ້າ', body: `${so.number}: ${resolution}` },
-          en: { title: refunded ? 'Taladonline approved a refund' : 'Taladonline rejected a return', body: `${so.number}: ${resolution}` },
+          lo: { title: refunded ? 'Vreview ອະນຸມັດການຄືນເງິນ' : 'Vreview ປະຕິເສດການຄືນສິນຄ້າ', body: `${so.number}: ${resolution}` },
+          en: { title: refunded ? 'Vreview approved a refund' : 'Vreview rejected a return', body: `${so.number}: ${resolution}` },
         }, { link: `/orders/${so.number}` });
       }
       await this.audit.log({ adminId: admin.id, action: `dispute.${decision}`, entityType: 'Dispute', entityId: id, changes: { order: so.number, resolution }, ip }, tx);
     });
     const updated = await this.prisma.dispute.findUniqueOrThrow({ where: { id }, select: { id: true, status: true, resolution: true } });
     return updated;
+  }
+
+  /**
+   * Takes back an order's points by hand, for a return settled outside the app (after the window,
+   * or through support). The order itself doesn't change.
+   */
+  async revokeOrderPoints(admin: AdminUser, number: string, reason: string | null, ip?: string) {
+    if (!reason) throw new BadRequestException({ code: 'REASON_REQUIRED', message: 'Say why the points are removed' });
+    const so = await this.prisma.shopOrder.findFirst({ where: { number }, select: { id: true, number: true, order: { select: { customerId: true } } } });
+    if (!so) throw new NotFoundException('Order not found');
+    const points = await this.prisma.$transaction(async (tx) => {
+      const removed = await revokeEarnedPoints(tx, so.id, `Points taken back: ${reason}`);
+      if (!removed) throw new ConflictException({ code: 'NO_POINTS', message: 'This order has no points to remove' });
+      await this.tellPointsRemoved(tx, so.order.customerId, so.number, removed, reason);
+      await this.audit.log({ adminId: admin.id, action: 'points.revoke', entityType: 'ShopOrder', entityId: so.id, changes: { order: so.number, points: removed, reason }, ip }, tx);
+      return removed;
+    });
+    return { points };
+  }
+
+  private tellPointsRemoved(tx: Prisma.TransactionClient, customerId: string, number: string, points: number, reason?: string) {
+    return this.notifications.send(
+      tx,
+      customerId,
+      'ORDER',
+      {
+        lo: { title: `ລົບຄະແນນ ${points} ຄະແນນ`, body: `ຄະແນນທີ່ໄດ້ຈາກຄຳສັ່ງຊື້ ${number} ຖືກລົບ ເພາະມີການຄືນສິນຄ້າ.${reason ? ` ${reason}` : ''}` },
+        en: { title: `${points} points removed`, body: `The points from order ${number} were removed because it was returned.${reason ? ` ${reason}` : ''}` },
+      },
+      { link: `/account/points` },
+    );
+  }
+
+  /** A photo or clip sent with a return. */
+  async disputeEvidence(id: string, index: number) {
+    const dispute = await this.prisma.dispute.findUnique({ where: { id }, select: { evidenceKeys: true } });
+    const key = dispute?.evidenceKeys[index];
+    if (!key) throw new NotFoundException('File not found');
+    return this.storage.get(key);
   }
 
   // ─── Payouts ───────────────────────────────────────────────────────────────
@@ -219,7 +280,7 @@ export class AdminOrdersService {
   async generatePayouts(admin: AdminUser, ip?: string): Promise<{ created: number; updated: number }> {
     const cutoff = new Date();
     const orders = await this.prisma.shopOrder.findMany({
-      where: { status: 'COMPLETED', payoutId: null, updatedAt: { lte: cutoff }, payments: { none: { method: 'COD' } } },
+      where: settleableOrders(cutoff),
       select: { id: true, shopId: true, total: true, platformDiscount: true, commissionAmount: true, createdAt: true },
     });
     const byShop = new Map<string, typeof orders>();
@@ -228,7 +289,7 @@ export class AdminOrdersService {
     let created = 0;
     let updated = 0;
     for (const [shopId, list] of byShop) {
-      // What customers paid plus platform coupons Taladonline pays back (shopNet = gross − commission).
+      // What customers paid plus platform coupons Vreview pays back (shopNet = gross − commission).
       const gross = list.reduce((s, o) => s + num(o.total) + num(o.platformDiscount), 0);
       const commission = list.reduce((s, o) => s + num(o.commissionAmount), 0);
       const merged = await this.prisma.$transaction(async (tx) => {
@@ -320,7 +381,7 @@ export class AdminOrdersService {
   }
 
   /**
-   * Taladonline's transfer slip for a payout still open (multipart `file`); a new one replaces
+   * Vreview's transfer slip for a payout still open (multipart `file`); a new one replaces
    * the last. Uploaded before marking it paid.
    */
   async uploadPayoutSlip(admin: AdminUser, id: string, file: Express.Multer.File | undefined) {
@@ -374,8 +435,8 @@ export class AdminOrdersService {
       if (action === 'paid' && payout.shop.ownerId) {
         const amount = `₭${num(payout.netAmount).toLocaleString('en-US')}`;
         await this.notifications.send(tx, payout.shop.ownerId, 'SYSTEM', {
-          lo: { title: 'ໂອນເງິນໃຫ້ຮ້ານແລ້ວ', body: `Taladonline ໂອນ ${amount} ເຂົ້າບັນຊີຂອງທ່ານແລ້ວ${reference ? ` (ອ້າງອີງ ${reference})` : ''}.${payout.slipKey ? ' ເບິ່ງສະລິບໄດ້ໃນໜ້າການເງິນ.' : ''}` },
-          en: { title: 'Payout sent', body: `Taladonline paid ${amount} to your account${reference ? ` (ref. ${reference})` : ''}.${payout.slipKey ? ' See the slip in Finance.' : ''}` },
+          lo: { title: 'ໂອນເງິນໃຫ້ຮ້ານແລ້ວ', body: `Vreview ໂອນ ${amount} ເຂົ້າບັນຊີຂອງທ່ານແລ້ວ${reference ? ` (ອ້າງອີງ ${reference})` : ''}.${payout.slipKey ? ' ເບິ່ງສະລິບໄດ້ໃນໜ້າການເງິນ.' : ''}` },
+          en: { title: 'Payout sent', body: `Vreview paid ${amount} to your account${reference ? ` (ref. ${reference})` : ''}.${payout.slipKey ? ' See the slip in Finance.' : ''}` },
         }, { link: '/finance' });
       }
       await this.audit.log({ adminId: admin.id, action: `payout.${action}`, entityType: 'Payout', entityId: id, changes: { from: payout.status, to: status, reference }, ip }, tx);

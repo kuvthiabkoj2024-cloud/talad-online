@@ -24,7 +24,7 @@ function lastMonths(): string[] {
 
 /**
  * Cash-on-delivery orders: the shop keeps the cash, so at the end of each month it transfers
- * Taladonline's commission on that month's completed COD sales.
+ * Vreview's commission on that month's completed COD sales.
  */
 export function CodOrdersPage() {
   const { t, locale } = useI18n()
@@ -172,7 +172,7 @@ function CodSummary({ data: d, current }: { data: CodMonth; current: boolean }) 
   )
 }
 
-/** Taladonline's account (and QR) for the commission transfer. */
+/** Vreview's account (and QR) for the commission transfer. */
 function PayTo({ account }: { account: NonNullable<CodMonth['account']> }) {
   const { t } = useI18n()
   const c = t.codOrders

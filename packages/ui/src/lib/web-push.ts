@@ -1,5 +1,5 @@
 /**
- * Web Push in the browser: system notifications from Taladonline on desktop browsers and
+ * Web Push in the browser: system notifications from Vreview on desktop browsers and
  * installed PWAs, even when the site is closed. The app's service worker (`/sw.js`) shows them;
  * the app passes how to reach its API (`save` / `remove`), since the storefront and the Seller
  * Center send their sessions differently.

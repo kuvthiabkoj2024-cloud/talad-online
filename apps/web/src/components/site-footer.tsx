@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import { OPEN_SHOP_URL } from "@/lib/customer";
 
-/** Taladonline's own contact and social accounts. */
+/** Vreview's own contact and social accounts. */
 const CONTACT = {
   phone: "+8562077802519",
   phoneLabel: "020 7780 2519",
@@ -106,7 +106,7 @@ export function SiteFooter({ locale, dict }: { locale: Locale; dict: Dictionary[
 
         {/* About */}
         <section>
-          <Heading>{dict.aboutTaladonline}</Heading>
+          <Heading>{dict.aboutVreview}</Heading>
           <ul className="space-y-3 text-white/85">
             {pages.map(([slug, label]) => (
               <li key={slug}>
@@ -183,7 +183,7 @@ export function SiteFooter({ locale, dict }: { locale: Locale; dict: Dictionary[
         </section>
       </div>
       <p className="border-t border-white/20 py-5 text-center text-xs text-white/75">
-        © {new Date().getFullYear()} Taladonline. {dict.rights}
+        © {new Date().getFullYear()} Vreview. {dict.rights}
       </p>
     </footer>
   );

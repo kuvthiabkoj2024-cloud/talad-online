@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { commissionOf, MAX_CART_QUANTITY, type Commission } from '@talad/shared';
+import { commissionOf, MAX_CART_QUANTITY, type Commission, type DepositType, type GuaranteeUnit } from '@talad/shared';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { MediaService } from '../media/media.service.js';
@@ -28,6 +28,11 @@ const lineInclude = {
       sku: true,
       price: true,
       compareAtPrice: true,
+      guaranteeDuration: true,
+      guaranteeUnit: true,
+      guaranteeTerms: true,
+      depositType: true,
+      depositValue: true,
       stock: true,
       status: true,
       images: { orderBy: { sortOrder: 'asc' }, take: 1, select: { key: true } },
@@ -77,7 +82,13 @@ export interface CartLine {
   shop: { id: string; slug: string; name: string };
   /** Checkout-only details, not sent to clients. */
   /** `commission`: the product's own (approved), else its category's, else the shop's; null = platform default. */
-  internal: { commission: Commission | null; paymentWindowHrs: number };
+  internal: {
+    commission: Commission | null;
+    paymentWindowHrs: number;
+    /** The period the shop entered. */
+    guarantee: { duration: number; unit: GuaranteeUnit; terms: string | null } | null;
+    deposit: { type: DepositType; value: number } | null;
+  };
 }
 
 export interface CartShopGroup {
@@ -252,6 +263,8 @@ export class CartService {
       internal: {
         commission: resolveCommission([product, product.category, ...(product.category.parent ? [product.category.parent] : []), product.shop]),
         paymentWindowHrs: product.shop.paymentWindowHrs,
+        guarantee: product.guaranteeDuration && product.guaranteeUnit ? { duration: product.guaranteeDuration, unit: product.guaranteeUnit, terms: product.guaranteeTerms } : null,
+        deposit: product.depositType && product.depositValue ? { type: product.depositType, value: product.depositValue.toNumber() } : null,
       },
     };
   }

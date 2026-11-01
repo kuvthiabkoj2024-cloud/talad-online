@@ -18,13 +18,13 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     // Share previews need absolute links (og:url, og:image).
     metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
-    title: { default: meta.title, template: `%s · Taladonline` },
+    title: { default: meta.title, template: `%s · Vreview` },
     description: meta.description,
     alternates: {
       languages: Object.fromEntries(LOCALES.map((l) => [l, `/${l}`])),
     },
     // Installed-app look on iOS (Android/desktop read app/manifest.ts).
-    appleWebApp: { capable: true, title: "Taladonline", statusBarStyle: "default" },
+    appleWebApp: { capable: true, title: "Vreview", statusBarStyle: "default" },
     icons: {
       icon: [
         { url: "/icons/icon.svg", type: "image/svg+xml" },

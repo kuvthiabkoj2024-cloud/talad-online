@@ -1,3 +1,4 @@
+import { DEPOSIT_NOTES } from './guarantee-deposit.js';
 /** Order lifecycle (scope §3.6). */
 export const ORDER_STATUSES = [
   'PENDING',
@@ -18,9 +19,10 @@ export const ORDER_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   CONFIRMED: ['PACKED', 'SHIPPED', 'CANCELLED'],
   PACKED: ['SHIPPED', 'CANCELLED'],
   // The customer confirms receipt (or it completes on its own) straight from "sent".
-  SHIPPED: ['DELIVERED', 'COMPLETED'],
+  SHIPPED: ['DELIVERED', 'COMPLETED', 'RETURN_REQUESTED'],
   DELIVERED: ['COMPLETED', 'RETURN_REQUESTED'],
-  COMPLETED: [],
+  // A return can still be asked for during RETURN_RULES.windowDays after completing.
+  COMPLETED: ['RETURN_REQUESTED'],
   CANCELLED: [],
   RETURN_REQUESTED: ['COMPLETED', 'CANCELLED'],
 };
@@ -61,12 +63,12 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
  */
 export const CHECKOUT_PAYMENT_METHODS = ['BANK_TRANSFER', 'COD'] as const satisfies readonly PaymentMethod[];
 
-/** Methods where the customer uploads transfer slips for Taladonline to check. */
+/** Methods where the customer uploads transfer slips for Vreview to check. */
 export const SLIP_PAYMENT_METHODS: readonly PaymentMethod[] = ['BANK_TRANSFER', 'BCEL_ONE', 'LAPNET', 'U_MONEY'];
 export type CheckoutPaymentMethod = (typeof CHECKOUT_PAYMENT_METHODS)[number];
 
 /**
- * Transfer payments go to Taladonline's account; an admin checks the slips before the shop
+ * Transfer payments go to Vreview's account; an admin checks the slips before the shop
  * sees the order. A customer sends at most this many slips at a time (one transfer can be
  * split over several).
  */
@@ -74,6 +76,75 @@ export const MAX_PAYMENT_SLIPS = 3;
 
 /** A sent order completes on its own this many days after shipping, unless the customer confirms it sooner. */
 export const AUTO_COMPLETE_DAYS = 7;
+
+/** Loyalty points an order earns, by its total. `upTo` is inclusive; null means any amount above the other ranges. */
+export interface PointTier {
+  upTo: number | null;
+  points: number;
+}
+
+export const POINT_TIER_RULES = { maxTiers: 20, amountMax: 1_000_000_000_000, pointsMax: 1_000_000 } as const;
+
+export const sortPointTiers = (tiers: readonly PointTier[]): PointTier[] => [...tiers].sort((a, b) => (a.upTo ?? Infinity) - (b.upTo ?? Infinity));
+
+/** Each range ends at a different amount, so only one can be open-ended. */
+export const pointTiersValid = (tiers: readonly PointTier[]): boolean =>
+  tiers.length <= POINT_TIER_RULES.maxTiers &&
+  new Set(tiers.map((t) => t.upTo)).size === tiers.length &&
+  tiers.every((t) => t.upTo === null || (t.upTo >= 1 && t.upTo <= POINT_TIER_RULES.amountMax));
+
+/** Points for an order of `total` kip: its range's points, or none above the last range. */
+export const pointsForTotal = (tiers: readonly PointTier[], total: number): number =>
+  total > 0 ? (sortPointTiers(tiers).find((t) => t.upTo === null || total <= t.upTo)?.points ?? 0) : 0;
+
+/** The ranges in order, each with the amount it starts above, for showing them. */
+export const pointTierRanges = (tiers: readonly PointTier[]): (PointTier & { over: number })[] =>
+  sortPointTiers(tiers).map((t, i, sorted) => ({ ...t, over: i > 0 ? (sorted[i - 1].upTo ?? 0) : 0 }));
+
+/** Order history notes for a courier bill corrected while the parcel is on its way. */
+export const BILL_REPORTED_NOTE = 'Customer reported the wrong bill';
+export const BILL_REPLACED_NOTE = 'Shop uploaded a new bill';
+
+/** History notes that record something on the order, not the moment it reached that status. */
+export const ORDER_SIDE_NOTES: readonly string[] = [BILL_REPORTED_NOTE, BILL_REPLACED_NOTE, ...Object.values(DEPOSIT_NOTES)];
+
+/** A wrong bill only matters until the parcel arrives: the customer can report it and the shop replace it. */
+export const billCorrectable = (status: OrderStatus): boolean => status === 'SHIPPED' || status === 'DELIVERED';
+
+/**
+ * Returns (Terms §13–16): the customer, or the shop for a COD order nobody took, sends the reason
+ * and photos or a video clip directly to Vreview, who decides. Open from when the order is
+ * sent until `windowDays` after it completes; payouts wait out the same days (see
+ * `settleableOrders` in the API). `videoMaxBytes` stays under Cloudflare's 100 MB request limit.
+ */
+export const RETURN_RULES = {
+  windowDays: 3,
+  maxFiles: 5,
+  maxVideos: 1,
+  imageMaxBytes: 10 * 1024 * 1024,
+  videoMaxBytes: 90 * 1024 * 1024,
+  detailsMax: 1000,
+} as const;
+
+export const RETURN_FILE_TYPES = 'image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm';
+
+/** Why a customer returns an order (Terms §13). */
+export const RETURN_REASONS = ['WRONG_ITEM', 'DAMAGED', 'NOT_AS_DESCRIBED', 'MISSING_ITEMS', 'NOT_WORKING', 'OTHER'] as const;
+export type ReturnReason = (typeof RETURN_REASONS)[number];
+
+/** A shop's reason for returning a cash-on-delivery order: the customer never took it. */
+export const NOT_COLLECTED_REASON = 'NOT_COLLECTED';
+
+const RETURN_WINDOW_MS = RETURN_RULES.windowDays * 86_400_000;
+
+/** The last moment to ask for a return of an order completed at `completedAt`. */
+export const returnDeadline = (completedAt: Date | string) => new Date(new Date(completedAt).getTime() + RETURN_WINDOW_MS);
+
+/** Whether an order in `status` (completed at `completedAt`, if it did) can still be returned. */
+export function returnOpen(status: OrderStatus, completedAt: Date | string | null | undefined, now = new Date()): boolean {
+  if (status === 'SHIPPED' || status === 'DELIVERED') return true;
+  return status === 'COMPLETED' && !!completedAt && returnDeadline(completedAt) > now;
+}
 
 /** Most units of one line a customer can put in the cart. */
 export const MAX_CART_QUANTITY = 99;
@@ -95,12 +166,12 @@ export function isShopOrderTab(value: unknown): value is ShopOrderTab {
 
 /**
  * What a shop can do to an order, from which statuses, and where it leads. `null` keeps
- * the status (rejecting a return escalates it to Taladonline instead).
+ * the status (rejecting a return escalates it to Vreview instead).
  *
- * Shops only get orders that are paid (a transfer Taladonline checked) or cash on delivery,
+ * Shops only get orders that are paid (a transfer Vreview checked) or cash on delivery,
  * as CONFIRMED. From there: `ship` (pack it and upload the courier's bill, in one step; the
  * customer then confirms receipt or it completes after AUTO_COMPLETE_DAYS) or `out-of-stock`
- * (cancels it, sets the stock to 0, tells both sides in their chat; Taladonline refunds a
+ * (cancels it, sets the stock to 0, tells both sides in their chat; Vreview refunds a
  * paid transfer). `pack` remains for older clients.
  */
 export const SHOP_ORDER_ACTIONS = {

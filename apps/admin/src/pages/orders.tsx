@@ -3,17 +3,20 @@ import { Button } from '@talad/ui/components/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@talad/ui/components/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@talad/ui/components/table'
 import { cn } from '@talad/ui/lib/utils'
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { Banknote, HandCoins, ImageOff, Landmark, ReceiptText, ScanSearch, TriangleAlert } from 'lucide-react'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Banknote, Coins, HandCoins, ImageOff, Landmark, ReceiptText, ScanSearch, TriangleAlert } from 'lucide-react'
+import { useState } from 'react'
 import { Link, useParams } from 'react-router'
+import { toast } from 'sonner'
 import { can, useAuth } from '@/auth/context'
 import { OrderStatusBadge } from '@/components/badges'
+import { ConfirmDialog, type ConfirmOptions } from '@/components/confirm-dialog'
 import { FilterTabs, Pager, SearchBox } from '@/components/list-controls'
 import { PageBody, PageIntro, TopBar } from '@/components/page-header'
 import { EmptyState, ErrorState, LoadingState } from '@/components/states'
 import { useSearchParamInput, useUrlParams } from '@/hooks/use-url-params'
 import { useI18n } from '@/i18n/context'
-import { api } from '@/lib/api'
+import { api, send } from '@/lib/api'
 import { fill, formatDate, formatMoney, formatNumber } from '@/lib/format'
 import { openPrivateFile } from '@/lib/private-file'
 import type { OrderDetail, OrderList } from '@/lib/types'
@@ -24,7 +27,7 @@ const METHODS = ['transfer', 'cod'] as const
 type Method = (typeof METHODS)[number]
 
 /**
- * Every order on the platform, in two tabs: transfers (checked by Taladonline before the shop
+ * Every order on the platform, in two tabs: transfers (checked by Vreview before the shop
  * gets them — "Check payment" opens the slips to approve) and cash on delivery.
  * `?method=cod&status=<tab>&q=`
  */
@@ -162,6 +165,8 @@ export function OrderDetailPage() {
   const { number = '' } = useParams()
   const { t, locale } = useI18n()
   const { admin } = useAuth()
+  const queryClient = useQueryClient()
+  const [confirm, setConfirm] = useState<ConfirmOptions | null>(null)
   const order = useQuery({ queryKey: ['admin', 'orders', number], queryFn: () => api<OrderDetail>(`/admin/orders/${encodeURIComponent(number)}`) })
 
   if (order.isPending || order.isError) {
@@ -190,7 +195,7 @@ export function OrderDetailPage() {
         </div>
         {o.cancelReason && o.status === 'CANCELLED' && <Note>{fill(t.orders.cancelReason, { reason: o.cancelReason })}</Note>}
         {o.dispute && <Note danger>{fill(t.orders.disputeOpen, { reason: o.dispute.reason })}</Note>}
-        {/* A transfer waiting for Taladonline: check the slips and approve right here. */}
+        {/* A transfer waiting for Vreview: check the slips and approve right here. */}
         {o.status === 'PENDING' && o.payment && o.payment.method !== 'COD' && can(admin, 'payments') && (
           <PaymentCheckPanel number={o.orderNumber} title={t.orders.paymentCheck} hint={t.orders.paymentCheckHint} />
         )}
@@ -267,6 +272,40 @@ export function OrderDetailPage() {
                     {t.orders.methodTabs[o.payment.method === 'COD' ? 'cod' : 'transfer']}
                   </span>
                 )}
+                {o.deposit && (
+                  <>
+                    <Row label={t.orders.deposit.title} value={formatMoney(o.deposit.amount, locale)} />
+                    <p className="text-right text-xs text-muted-foreground">{t.orders.deposit.status[o.deposit.status]}</p>
+                    <Row label={t.orders.deposit.rest} value={formatMoney(o.collectOnDelivery, locale)} />
+                  </>
+                )}
+                {o.pointsEarned > 0 && (
+                  <div className="mt-1 flex flex-wrap items-center justify-between gap-2 border-t pt-2">
+                    <span>{fill(t.orders.pointsEarned, { n: formatNumber(o.pointsEarned, locale) })}</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() =>
+                        setConfirm({
+                          title: t.orders.removePointsTitle,
+                          description: fill(t.orders.removePointsBody, { n: formatNumber(o.pointsEarned, locale) }),
+                          confirmLabel: t.orders.removePoints,
+                          destructive: true,
+                          reason: { required: true },
+                          onConfirm: async ({ reason }) => {
+                            await send('POST', `/admin/orders/${encodeURIComponent(o.number)}/revoke-points`, { reason })
+                            await queryClient.invalidateQueries({ queryKey: ['admin', 'orders', number] })
+                            toast.success(t.orders.pointsRemoved)
+                          },
+                        })
+                      }
+                    >
+                      <Coins />
+                      {t.orders.removePoints}
+                    </Button>
+                  </div>
+                )}
                 {o.payment?.hasSlip && (
                   <Button variant="outline" size="sm" className="mt-1 self-start" onClick={() => void openPrivateFile(`/admin/orders/${encodeURIComponent(o.number)}/slip`)}>
                     <ScanSearch />
@@ -295,6 +334,7 @@ export function OrderDetailPage() {
           </div>
         </div>
       </PageBody>
+      <ConfirmDialog options={confirm} onClose={() => setConfirm(null)} />
     </>
   )
 }

@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '../../../generated/prisma/client.js';
 import { PrismaService } from '../../../prisma/prisma.service.js';
 import { MediaService } from '../../media/media.service.js';
 import { NotificationsService } from '../../notifications/notifications.service.js';
@@ -29,12 +30,33 @@ export interface ProfileFollowerPage {
   total: number;
 }
 
+/** A video the viewer liked: a customer's post, or a shop's product video they saved. */
+export interface LikedVideo {
+  kind: 'post' | 'product';
+  id: string;
+  videoUrl: string;
+  posterUrl: string | null;
+  title: string;
+  stats: { views: number; likes: number; comments: number; shares: number };
+  likedAt: Date;
+}
+
+export interface LikedVideoPage {
+  items: LikedVideo[];
+  /** "<ms>.<id>" of the last item. */
+  nextCursor: string | null;
+  total: number;
+}
+
 export interface ProfileFollowState {
   following: boolean;
   followers: number;
 }
 
 const ACTIVE = { isActive: true } as const;
+/** What a customer can still watch: nothing hidden, taken down, or from a closed account or shop. */
+const LIKED_POST = { isHidden: false, customer: ACTIVE } satisfies Prisma.FeedPostWhereInput;
+const LIKED_PRODUCT = { status: 'PUBLISHED', shop: { status: 'APPROVED' }, videoKey: { not: null }, videoHidden: false } satisfies Prisma.ProductWhereInput;
 
 /**
  * Customers' public profiles in the video feed: their videos, followers, and following other
@@ -101,6 +123,92 @@ export class ProfilesService {
       nextCursor: rows.length > limit ? items[items.length - 1].follower.id : null,
       total,
     };
+  }
+
+  /** Who they follow, newest first. */
+  async following(customerId: string, cursor: string | undefined, limit: number): Promise<ProfileFollowerPage> {
+    await this.assertActive(customerId);
+    const where = { followerId: customerId, following: ACTIVE };
+    const [rows, total] = await Promise.all([
+      this.prisma.customerFollow.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { followingId: 'desc' }],
+        take: limit + 1,
+        ...(cursor && { cursor: { followerId_followingId: { followerId: customerId, followingId: cursor } }, skip: 1 }),
+        select: { createdAt: true, following: { select: { id: true, name: true, avatarUrl: true } } },
+      }),
+      this.prisma.customerFollow.count({ where }),
+    ]);
+    const items = rows.slice(0, limit);
+    return {
+      items: items.map((r) => ({ id: r.following.id, name: r.following.name, avatarUrl: publicAvatar(r.following), followedAt: r.createdAt })),
+      nextCursor: rows.length > limit ? items[items.length - 1].following.id : null,
+      total,
+    };
+  }
+
+  /** The videos this customer liked, most recently liked first. Theirs alone to see. */
+  async liked(customerId: string, cursor: string | undefined, limit: number): Promise<LikedVideoPage> {
+    const [ms, lastId] = cursor?.split('.') ?? [];
+    const time = ms ? new Date(Number(ms)) : null;
+    // Two lists merged by when they were liked; the id settles likes made in the same instant.
+    const beforePost = time ? { OR: [{ createdAt: { lt: time } }, { createdAt: time, postId: { lt: lastId } }] } : {};
+    const beforeProduct = time ? { OR: [{ createdAt: { lt: time } }, { createdAt: time, productId: { lt: lastId } }] } : {};
+    const postWhere = { customerId, post: LIKED_POST };
+    const productWhere = { customerId, product: LIKED_PRODUCT };
+    const [posts, products, postCount, productCount] = await Promise.all([
+      this.prisma.feedPostLike.findMany({
+        where: { ...postWhere, ...beforePost },
+        orderBy: [{ createdAt: 'desc' }, { postId: 'desc' }],
+        take: limit + 1,
+        select: { createdAt: true, post: true },
+      }),
+      this.prisma.wishlistItem.findMany({
+        where: { ...productWhere, ...beforeProduct },
+        orderBy: [{ createdAt: 'desc' }, { productId: 'desc' }],
+        take: limit + 1,
+        select: {
+          createdAt: true,
+          product: {
+            select: {
+              id: true,
+              name: true,
+              videoKey: true,
+              videoViewCount: true,
+              videoCommentCount: true,
+              videoShareCount: true,
+              images: { orderBy: { sortOrder: 'asc' }, take: 1, select: { key: true } },
+              _count: { select: { wishlistBy: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.feedPostLike.count({ where: postWhere }),
+      this.prisma.wishlistItem.count({ where: productWhere }),
+    ]);
+    const merged: LikedVideo[] = [
+      ...posts.map(({ createdAt, post: p }): LikedVideo => ({
+        kind: 'post',
+        id: p.id,
+        videoUrl: this.media.publicUrl(p.videoKey),
+        posterUrl: null,
+        title: p.caption,
+        stats: { views: p.viewCount, likes: p.likeCount, comments: p.commentCount, shares: p.shareCount },
+        likedAt: createdAt,
+      })),
+      ...products.map(({ createdAt, product: p }): LikedVideo => ({
+        kind: 'product',
+        id: p.id,
+        videoUrl: this.media.publicUrl(p.videoKey!),
+        posterUrl: p.images[0] ? this.media.publicUrl(p.images[0].key) : null,
+        title: p.name,
+        stats: { views: p.videoViewCount, likes: p._count.wishlistBy, comments: p.videoCommentCount, shares: p.videoShareCount },
+        likedAt: createdAt,
+      })),
+    ].sort((a, b) => b.likedAt.getTime() - a.likedAt.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+    const items = merged.slice(0, limit);
+    const last = items[items.length - 1];
+    return { items, nextCursor: merged.length > limit && last ? `${last.likedAt.getTime()}.${last.id}` : null, total: postCount + productCount };
   }
 
   /** Follows or unfollows; repeating either is harmless. The person followed hears about it. */

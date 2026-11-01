@@ -5,6 +5,7 @@ export * from './commission.js';
 export * from './delivery.js';
 export * from './locale.js';
 export * from './notification.js';
+export * from './guarantee-deposit.js';
 export * from './order.js';
 export * from './phone.js';
 export * from './roles.js';

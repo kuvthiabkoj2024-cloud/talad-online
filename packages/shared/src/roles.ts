@@ -18,6 +18,8 @@ export const ADMIN_PERMISSIONS = [
   'shops.commission',
   'products',
   'customers',
+  /** Customers' and shops' videos: reviewing them and hiding them from the feed. */
+  'videos',
   'orders',
   'disputes',
   /** Checking customers' transfer slips and refunding cancelled paid orders. */
@@ -37,7 +39,7 @@ export type AdminPermission = (typeof ADMIN_PERMISSIONS)[number];
 /** The permissions grouped as in the console's sidebar, for the permission picker. */
 export const ADMIN_PERMISSION_GROUPS: { key: 'overview' | 'marketplace' | 'money' | 'content' | 'system'; permissions: AdminPermission[] }[] = [
   { key: 'overview', permissions: ['dashboard', 'reports'] },
-  { key: 'marketplace', permissions: ['shops', 'shops.review', 'shops.commission', 'products', 'customers', 'orders', 'disputes'] },
+  { key: 'marketplace', permissions: ['shops', 'shops.review', 'shops.commission', 'products', 'customers', 'videos', 'orders', 'disputes'] },
   { key: 'money', permissions: ['payments', 'payouts', 'coupons'] },
   { key: 'content', permissions: ['catalog', 'banners', 'pages', 'announcements'] },
   { key: 'system', permissions: ['delivery', 'settings', 'audit'] },
@@ -45,7 +47,7 @@ export const ADMIN_PERMISSION_GROUPS: { key: 'overview' | 'marketplace' | 'money
 
 /** What the built-in roles start with (editable later, except Super Admin). */
 export const DEFAULT_ROLE_PERMISSIONS: Record<Exclude<AdminRole, 'SUPER_ADMIN'>, AdminPermission[]> = {
-  SUPPORT: ['dashboard', 'shops', 'shops.review', 'products', 'customers', 'orders', 'disputes'],
+  SUPPORT: ['dashboard', 'shops', 'shops.review', 'products', 'customers', 'videos', 'orders', 'disputes'],
   FINANCE: ['dashboard', 'reports', 'shops', 'shops.commission', 'orders', 'payments', 'payouts'],
 };
 

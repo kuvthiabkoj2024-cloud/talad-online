@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { ALERTS_KEY } from '@/nav'
 import { DisputeStatusBadge, OrderStatusBadge, PayoutStatusBadge } from '@/components/badges'
 import { ConfirmDialog, type ConfirmOptions } from '@/components/confirm-dialog'
+import { DisputeEvidence } from '@/components/dispute-evidence'
 import { PayoutDetailDialog } from '@/components/payout-detail-dialog'
 import { PayoutPaidDialog } from '@/components/payout-paid-dialog'
 import { PAYOUT_NEXT, type PayoutAction } from '@/lib/payouts'
@@ -39,11 +40,20 @@ export function DisputesPage() {
   })
   const [confirm, setConfirm] = useState<ConfirmOptions | null>(null)
 
+  // A COD order the customer never took: approving means no commission, and no money to send back.
+  const notCollected = (d: DisputeRow) => d.reason === 'NOT_COLLECTED'
+  const actionLabel = (d: DisputeRow, decision: DisputeDecision) => (notCollected(d) && decision !== 'review' ? t.disputes.notCollectedActions[decision] : t.disputes.actions[decision])
+
   const decide = (d: DisputeRow, decision: DisputeDecision) =>
     setConfirm({
-      title: `${t.disputes.actions[decision]} · ${d.order.number}`,
-      description: t.disputes.confirm[decision],
-      confirmLabel: t.disputes.actions[decision],
+      title: `${actionLabel(d, decision)} · ${d.order.number}`,
+      description:
+        notCollected(d) && decision !== 'review'
+          ? t.disputes.notCollectedConfirm[decision]
+          : decision === 'refund' && d.order.paymentMethod === 'COD'
+            ? t.disputes.codRefundConfirm
+            : t.disputes.confirm[decision],
+      confirmLabel: actionLabel(d, decision),
       destructive: decision === 'reject',
       reason: decision === 'review' ? undefined : { label: t.disputes.resolutionLabel, required: true },
       onConfirm: async ({ reason }) => {
@@ -88,14 +98,22 @@ export function DisputesPage() {
                             <OrderStatusBadge status={d.order.status} />
                             <span className="text-muted-foreground">
                               {d.order.shop.name} → {d.order.customer.name} · {formatMoney(d.order.total, locale)}
+                              {d.order.paymentMethod === 'COD' && ' · COD'}
                             </span>
                           </div>
                           <span className="text-xs text-muted-foreground">
                             {t.disputes.raisedBy[d.raisedBy]} · {formatDate(d.createdAt, locale, true)}
                           </span>
                         </div>
-                        <p className="text-sm">{d.reason}</p>
+                        <p className="text-sm font-medium">{t.disputes.reasons[d.reason as keyof typeof t.disputes.reasons] ?? d.reason}</p>
                         {d.details && <p className="text-sm text-muted-foreground">{d.details}</p>}
+                        {d.order.pointsEarned > 0 && <p className="text-sm text-muted-foreground">{fill(t.disputes.pointsRemoved, { n: formatNumber(d.order.pointsEarned, locale) })}</p>}
+                        {d.order.deposit && (
+                          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+                            {fill(notCollected(d) ? t.orders.deposit.ifNotCollected : t.orders.deposit.ifReturned, { amount: formatMoney(d.order.deposit.amount, locale) })}
+                          </p>
+                        )}
+                        <DisputeEvidence id={d.id} evidence={d.evidence} />
                         {d.resolution && (
                           <p className="rounded-lg bg-muted px-3 py-2 text-sm">
                             <span className="block text-xs text-muted-foreground">{t.disputes.resolution}</span>
@@ -110,10 +128,10 @@ export function DisputesPage() {
                               </Button>
                             )}
                             <Button size="sm" onClick={() => decide(d, 'refund')}>
-                              {t.disputes.actions.refund}
+                              {actionLabel(d, 'refund')}
                             </Button>
                             <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => decide(d, 'reject')}>
-                              {t.disputes.actions.reject}
+                              {actionLabel(d, 'reject')}
                             </Button>
                           </div>
                         )}

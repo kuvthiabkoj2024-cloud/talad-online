@@ -1,4 +1,4 @@
-import type { AdminPermission, Commission, KycDocumentType, Locale, OrderStatus, PaymentMethod, ProductStatus, ShopOrderTab } from '@talad/shared'
+import type { AdminPermission, Commission, DepositStatus, KycDocumentType, Locale, OrderStatus, PaymentMethod, PointTier, ProductStatus, ShopOrderTab } from '@talad/shared'
 
 export type LocalizedText = Partial<Record<Locale, string>>
 export type ShopStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED'
@@ -61,7 +61,7 @@ export interface Alerts {
 export type PaymentQueue = 'review' | 'rejected' | 'approved'
 export type SlipStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 
-/** A checkout's transfer to Taladonline and its slips (admin Payments). */
+/** A checkout's transfer to Vreview and its slips (admin Payments). */
 export interface PaymentReview {
   number: string
   createdAt: string
@@ -213,6 +213,7 @@ export interface CustomerRow {
   createdAt: string
   shop: { id: string; name: string; status: ShopStatus } | null
   orderCount: number
+  videoCount: number
   totalSpent: number
 }
 
@@ -262,6 +263,10 @@ export interface OrderList extends Paged<OrderRow> {
 }
 
 export interface OrderDetail extends Omit<OrderRow, 'customer' | 'payment'> {
+  deposit: { amount: number; status: DepositStatus; rejectReason: string | null; dueAt: string | null } | null
+  collectOnDelivery: number
+  /** Loyalty points the customer still holds from this order. */
+  pointsEarned: number
   /** The whole checkout; a transfer is checked per checkout (Payments). */
   orderNumber: string
   subtotal: number
@@ -285,11 +290,13 @@ export interface DisputeRow {
   raisedBy: 'SHOP' | 'CUSTOMER' | 'ADMIN'
   reason: string
   details: string | null
+  /** Photos and clips sent with a return. */
+  evidence: { index: number; kind: 'IMAGE' | 'VIDEO' }[]
   refundAmount: number | null
   resolution: string | null
   resolvedAt: string | null
   createdAt: string
-  order: { number: string; status: OrderStatus; total: number; shop: { id: string; name: string }; customer: { id: string; name: string; phone: string | null } }
+  order: { number: string; status: OrderStatus; total: number; shop: { id: string; name: string }; customer: { id: string; name: string; phone: string | null }; paymentMethod: string | null; pointsEarned: number; deposit: { amount: number; status: string } | null }
 }
 
 export interface PayoutRow {
@@ -329,7 +336,7 @@ export interface PayoutDetail {
   status: PayoutStatus
   paidAt: string | null
   reference: string | null
-  /** Taladonline's transfer slip was uploaded (GET /admin/payouts/:id/slip). */
+  /** Vreview's transfer slip was uploaded (GET /admin/payouts/:id/slip). */
   hasSlip: boolean
   createdAt: string
   orders: {
@@ -422,7 +429,13 @@ export interface Settings {
   productModeration: 'pre' | 'post'
   defaultCommissionRate: number
   paymentMethods: string[]
-  points: { earnPer: number; redeemValue: number; expiryDays: number }
+  points: {
+    earnTiers: PointTier[]
+    /** The older "1 point per this many kip" rule, still in use until ranges are saved. */
+    legacyEarnPer: number | null
+    redeemValue: number
+    expiryDays: number
+  }
   readOnly: { currency: string; timezone: string; locales: string[]; taxRate: number }
 }
 
@@ -469,3 +482,41 @@ export interface CommissionRequestRow {
 }
 
 export type CommissionRequestPage = Paged<CommissionRequestRow> & { counts: Record<CommissionRequestStatus, number> }
+
+export type AdminVideoKind = 'customer' | 'shop'
+
+/** Mirrors `AdminVideo` (API `admin/videos/:kind`). */
+export interface AdminVideo {
+  kind: AdminVideoKind
+  id: string
+  videoUrl: string
+  posterUrl: string | null
+  /** A customer's caption, or the product's name. */
+  title: string
+  owner: { id: string; name: string; contact: string | null }
+  /** Shop videos: the product's status. */
+  productStatus: ProductStatus | null
+  views: number
+  likes: number
+  comments: number
+  shares: number
+  hidden: boolean
+  hiddenReason: string | null
+  hiddenAt: string | null
+  createdAt: string
+}
+
+export interface AdminVideoComment {
+  id: string
+  body: string
+  author: { id: string; name: string }
+  byShop: boolean
+  isReply: boolean
+  deleted: boolean
+  createdAt: string
+}
+
+export interface AdminVideoLike {
+  customer: { id: string; name: string }
+  createdAt: string
+}

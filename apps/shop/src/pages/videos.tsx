@@ -169,8 +169,9 @@ function VideoTile({ video: v, onOpen }: { video: ShopVideo; onOpen: () => void 
             <Play className="ml-0.5 size-5 fill-current" />
           </span>
         </span>
-        <span className="absolute top-2 left-2">
+        <span className="absolute top-2 left-2 flex flex-col items-start gap-1">
           <ProductStatusBadge status={v.status} className="bg-white/90" />
+          {v.hidden && <span className="rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">{t.videos.hiddenBadge}</span>}
         </span>
         {/* The numbers, TikTok-style, over the bottom of the clip. */}
         <span className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-1 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-2.5 pt-10 pb-2 text-white">
@@ -197,6 +198,7 @@ function VideoTile({ video: v, onOpen }: { video: ShopVideo; onOpen: () => void 
       <Link to={`/products/${v.productId}`} className="line-clamp-2 text-sm font-medium hover:text-primary hover:underline">
         {v.name}
       </Link>
+      {v.hidden && <p className="text-xs text-destructive">{fill(t.videos.hiddenNote, { reason: v.hiddenReason ?? '' })}</p>}
     </div>
   )
 }

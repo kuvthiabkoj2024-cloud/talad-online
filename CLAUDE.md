@@ -1,4 +1,4 @@
-# Taladonline
+# Vreview
 
 pnpm + Turborepo monorepo. See README.md for layout and setup; product scope in
 marketplace-project-scope.md (code comments cite its sections as §x.y).

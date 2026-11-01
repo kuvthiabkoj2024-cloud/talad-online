@@ -1,13 +1,12 @@
 "use client";
 
 import type { Locale } from "@talad/shared";
-import { Clapperboard, Heart, LoaderCircle, MessageCircle, Play, Share2 } from "lucide-react";
-import Link from "next/link";
+import { Clapperboard, LoaderCircle } from "lucide-react";
 import { useState, useTransition } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import type { ProfileVideoPage } from "@/lib/api";
-import { formatCount } from "@/lib/format";
 import { loadProfileVideos } from "@/lib/profile-actions";
+import { VideoTile } from "./video-tile";
 
 type Dict = Dictionary["profile"];
 
@@ -58,27 +57,14 @@ export function ProfileVideos({
       <ul className="grid grid-cols-3 gap-0.5">
         {items.map((p) => (
           <li key={p.id}>
-            <Link href={`/${locale}/feed?post=${p.id}`} aria-label={p.caption || dict.videos} className="group relative block aspect-[3/4] overflow-hidden bg-neutral-900">
-              {/* The first frame stands in for a cover (posts have none). */}
-              <video
-                src={`${p.videoUrl}#t=0.1`}
-                muted
-                playsInline
-                preload="metadata"
-                className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
-              />
-              <span className="absolute inset-x-0 bottom-0 flex flex-col gap-1 bg-linear-to-t from-black/80 via-black/40 to-transparent px-2 pb-1.5 pt-10 text-white">
-                <span className="flex items-center gap-1 text-xs font-bold drop-shadow">
-                  <Play className="size-3.5 fill-current" />
-                  {formatCount(p.stats.views, locale)}
-                </span>
-                <span className="flex items-center gap-2 text-[10px] font-semibold text-white/85 tabular-nums">
-                  <Stat icon={Heart} label={dict.likes} value={formatCount(p.stats.likes, locale)} />
-                  <Stat icon={MessageCircle} label={dict.comments} value={formatCount(p.stats.comments, locale)} />
-                  <Stat icon={Share2} label={dict.shares} value={formatCount(p.stats.shares, locale)} />
-                </span>
-              </span>
-            </Link>
+            <VideoTile
+              href={`/${locale}/feed?post=${p.id}&back=${customerId}`}
+              label={p.caption || dict.videos}
+              videoUrl={p.videoUrl}
+              stats={p.stats}
+              locale={locale}
+              dict={dict}
+            />
           </li>
         ))}
       </ul>
@@ -99,15 +85,5 @@ export function ProfileVideos({
         </button>
       )}
     </div>
-  );
-}
-
-function Stat({ icon: Icon, label, value }: { icon: typeof Heart; label: string; value: string }) {
-  return (
-    <span className="flex items-center gap-0.5" title={label}>
-      <Icon className="size-3" aria-hidden />
-      <span className="sr-only">{label}</span>
-      {value}
-    </span>
   );
 }

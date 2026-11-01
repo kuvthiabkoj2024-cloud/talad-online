@@ -4,8 +4,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@talad/ui/components/table'
 import { cn } from '@talad/ui/lib/utils'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { Download, LoaderCircle, ReceiptText, Wallet } from 'lucide-react'
+import { Download, ImageOff, LoaderCircle, ReceiptText, Wallet } from 'lucide-react'
 import { useState } from 'react'
+import { Link } from 'react-router'
 import { toast } from 'sonner'
 import { FilterTabs } from '@/components/list-controls'
 import { PageBody, PageIntro, TopBar } from '@/components/page-header'
@@ -14,7 +15,7 @@ import { useUrlParams } from '@/hooks/use-url-params'
 import { useI18n } from '@/i18n/context'
 import { api, getToken } from '@/lib/api'
 import { fill, formatDate, formatMoney, formatNumber } from '@/lib/format'
-import type { ShopFinance } from '@/lib/types'
+import type { ShopFinance, ShopPayout } from '@/lib/types'
 
 const PERIODS = ['this-month', 'last-month', 'last-90', 'this-year'] as const
 type Period = (typeof PERIODS)[number]
@@ -59,7 +60,7 @@ export function FinancePage() {
       if (!res.ok) throw new Error(String(res.status))
       const a = document.createElement('a')
       a.href = URL.createObjectURL(await res.blob())
-      a.download = `taladonline-statement-${qs.get('from')!.slice(0, 10)}-${qs.get('to')!.slice(0, 10)}.csv`
+      a.download = `vreview-statement-${qs.get('from')!.slice(0, 10)}-${qs.get('to')!.slice(0, 10)}.csv`
       a.click()
       URL.revokeObjectURL(a.href)
     } catch {
@@ -120,7 +121,12 @@ export function FinancePage() {
                 hint={fill(t.finance.inProgressHint, { n: data.data.inProgress.orders })}
               />
               <Kpi label={t.finance.refunded} value={formatMoney(data.data.refunded.amount, locale)} hint={fill(t.finance.orderCount, { n: formatNumber(data.data.refunded.orders, locale) })} />
-              <Kpi label={t.finance.balance} value={formatMoney(Math.max(0, data.data.balance), locale)} hint={t.finance.balanceHint} className="sm:col-span-2" />
+              <Kpi
+                label={t.finance.pending}
+                value={formatMoney(Math.max(0, data.data.pending.amount), locale)}
+                hint={fill(t.finance.pendingCount, { n: formatNumber(data.data.pending.count, locale) })}
+                className="sm:col-span-2"
+              />
             </div>
 
             <Card className="gap-3">
@@ -141,6 +147,8 @@ export function FinancePage() {
               </CardContent>
             </Card>
 
+            <PendingPayouts pending={data.data.pending} />
+
             <Card className="gap-3">
               <CardHeader>
                 <CardTitle>{t.finance.payouts}</CardTitle>
@@ -153,37 +161,15 @@ export function FinancePage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="pl-6">{t.finance.payoutPeriod}</TableHead>
-                        <TableHead className="text-right">{t.finance.gross}</TableHead>
+                        <TableHead className="hidden text-right sm:table-cell">{t.finance.gross}</TableHead>
                         <TableHead className="hidden text-right sm:table-cell">{t.finance.commission}</TableHead>
-                        <TableHead className="text-right">{t.finance.net}</TableHead>
-                        <TableHead className="pr-6">{t.products.status}</TableHead>
+                        <TableHead className="pr-6 text-right sm:pr-2">{t.finance.net}</TableHead>
+                        <TableHead className="hidden pr-6 sm:table-cell">{t.products.status}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {data.data.payouts.map((p) => (
-                        <TableRow key={p.id}>
-                          <TableCell className="pl-6">
-                            <span className="block">
-                              {formatDate(p.periodStart, locale)} – {formatDate(p.periodEnd, locale)}
-                            </span>
-                            {p.reference && <span className="block font-mono text-xs text-muted-foreground">{fill(t.finance.reference, { ref: p.reference })}</span>}
-                            {p.hasSlip && <PayoutSlip id={p.id} />}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">{formatMoney(p.gross, locale)}</TableCell>
-                          <TableCell className="hidden text-right text-muted-foreground tabular-nums sm:table-cell">−{formatMoney(p.commission, locale)}</TableCell>
-                          <TableCell className="text-right font-medium tabular-nums">{formatMoney(p.net, locale)}</TableCell>
-                          <TableCell className="pr-6">
-                            <span
-                              className={cn(
-                                'rounded-full px-2 py-0.5 text-xs font-medium',
-                                p.status === 'PAID' ? 'bg-brand-soft text-primary' : p.status === 'FAILED' ? 'bg-red-50 text-red-700' : 'bg-muted text-muted-foreground',
-                              )}
-                            >
-                              {t.finance.payoutStatus[p.status]}
-                            </span>
-                            {p.paidAt && <span className="mt-0.5 block text-xs text-muted-foreground">{formatDate(p.paidAt, locale)}</span>}
-                          </TableCell>
-                        </TableRow>
+                        <PayoutRow key={p.id} payout={p} />
                       ))}
                     </TableBody>
                   </Table>
@@ -194,6 +180,131 @@ export function FinancePage() {
         )}
       </PageBody>
     </>
+  )
+}
+
+/** What Vreview still owes: batches not paid yet, then completed orders not in a batch. */
+function PendingPayouts({ pending }: { pending: ShopFinance['pending'] }) {
+  const { t, locale } = useI18n()
+  const hidden = pending.ordersTotal - pending.orders.length
+  return (
+    <Card className="gap-3">
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <CardTitle className="flex items-center gap-2">
+            {t.finance.pendingTitle}
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 tabular-nums dark:bg-amber-950 dark:text-amber-200">{formatNumber(pending.count, locale)}</span>
+          </CardTitle>
+          <CardDescription>{t.finance.pendingHint}</CardDescription>
+        </div>
+        <span className="text-xl font-semibold tabular-nums">{formatMoney(Math.max(0, pending.amount), locale)}</span>
+      </CardHeader>
+      <CardContent className="px-0">
+        {pending.count === 0 ? (
+          <EmptyState icon={Wallet} title={t.finance.noPending} className="mx-6 border-0 py-6" />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="pl-6">{t.finance.pendingItem}</TableHead>
+                <TableHead className="hidden text-right sm:table-cell">{t.finance.gross}</TableHead>
+                <TableHead className="hidden text-right sm:table-cell">{t.finance.commission}</TableHead>
+                <TableHead className="pr-6 text-right sm:pr-2">{t.finance.net}</TableHead>
+                <TableHead className="hidden pr-6 sm:table-cell">{t.products.status}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pending.payouts.map((p) => (
+                <PayoutRow key={p.id} payout={p} />
+              ))}
+              {pending.orders.map((o) => (
+                <TableRow key={o.number}>
+                  <TableCell className="pl-6">
+                    <span className="flex items-center gap-3">
+                      <span className="flex h-16 w-12 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                        <ReceiptText className="size-4" aria-hidden />
+                      </span>
+                      <span className="min-w-0">
+                        <Link to={`/orders/${o.number}`} className="block font-mono font-medium hover:underline">
+                          {o.number}
+                        </Link>
+                        {o.completedAt && <span className="block text-xs text-muted-foreground">{fill(t.finance.completedOn, { date: formatDate(o.completedAt, locale) })}</span>}
+                        <span className="mt-1 block sm:hidden">
+                          <PendingOrderStatus order={o} />
+                        </span>
+                      </span>
+                    </span>
+                  </TableCell>
+                  <TableCell className="hidden text-right text-muted-foreground sm:table-cell">–</TableCell>
+                  <TableCell className="hidden text-right text-muted-foreground sm:table-cell">–</TableCell>
+                  <TableCell className="pr-6 text-right font-medium tabular-nums sm:pr-2">{formatMoney(o.net, locale)}</TableCell>
+                  <TableCell className="hidden pr-6 sm:table-cell">
+                    <PendingOrderStatus order={o} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+        {hidden > 0 && <p className="px-6 pt-3 text-xs text-muted-foreground">{fill(t.finance.pendingMore, { n: formatNumber(hidden, locale) })}</p>}
+      </CardContent>
+    </Card>
+  )
+}
+
+function PendingOrderStatus({ order: o }: { order: ShopFinance['pending']['orders'][number] }) {
+  const { t, locale } = useI18n()
+  if (o.ready || !o.readyAt) return <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700 dark:bg-sky-950 dark:text-sky-200">{t.finance.orderReady}</span>
+  return (
+    <>
+      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">{t.finance.orderWaiting}</span>
+      <span className="mt-0.5 block text-xs text-muted-foreground">{fill(t.finance.orderWaitingUntil, { date: formatDate(o.readyAt, locale) })}</span>
+    </>
+  )
+}
+
+function PayoutStatus({ payout: p }: { payout: ShopPayout }) {
+  const { t, locale } = useI18n()
+  return (
+    <>
+      <span
+        className={cn(
+          'rounded-full px-2 py-0.5 text-xs font-medium',
+          p.status === 'PAID' ? 'bg-brand-soft text-primary' : p.status === 'FAILED' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200',
+        )}
+      >
+        {t.finance.payoutStatus[p.status]}
+      </span>
+      {p.paidAt && <span className="mt-0.5 block text-xs text-muted-foreground">{formatDate(p.paidAt, locale)}</span>}
+    </>
+  )
+}
+
+function PayoutRow({ payout: p }: { payout: ShopPayout }) {
+  const { t, locale } = useI18n()
+  return (
+    <TableRow>
+      <TableCell className="pl-6">
+        <span className="flex items-center gap-3">
+          <PayoutSlip id={p.id} hasSlip={p.hasSlip} />
+          <span className="min-w-0">
+            <span className="block whitespace-normal">
+              {formatDate(p.periodStart, locale)} – {formatDate(p.periodEnd, locale)}
+            </span>
+            {p.reference && <span className="block font-mono text-xs text-muted-foreground">{fill(t.finance.reference, { ref: p.reference })}</span>}
+            <span className="mt-1 block sm:hidden">
+              <PayoutStatus payout={p} />
+            </span>
+          </span>
+        </span>
+      </TableCell>
+      <TableCell className="hidden text-right tabular-nums sm:table-cell">{formatMoney(p.gross, locale)}</TableCell>
+      <TableCell className="hidden text-right text-muted-foreground tabular-nums sm:table-cell">−{formatMoney(p.commission, locale)}</TableCell>
+      <TableCell className="pr-6 text-right font-medium tabular-nums sm:pr-2">{formatMoney(p.net, locale)}</TableCell>
+      <TableCell className="hidden pr-6 sm:table-cell">
+        <PayoutStatus payout={p} />
+      </TableCell>
+    </TableRow>
   )
 }
 
@@ -209,13 +320,13 @@ function Kpi({ label, value, hint, className }: { label: string; value: string; 
   )
 }
 
-/** Taladonline's transfer slip for a payout, fetched (with the session) only when opened. */
-function PayoutSlip({ id }: { id: string }) {
+/** Vreview's transfer slip at the front of a payout's row: a thumbnail, full size in a pop-up. It's private, so it's fetched with the session. */
+function PayoutSlip({ id, hasSlip }: { id: string; hasSlip: boolean }) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const slip = useQuery({
     queryKey: ['shop', 'payout-slip', id],
-    enabled: open,
+    enabled: hasSlip,
     staleTime: Infinity,
     queryFn: async () => {
       const res = await fetch(`${import.meta.env.VITE_API_URL}/me/shop/finance/payouts/${id}/slip`, { headers: { Authorization: `Bearer ${getToken()}` } })
@@ -223,11 +334,20 @@ function PayoutSlip({ id }: { id: string }) {
       return URL.createObjectURL(await res.blob())
     },
   })
+  const frame = 'flex h-16 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted text-muted-foreground'
+  // No slip yet (not paid, or paid without one): an empty frame keeps the rows lined up.
+  if (!hasSlip) {
+    return (
+      <span className={frame} title={t.finance.noSlip}>
+        <ReceiptText className="size-4" aria-hidden />
+        <span className="sr-only">{t.finance.noSlip}</span>
+      </span>
+    )
+  }
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className="mt-0.5 flex items-center gap-1 text-xs font-medium text-primary hover:underline">
-        <ReceiptText className="size-3.5" />
-        {t.finance.viewSlip}
+      <button type="button" onClick={() => setOpen(true)} aria-label={t.finance.viewSlip} className={cn(frame, 'ring-1 ring-border transition hover:ring-primary/50')}>
+        {slip.isPending ? <LoaderCircle className="size-4 animate-spin" /> : slip.data ? <img src={slip.data} alt="" className="size-full object-cover" /> : <ImageOff className="size-4" />}
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-lg">
@@ -237,8 +357,10 @@ function PayoutSlip({ id }: { id: string }) {
           </DialogHeader>
           {slip.data ? (
             <img src={slip.data} alt={t.finance.slip} className="max-h-[75svh] w-full rounded-lg object-contain" />
-          ) : (
+          ) : slip.isPending ? (
             <LoaderCircle className="mx-auto my-16 size-6 animate-spin text-muted-foreground" />
+          ) : (
+            <ImageOff className="mx-auto my-16 size-6 text-muted-foreground" />
           )}
         </DialogContent>
       </Dialog>

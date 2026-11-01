@@ -55,7 +55,7 @@ function deviceName(ua: string | null): { name: string | null; mobile: boolean }
         : /Safari\//.test(ua)
           ? 'Safari'
           : /Expo|okhttp|CFNetwork/.test(ua)
-            ? 'Taladonline app'
+            ? 'Vreview app'
             : null
   const name = [browser, os].filter(Boolean).join(' · ') || null
   return { name, mobile: /iPhone|Android|Mobile/.test(ua) }

@@ -1,4 +1,4 @@
-import { SHOP_ORDER_ACTION_NAMES, SHOP_ORDER_TABS, type ShopOrderAction, type ShopOrderTab } from '@talad/shared';
+import { DEPOSIT_RULES, SHOP_ORDER_ACTION_NAMES, SHOP_ORDER_TABS, type ShopOrderAction, type ShopOrderTab } from '@talad/shared';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 
@@ -53,4 +53,23 @@ export class ShopOrderActionDto {
   @IsString()
   @MaxLength(200)
   billKey?: string;
+}
+
+/** A new courier bill for a parcel already on its way. */
+export class ReplaceBillDto {
+  /** From POST /me/shop/orders/:number/bill. */
+  @IsString()
+  @MaxLength(200)
+  billKey: string;
+
+  /** The bill may be from another courier than first chosen. */
+  @IsOptional()
+  @IsUUID('7')
+  deliveryProviderId?: string;
+}
+
+export class RejectDepositDto {
+  @IsString()
+  @MaxLength(DEPOSIT_RULES.reasonMax)
+  reason: string;
 }

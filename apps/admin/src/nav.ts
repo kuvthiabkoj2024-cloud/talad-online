@@ -1,5 +1,6 @@
 import type { AdminPermission } from '@talad/shared'
 import {
+  Clapperboard,
   BadgePercent,
   BarChart3,
   FileText,
@@ -52,6 +53,7 @@ export const NAV_GROUPS: { label: NavKey; items: NavItem[] }[] = [
       { to: '/shops', label: 'shops', icon: Store, area: 'shops', badge: (a) => a.pendingShops },
       { to: '/products', label: 'products', icon: Package, area: 'products', badge: (a) => a.pendingProducts },
       { to: '/customers', label: 'customers', icon: Users, area: 'customers' },
+      { to: '/videos', label: 'videos', icon: Clapperboard, area: 'videos' },
       // Orders waiting for a payment check (the same count as Payments).
       { to: '/orders', label: 'orders', icon: ReceiptText, area: 'orders', badge: (a) => a.paymentsToCheck },
       { to: '/disputes', label: 'disputes', icon: Gavel, area: 'disputes', badge: (a) => a.openDisputes },

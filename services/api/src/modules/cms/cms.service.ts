@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { CHECKOUT_PAYMENT_METHODS } from '@talad/shared';
+import { CHECKOUT_PAYMENT_METHODS, pointTiersValid, sortPointTiers, type PointTier } from '@talad/shared';
 import type { AdminUser, Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -13,7 +13,13 @@ export interface PlatformSettings {
   productModeration: 'pre' | 'post';
   defaultCommissionRate: number;
   paymentMethods: string[];
-  points: { earnPer: number; redeemValue: number; expiryDays: number };
+  points: {
+    earnTiers: PointTier[];
+    /** The older "1 point per this many kip" rule, still in use until ranges are saved. */
+    legacyEarnPer: number | null;
+    redeemValue: number;
+    expiryDays: number;
+  };
   readOnly: { currency: string; timezone: string; locales: string[]; taxRate: number };
 }
 
@@ -21,7 +27,7 @@ const DEFAULTS: Omit<PlatformSettings, 'readOnly'> = {
   productModeration: 'pre',
   defaultCommissionRate: 5,
   paymentMethods: [...CHECKOUT_PAYMENT_METHODS],
-  points: { earnPer: 10_000, redeemValue: 100, expiryDays: 365 },
+  points: { earnTiers: [], legacyEarnPer: null, redeemValue: 100, expiryDays: 365 },
 };
 
 /** Legal/help pages, platform settings (§2.11). */
@@ -54,11 +60,12 @@ export class CmsService {
   async settings(): Promise<PlatformSettings> {
     const rows = await this.prisma.setting.findMany();
     const v = Object.fromEntries(rows.map((r) => [r.key, r.value])) as Record<string, unknown>;
+    const { earnPer, ...points } = (v.points ?? {}) as Partial<PlatformSettings['points']> & { earnPer?: number };
     return {
       productModeration: v.productModeration === 'post' ? 'post' : 'pre',
       defaultCommissionRate: typeof v.defaultCommissionRate === 'number' ? v.defaultCommissionRate : DEFAULTS.defaultCommissionRate,
       paymentMethods: Array.isArray(v.paymentMethods) ? (v.paymentMethods as string[]) : DEFAULTS.paymentMethods,
-      points: { ...DEFAULTS.points, ...(v.points as Partial<PlatformSettings['points']> | undefined) },
+      points: { ...DEFAULTS.points, ...points, legacyEarnPer: !points.earnTiers && earnPer && earnPer > 0 ? earnPer : null },
       readOnly: {
         currency: (v.currency as string) ?? 'LAK',
         timezone: (v.timezone as string) ?? 'Asia/Vientiane',
@@ -78,12 +85,20 @@ export class CmsService {
     if (dto.paymentMethods.length === 0) {
       throw new BadRequestException({ code: 'NO_PAYMENT_METHOD', message: 'Keep at least one payment method' });
     }
+    if (dto.points.earnTiers && !pointTiersValid(dto.points.earnTiers)) {
+      throw new BadRequestException({ code: 'POINT_TIERS_INVALID', message: 'Each point range must end at a different amount' });
+    }
     const before = await this.settings();
+    const earning: Prisma.InputJsonObject = dto.points.earnTiers
+      ? { earnTiers: sortPointTiers(dto.points.earnTiers.map((t) => ({ upTo: t.upTo ?? null, points: t.points }))) as unknown as Prisma.InputJsonArray }
+      : before.points.legacyEarnPer
+        ? { earnPer: before.points.legacyEarnPer }
+        : { earnTiers: before.points.earnTiers as unknown as Prisma.InputJsonArray };
     const values: Record<string, Prisma.InputJsonValue> = {
       productModeration: dto.productModeration,
       defaultCommissionRate: dto.defaultCommissionRate,
       paymentMethods: [...new Set(dto.paymentMethods)],
-      points: { earnPer: dto.points.earnPer, redeemValue: dto.points.redeemValue, expiryDays: dto.points.expiryDays },
+      points: { ...earning, redeemValue: dto.points.redeemValue, expiryDays: dto.points.expiryDays },
     };
     await this.prisma.$transaction(
       Object.entries(values).map(([key, value]) => this.prisma.setting.upsert({ where: { key }, create: { key, value }, update: { value } })),

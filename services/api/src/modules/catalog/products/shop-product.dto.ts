@@ -1,8 +1,13 @@
 import {
+  DEPOSIT_TYPES,
+  GUARANTEE_RULES,
+  GUARANTEE_UNITS,
   MEDIA_LIMITS,
   PRODUCT_RULES,
   PRODUCT_SAVE_INTENTS,
   PRODUCT_STATUSES,
+  type DepositType,
+  type GuaranteeUnit,
   type ProductSaveIntent,
   type ProductStatus,
 } from '@talad/shared';
@@ -73,6 +78,34 @@ export class ShopProductOptionDto {
   values: string[];
 }
 
+export class ShopProductGuaranteeDto {
+  /** The period the shop gives; customers get double. */
+  @IsInt()
+  @Min(1)
+  @Max(GUARANTEE_RULES.durationMax)
+  duration: number;
+
+  @IsIn(GUARANTEE_UNITS)
+  unit: GuaranteeUnit;
+
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(GUARANTEE_RULES.termsMax)
+  terms?: string;
+}
+
+export class ShopProductDepositDto {
+  @IsIn(DEPOSIT_TYPES)
+  type: DepositType;
+
+  /** Kip per unit, or a percent of the price (checked against the type when saving). */
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(1)
+  @Max(PRODUCT_RULES.maxPrice)
+  value: number;
+}
+
 export class ShopProductDto {
   @IsIn(PRODUCT_SAVE_INTENTS)
   intent: ProductSaveIntent;
@@ -109,6 +142,18 @@ export class ShopProductDto {
   @Min(0)
   @Max(PRODUCT_RULES.maxPrice)
   compareAtPrice?: number | null;
+
+  /** Null = no guarantee. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ShopProductGuaranteeDto)
+  guarantee?: ShopProductGuaranteeDto | null;
+
+  /** Null = no deposit with cash on delivery. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ShopProductDepositDto)
+  deposit?: ShopProductDepositDto | null;
 
   /** Ignored when the product has variants (stock is per option then). */
   @IsInt()

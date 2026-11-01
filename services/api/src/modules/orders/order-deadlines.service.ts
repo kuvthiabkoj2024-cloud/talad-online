@@ -1,8 +1,10 @@
 import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import { DEPOSIT_NOTES } from '@talad/shared';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../../config/env.validation.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { settleDeposit } from './order-deposits.service.js';
 import { addSold, markCodPaid, moveOrder, restoreStock, returnPoints } from './order-transitions.js';
 
 const EVERY = 5 * 60_000;
@@ -10,7 +12,8 @@ const EVERY = 5 * 60_000;
 /**
  * Order deadlines (§3.6), checked every few minutes in-process:
  * - unpaid orders are cancelled when the payment window ends, unless slips are waiting for
- *   (or passed) Taladonline's check — rejected slips don't count;
+ *   (or passed) Vreview's check — rejected slips don't count;
+ * - a COD order whose deposit nobody settled in time is cancelled (the shop owes back a slip it never rejected);
  * - sent orders complete AUTO_COMPLETE_DAYS after shipping unless the customer confirmed
  *   sooner (they count as sold and cash on delivery as paid, but earn no loyalty points).
  */
@@ -60,6 +63,24 @@ export class OrderDeadlinesService implements OnModuleInit, OnModuleDestroy {
           await restoreStock(tx, o.id);
           await returnPoints(tx, o.id);
           await tx.payment.updateMany({ where: { shopOrderId: o.id, status: 'PENDING' }, data: { status: 'EXPIRED' } });
+          await this.notifications.notifyOrder(tx, this.target(o), 'CANCELLED', note);
+          return true;
+        });
+        if (done) cancelled++;
+      }
+
+      const unsettled = await this.prisma.shopOrder.findMany({
+        where: { status: 'CONFIRMED', depositStatus: { in: ['PENDING', 'REJECTED'] }, depositDueAt: { lt: now } },
+        select: this.select,
+      });
+      for (const o of unsettled) {
+        const note = DEPOSIT_NOTES.expired;
+        const done = await this.prisma.$transaction(async (tx) => {
+          if (!(await moveOrder(tx, o.id, 'CONFIRMED', 'CANCELLED', { cancelReason: note }, { actorType: null, actorId: null, note }))) return false;
+          await restoreStock(tx, o.id);
+          await returnPoints(tx, o.id);
+          await settleDeposit(tx, this.notifications, o.id, 'RETURN_DUE');
+          await tx.payment.updateMany({ where: { shopOrderId: o.id, status: 'PENDING' }, data: { status: 'FAILED' } });
           await this.notifications.notifyOrder(tx, this.target(o), 'CANCELLED', note);
           return true;
         });

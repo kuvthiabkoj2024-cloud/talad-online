@@ -10,7 +10,7 @@ export function PromoCards({ dict }: { dict: Dictionary["home"] }) {
           <p className="text-xl font-bold leading-snug">
             {dict.promoTitle}
             <br />
-            <span className="text-primary">Taladonline</span>
+            <span className="text-primary">Vreview</span>
           </p>
           <p className="mt-2 text-xs text-muted-foreground">{dict.promoSubtitle}</p>
         </div>

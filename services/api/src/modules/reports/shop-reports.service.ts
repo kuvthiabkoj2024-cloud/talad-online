@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { RETURN_RULES } from '@talad/shared';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { MediaService } from '../media/media.service.js';
@@ -6,6 +7,7 @@ import { StorageService } from '../media/storage.service.js';
 import { shopNet } from '../orders/checkout-pricing.js';
 
 const DAY = 86_400_000;
+const PENDING_ORDERS_SHOWN = 200;
 export const STATS_RANGES = [7, 30, 90] as const;
 export type StatsRange = (typeof STATS_RANGES)[number];
 
@@ -19,9 +21,9 @@ export interface ShopFinance {
   to: Date;
   /** Completed orders in the period: what the shop has earned. */
   /**
-   * `gross` = what customers paid + platform coupons Taladonline pays back; `net` = gross − commission.
+   * `gross` = what customers paid + platform coupons Vreview pays back; `net` = gross − commission.
    * `discounts`: what the shop's prices were lowered by — flash sales and its own coupons (both
-   * the shop's cost) and platform coupons (funded by Taladonline, included in `gross`).
+   * the shop's cost) and platform coupons (funded by Vreview, included in `gross`).
    */
   earned: {
     orders: number;
@@ -33,20 +35,33 @@ export interface ShopFinance {
   /** Paid or cash orders still on their way to the customer. */
   inProgress: { orders: number; amount: number };
   refunded: { orders: number; amount: number };
-  /** All-time completed net (transfers only) minus payouts already paid. */
-  balance: number;
-  payouts: {
-    id: string;
-    periodStart: Date;
-    periodEnd: Date;
-    gross: number;
-    commission: number;
-    refunds: number;
-    net: number;
-    status: string;
-    paidAt: Date | null;
-    reference: string | null;
-  }[];
+  /** Everything Vreview still has to pay the shop, whatever the period. */
+  pending: {
+    count: number;
+    amount: number;
+    /** Batches made but not paid yet. */
+    payouts: ShopPayout[];
+    /** Completed orders in no batch yet, newest first (up to PENDING_ORDERS_SHOWN). */
+    orders: { number: string; completedAt: Date | null; net: number; readyAt: Date | null; ready: boolean }[];
+    /** All such orders, which may be more than listed. */
+    ordersTotal: number;
+  };
+  /** Payouts paid or failed. */
+  payouts: ShopPayout[];
+}
+
+export interface ShopPayout {
+  id: string;
+  periodStart: Date;
+  periodEnd: Date;
+  gross: number;
+  commission: number;
+  refunds: number;
+  net: number;
+  status: string;
+  paidAt: Date | null;
+  reference: string | null;
+  hasSlip: boolean;
 }
 
 export interface ShopStats {
@@ -72,7 +87,7 @@ export class ShopReportsService {
     private readonly storage: StorageService,
   ) {}
 
-  /** Taladonline's transfer slip for one of the shop's payouts. */
+  /** Vreview's transfer slip for one of the shop's payouts. */
   async payoutSlip(shopId: string, id: string) {
     const p = await this.prisma.payout.findFirst({ where: { id, shopId }, select: { slipKey: true } });
     if (!p?.slipKey) throw new NotFoundException('No transfer slip');
@@ -81,7 +96,9 @@ export class ShopReportsService {
 
   async finance(shopId: string, from: Date, to: Date): Promise<ShopFinance> {
     const inPeriod = { shopId, createdAt: { gte: from, lt: to } };
-    const [earned, active, refunded, lifetime, payouts, flash] = await Promise.all([
+    // Not yet in a payout: transfers only, the shop already holds cash from COD.
+    const unpaid: Prisma.ShopOrderWhereInput = { shopId, status: 'COMPLETED', payoutId: null, payments: { none: { method: 'COD' } } };
+    const [earned, active, refunded, owed, owedOrders, payouts, batches, flash] = await Promise.all([
       this.prisma.shopOrder.aggregate({
         where: { ...inPeriod, status: 'COMPLETED' },
         _count: { _all: true },
@@ -97,9 +114,22 @@ export class ShopReportsService {
         _count: { _all: true },
         _sum: { total: true },
       }),
-      // What Taladonline owes the shop: cash on delivery is already the shop's (it pays that commission monthly).
-      this.prisma.shopOrder.aggregate({ where: { shopId, status: 'COMPLETED', payments: { none: { method: 'COD' } } }, _sum: { total: true, commissionAmount: true, platformDiscount: true } }),
-      this.prisma.payout.findMany({ where: { shopId }, orderBy: { periodStart: 'desc' }, take: 24 }),
+      // What Vreview owes the shop: cash on delivery is already the shop's (it pays that commission monthly).
+      this.prisma.shopOrder.aggregate({ where: unpaid, _count: { _all: true }, _sum: { total: true, commissionAmount: true, platformDiscount: true } }),
+      this.prisma.shopOrder.findMany({
+        where: unpaid,
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        take: PENDING_ORDERS_SHOWN,
+        select: {
+          number: true,
+          total: true,
+          commissionAmount: true,
+          platformDiscount: true,
+          history: { where: { toStatus: 'COMPLETED' }, orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } },
+        },
+      }),
+      this.prisma.payout.findMany({ where: { shopId, status: { in: ['PAID', 'FAILED'] } }, orderBy: { periodStart: 'desc' }, take: 24 }),
+      this.prisma.payout.findMany({ where: { shopId, status: { in: ['SCHEDULED', 'PROCESSING'] } }, orderBy: { periodStart: 'desc' } }),
       // Flash-sale savings: regular price − sale price, per unit sold (unknown on older orders).
       this.prisma.$queryRaw<{ amount: Prisma.Decimal | null }[]>`
         SELECT SUM((COALESCE(oi."regularPrice", oi."unitPrice") - oi."unitPrice") * oi.quantity) AS amount
@@ -109,7 +139,20 @@ export class ShopReportsService {
     const platformCoupons = num(earned._sum.platformDiscount);
     const gross = num(earned._sum.total) + platformCoupons;
     const commission = num(earned._sum.commissionAmount);
-    const paidOut = payouts.filter((p) => p.status === 'PAID').reduce((s, p) => s + num(p.netAmount), 0);
+    const toPayout = (p: (typeof payouts)[number]): ShopPayout => ({
+      id: p.id,
+      periodStart: p.periodStart,
+      periodEnd: p.periodEnd,
+      gross: num(p.grossAmount),
+      commission: num(p.commissionAmount),
+      refunds: num(p.refundAmount),
+      net: num(p.netAmount),
+      status: p.status,
+      paidAt: p.paidAt,
+      reference: p.reference,
+      hasSlip: p.slipKey !== null,
+    });
+    const now = Date.now();
     return {
       from,
       to,
@@ -122,20 +165,27 @@ export class ShopReportsService {
       },
       inProgress: { orders: active._count._all, amount: num(active._sum.total) },
       refunded: { orders: refunded._count._all, amount: num(refunded._sum.total) },
-      balance: shopNet({ total: num(lifetime._sum.total), platformDiscount: num(lifetime._sum.platformDiscount), commission: num(lifetime._sum.commissionAmount) }) - paidOut,
-      payouts: payouts.map((p) => ({
-        id: p.id,
-        periodStart: p.periodStart,
-        periodEnd: p.periodEnd,
-        gross: num(p.grossAmount),
-        commission: num(p.commissionAmount),
-        refunds: num(p.refundAmount),
-        net: num(p.netAmount),
-        status: p.status,
-        paidAt: p.paidAt,
-        reference: p.reference,
-        hasSlip: p.slipKey !== null,
-      })),
+      pending: {
+        count: batches.length + owed._count._all,
+        amount:
+          batches.reduce((n, p) => n + num(p.netAmount), 0) +
+          shopNet({ total: num(owed._sum.total), platformDiscount: num(owed._sum.platformDiscount), commission: num(owed._sum.commissionAmount) }),
+        payouts: batches.map(toPayout),
+        orders: owedOrders.map((o) => {
+          const completedAt = o.history[0]?.createdAt ?? null;
+          // Payouts wait out the return window (settleableOrders).
+          const readyAt = completedAt && new Date(completedAt.getTime() + RETURN_RULES.windowDays * DAY);
+          return {
+            number: o.number,
+            completedAt,
+            net: shopNet({ total: num(o.total), platformDiscount: num(o.platformDiscount), commission: num(o.commissionAmount) }),
+            readyAt,
+            ready: readyAt !== null && readyAt.getTime() <= now,
+          };
+        }),
+        ordersTotal: owed._count._all,
+      },
+      payouts: payouts.map(toPayout),
     };
   }
 

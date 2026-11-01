@@ -86,9 +86,28 @@ export function itemCommissions(
 }
 
 /**
- * What a shop is owed for an order: what the customer paid it, plus the discount Taladonline
+ * What a shop is owed for an order: what the customer paid it, plus the discount Vreview
  * funds (platform coupons, paid back to the shop), minus commission.
  */
 export function shopNet(o: { total: number; platformDiscount: number; commission: number }): number {
   return o.total + o.platformDiscount - o.commission;
+}
+
+/** The price is below what it normally costs: a flash sale, or a discount from the crossed-out price. */
+export const onPromotion = (l: { unitPrice: number; regularPrice: number; compareAtPrice: number | null }): boolean =>
+  l.unitPrice < l.regularPrice || (l.compareAtPrice !== null && l.unitPrice < l.compareAtPrice);
+
+/**
+ * What a shop's part of an order earns loyalty points on: nothing with a coupon, otherwise its
+ * goods not on promotion, less their share of any points spent on it.
+ */
+export function pointsBase(
+  lines: { lineTotal: number; unitPrice: number; regularPrice: number; compareAtPrice: number | null }[],
+  coupon: number,
+  pointsSpent: number,
+): number {
+  const subtotal = lines.reduce((n, l) => n + l.lineTotal, 0);
+  if (coupon > 0 || subtotal <= 0) return 0;
+  const regular = lines.reduce((n, l) => n + (onPromotion(l) ? 0 : l.lineTotal), 0);
+  return Math.max(0, regular - Math.round((pointsSpent * regular) / subtotal));
 }

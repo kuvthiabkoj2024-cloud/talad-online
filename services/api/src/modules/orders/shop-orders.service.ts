@@ -2,11 +2,17 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { randomUUID } from 'node:crypto';
 import {
   AUTO_COMPLETE_DAYS,
+  BILL_REPLACED_NOTE,
   SHOP_ORDER_ACTIONS,
   SHOP_ORDER_TABS,
   SHOP_PROFILE_RULES,
+  billCorrectable,
+  depositBlocksShipping,
   formatMoney,
+  returnOpen,
   shopOrderActions,
+  type DepositStatus,
+  type GuaranteeUnit,
   type ShopOrderAction,
   type ShopOrderTab,
 } from '@talad/shared';
@@ -17,21 +23,24 @@ import { MediaService } from '../media/media.service.js';
 import { filePrefix, storageFolder } from '../media/storage-keys.js';
 import { StorageService } from '../media/storage.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
-import { clearStock, moveOrder, postSystemMessage, restoreStock, returnPoints } from './order-transitions.js';
+import { clearStock, moveOrder, postSystemMessage, restoreStock, returnPoints, revokeEarnedPoints } from './order-transitions.js';
+import { settleDeposit } from './order-deposits.service.js';
 import { paymentCheck, paymentOf, type PaymentCheck } from './payment-slips.service.js';
-import type { ListShopOrdersQuery, ShopOrderActionDto } from './shop-orders.dto.js';
+import type { ListShopOrdersQuery, ReplaceBillDto, ShopOrderActionDto } from './shop-orders.dto.js';
 
 const DAY = 86_400_000;
 /** Where a shop's courier bills are kept; a bill key sent back must start with this. */
 const billPrefix = (shopId: string) => filePrefix(storageFolder.shopOrders(shopId), 'bill');
 /** Actions that need the seller to say why (shown to the customer). */
 const NEEDS_REASON: ShopOrderAction[] = ['cancel', 'reject-return'];
-/** Shops never see a transfer that Taladonline hasn't approved yet (it stays PENDING until then). */
+/** Shops never see a transfer that Vreview hasn't approved yet (it stays PENDING until then). */
 const SHOP_VISIBLE: Prisma.ShopOrderWhereInput = { status: { not: 'PENDING' } };
 
 const lineSelect = {
   name: true,
   sku: true,
+  guaranteeDuration: true,
+  guaranteeUnit: true,
   quantity: true,
   unitPrice: true,
   lineTotal: true,
@@ -68,6 +77,8 @@ export interface ShopOrderLine {
   lineTotal: number;
   imageUrl: string | null;
   productSlug: string;
+  /** What the customer got (already double what the shop entered). */
+  guarantee: { duration: number; unit: GuaranteeUnit } | null;
 }
 
 export interface ShopOrderSummary {
@@ -80,7 +91,7 @@ export interface ShopOrderSummary {
   customer: { id: string; name: string };
   shop: { id: string; name: string; slug: string };
   payment: { method: PaymentMethod; status: PaymentStatus; hasSlip: boolean } | null;
-  /** A transfer whose slips wait for Taladonline's check (admin console only; shops never see these). */
+  /** A transfer whose slips wait for Vreview's check (admin console only; shops never see these). */
   awaitingConfirmation: boolean;
   /** While unpaid: slips being checked, rejected (waiting for new ones), or none sent yet. */
   paymentCheck: PaymentCheck;
@@ -89,6 +100,11 @@ export interface ShopOrderSummary {
   urgent: boolean;
   /** The customer collects it at the shop. */
   pickup: boolean;
+  deliveryProvider: { id: string; name: string } | null;
+  /** The customer reported the courier's bill as wrong: the shop needs to upload a new one. */
+  billError: boolean;
+  /** Null without a deposit. */
+  depositStatus: DepositStatus | null;
 }
 
 export interface ShopOrderDetail extends ShopOrderSummary {
@@ -96,25 +112,35 @@ export interface ShopOrderDetail extends ShopOrderSummary {
   orderNumber: string;
   subtotal: number;
   discountTotal: number;
-  /** Part of the discount Taladonline funds (platform coupon), paid back to the shop. */
+  /** Part of the discount Vreview funds (platform coupon), paid back to the shop. */
   platformDiscount: number;
   shippingFee: number;
   commissionAmount: number;
   note: string | null;
   customer: { id: string; name: string; phone: string | null };
   shippingAddress: unknown;
-  deliveryProvider: { id: string; name: string } | null;
   trackingNumber: string | null;
   /** A courier bill photo was uploaded when shipping. */
   hasShippingBill: boolean;
+  /** When the customer reported the bill as wrong, until a new one is uploaded. */
+  billIssueAt: Date | null;
+  /** The parcel is on its way, so its bill can still be replaced. */
+  billReplaceable: boolean;
   /** The shop delivers it itself as urgent delivery (fee in `shippingFee`). */
   urgentDelivery: boolean;
   autoConfirmAt: Date | null;
   cancelReason: string | null;
   payment: (ShopOrderSummary['payment'] & { amount: number; paidAt: Date | null; slipUploadedAt: Date | null }) | null;
   history: { status: OrderStatus; note: string | null; actor: 'SHOP' | 'CUSTOMER' | 'ADMIN' | null; at: Date }[];
-  /** Open escalation to Taladonline (a rejected return). */
+  /** Open escalation to Vreview (a rejected return). */
   dispute: { status: string; reason: string; createdAt: Date } | null;
+  /** A cash-on-delivery order the shop can report as never collected. */
+  returnable: boolean;
+  /** Loyalty points the customer still holds from this order. */
+  pointsEarned: number;
+  deposit: { amount: number; status: DepositStatus; rejectReason: string | null; dueAt: Date | null } | null;
+  /** What's left to collect in cash on delivery (the total less a confirmed deposit). */
+  collectOnDelivery: number;
   actions: ShopOrderAction[];
 }
 
@@ -144,7 +170,7 @@ export class ShopOrdersService {
 
   /**
    * `shopId` null = every shop (admin console); `customerId` narrows to one buyer; `method`
-   * splits transfers (checked by Taladonline) from cash on delivery.
+   * splits transfers (checked by Vreview) from cash on delivery.
    */
   async list(shopId: string | null, query: ListShopOrdersQuery, customerId?: string, method?: 'transfer' | 'cod'): Promise<ShopOrderList> {
     const term = query.q?.trim();
@@ -173,7 +199,8 @@ export class ShopOrdersService {
       this.prisma.shopOrder.findMany({
         where,
         include: orderInclude,
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        // A shop's bill errors come first, so one on an older order isn't lost pages down.
+        orderBy: [...(shopId ? [{ billIssueAt: { sort: 'desc', nulls: 'last' } } as const] : []), { createdAt: 'desc' }, { id: 'desc' }],
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
       }),
@@ -229,9 +256,10 @@ export class ShopOrdersService {
       note: row.order.note,
       customer: row.order.customer,
       shippingAddress: row.order.shippingAddress,
-      deliveryProvider: row.deliveryProvider,
       trackingNumber: row.trackingNumber,
       hasShippingBill: row.shippingBillKey !== null,
+      billIssueAt: row.billIssueAt,
+      billReplaceable: row.shippingBillKey !== null && billCorrectable(row.status),
       urgentDelivery: row.urgentDelivery,
       autoConfirmAt: row.autoConfirmAt,
       cancelReason: row.cancelReason,
@@ -242,9 +270,18 @@ export class ShopOrdersService {
         slipUploadedAt: payment.slipUploadedAt,
       },
       history: history.map((h) => ({ status: h.toStatus, note: h.note, actor: h.actorType, at: h.createdAt })),
+      returnable:
+        payment?.method === 'COD' &&
+        !row.payoutId &&
+        (await this.prisma.dispute.count({ where: { shopOrderId: row.id } })) === 0 &&
+        returnOpen(row.status, history.findLast((h) => h.toStatus === 'COMPLETED')?.createdAt),
       dispute: dispute && { status: dispute.status, reason: dispute.reason, createdAt: dispute.createdAt },
-      // A rejected return waits for Taladonline; nothing more for the shop to do.
-      actions: dispute ? [] : shopOrderActions(row.status),
+      pointsEarned: row.pointsEarned,
+      deposit: row.depositStatus && { amount: row.depositAmount.toNumber(), status: row.depositStatus, rejectReason: row.depositRejectReason, dueAt: row.depositDueAt },
+      collectOnDelivery: Math.max(0, row.total.toNumber() - row.depositAmount.toNumber()),
+      // A rejected return waits for Vreview; nothing more for the shop to do. An unsettled
+      // deposit holds the order back, though the shop can still call it off.
+      actions: dispute ? [] : shopOrderActions(row.status).filter((a) => !depositBlocksShipping(row.depositStatus) || a === 'cancel' || a === 'out-of-stock'),
     };
   }
 
@@ -260,6 +297,45 @@ export class ShopOrdersService {
     const billKey = `${billPrefix(shop.id)}${randomUUID()}.${kind.ext}`;
     await this.storage.put(billKey, file.buffer, kind.type);
     return { billKey };
+  }
+
+  /**
+   * Swaps the bill of a parcel on its way and tells the customer. The old photo is deleted: it was
+   * wrong, and may show another customer's name and phone.
+   */
+  async replaceBill(shop: Shop, number: string, dto: ReplaceBillDto): Promise<ShopOrderDetail> {
+    const row = await this.find(shop.id, number);
+    const previous = row.shippingBillKey;
+    if (!previous || !billCorrectable(row.status)) {
+      throw new ConflictException({ code: 'INVALID_TRANSITION', message: 'This bill can no longer be changed' });
+    }
+    if (!dto.billKey.startsWith(billPrefix(shop.id)) || dto.billKey === previous) {
+      throw new BadRequestException({ code: 'BILL_REQUIRED', message: "Upload a photo of the courier's bill" });
+    }
+    if (dto.deliveryProviderId) await this.assertProvider(dto.deliveryProviderId);
+
+    await this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.shopOrder.updateMany({
+        where: { id: row.id, status: row.status, shippingBillKey: previous },
+        data: { shippingBillKey: dto.billKey, billIssueAt: null, ...(dto.deliveryProviderId && { deliveryProviderId: dto.deliveryProviderId }) },
+      });
+      if (!count) throw new ConflictException({ code: 'INVALID_TRANSITION', message: 'This order was just updated' });
+      await tx.orderStatusHistory.create({
+        data: { shopOrderId: row.id, fromStatus: row.status, toStatus: row.status, actorType: 'SHOP', actorId: shop.id, note: BILL_REPLACED_NOTE },
+      });
+      await this.notifications.send(
+        tx,
+        row.order.customer.id,
+        'ORDER',
+        {
+          lo: { title: `ຮ້ານອັບໂຫຼດໃບບິນໃໝ່ ${row.number}`, body: `${shop.name} ປ່ຽນໃບບິນຂົນສົ່ງແລ້ວ. ກົດເພື່ອເບິ່ງ.` },
+          en: { title: `New bill for ${row.number}`, body: `${shop.name} uploaded a new courier's bill. Tap to view it.` },
+        },
+        { link: `/account/orders/${row.number}` },
+      );
+    });
+    await this.storage.remove(previous);
+    return this.detail(shop.id, number);
   }
 
   /** The courier bill of a shipped order (the shop's, or the customer's own order). */
@@ -291,6 +367,14 @@ export class ShopOrdersService {
     if (!(rule.from as readonly OrderStatus[]).includes(row.status)) {
       throw new ConflictException({ code: 'INVALID_TRANSITION', message: 'This order can no longer do that' });
     }
+    if ((dto.action === 'ship' || dto.action === 'pack') && depositBlocksShipping(row.depositStatus)) {
+      throw new ConflictException({ code: 'DEPOSIT_UNCONFIRMED', message: 'Confirm the deposit before sending this order' });
+    }
+    // A return with a dispute open is Vreview's to decide, or a shop could drop the commission
+    // on a sale by reporting it and approving its own report.
+    if ((dto.action === 'approve-return' || dto.action === 'reject-return') && (await this.prisma.dispute.count({ where: { shopOrderId: row.id, status: { in: ['OPEN', 'IN_REVIEW'] } } }))) {
+      throw new ConflictException({ code: 'INVALID_TRANSITION', message: 'Vreview is reviewing this return' });
+    }
     const reason = dto.reason?.trim() || null;
     if (NEEDS_REASON.includes(dto.action) && !reason) {
       throw new BadRequestException({ code: 'REASON_REQUIRED', message: 'Tell the customer why' });
@@ -304,10 +388,7 @@ export class ShopOrdersService {
     if (dto.action === 'ship' && !dto.billKey && !row.urgentDelivery && !row.pickup) {
       throw new BadRequestException({ code: 'BILL_REQUIRED', message: "Upload a photo of the courier's bill" });
     }
-    if (dto.action === 'ship' && dto.deliveryProviderId) {
-      const provider = await this.prisma.deliveryProvider.findFirst({ where: { id: dto.deliveryProviderId, isActive: true } });
-      if (!provider) throw new BadRequestException({ code: 'INVALID_PROVIDER', message: 'Unknown delivery provider' });
-    }
+    if (dto.action === 'ship' && dto.deliveryProviderId) await this.assertProvider(dto.deliveryProviderId);
 
     const payment = paymentOf(row);
     const now = new Date();
@@ -318,7 +399,7 @@ export class ShopOrdersService {
         payment ? tx.payment.update({ where: { id: payment.id }, data: { status, ...extra } }) : null;
       let moved = true;
 
-      // A paid transfer that won't be delivered is refunded by Taladonline (Admin → Refunds).
+      // A paid transfer that won't be delivered is refunded by Vreview (Admin → Refunds).
       const paidTransfer = payment !== null && payment.method !== 'COD' && payment.status === 'PAID';
       const refundDue = async (why: string) => {
         if (!paidTransfer) {
@@ -361,8 +442,9 @@ export class ShopOrdersService {
           if (!moved) break;
           await clearStock(tx, row.id);
           await returnPoints(tx, row.id);
+          await settleDeposit(tx, this.notifications, row.id, 'RETURN_DUE');
           await refundDue(OUT_OF_STOCK_REASON);
-          // Taladonline tells both sides in their chat what happened and what comes next.
+          // Vreview tells both sides in their chat what happened and what comes next.
           await postSystemMessage(
             tx,
             shop.id,
@@ -382,6 +464,8 @@ export class ShopOrdersService {
           if (!moved) break;
           await restoreStock(tx, row.id);
           await returnPoints(tx, row.id);
+          if (dto.action === 'approve-return') await revokeEarnedPoints(tx, row.id);
+          await settleDeposit(tx, this.notifications, row.id, 'RETURN_DUE');
           await refundDue(note ?? 'Cancelled by the shop');
           break;
         }
@@ -415,6 +499,11 @@ export class ShopOrdersService {
     return this.detail(shop.id, number);
   }
 
+  private async assertProvider(id: string) {
+    const provider = await this.prisma.deliveryProvider.findFirst({ where: { id, isActive: true } });
+    if (!provider) throw new BadRequestException({ code: 'INVALID_PROVIDER', message: 'Unknown delivery provider' });
+  }
+
   private async find(shopId: string | null, number: string): Promise<OrderRow> {
     const row = await this.prisma.shopOrder.findFirst({ where: { number, ...(shopId && { shopId, ...SHOP_VISIBLE }) }, include: orderInclude });
     if (!row) throw new NotFoundException('Order not found');
@@ -438,12 +527,16 @@ export class ShopOrdersService {
         lineTotal: i.lineTotal.toNumber(),
         imageUrl: i.product.images[0] ? this.media.publicUrl(i.product.images[0].key) : null,
         productSlug: i.product.slug,
+        guarantee: i.guaranteeDuration && i.guaranteeUnit ? { duration: i.guaranteeDuration, unit: i.guaranteeUnit } : null,
       })),
       customer: { id: r.order.customer.id, name: r.order.customer.name },
       shop: r.shop,
       payment: payment && { method: payment.method, status: payment.status, hasSlip: payment.slipKey !== null },
       urgent: r.urgentDelivery,
       pickup: r.pickup,
+      deliveryProvider: r.deliveryProvider,
+      billError: r.billIssueAt !== null,
+      depositStatus: r.depositStatus,
       awaitingConfirmation: r.status === 'PENDING' && paymentCheck(r.order.slips) === 'reviewing',
       paymentCheck: r.status === 'PENDING' ? paymentCheck(r.order.slips) : null,
       paymentDueAt: r.paymentDueAt,
@@ -459,11 +552,11 @@ function outOfStockMessage({ number, items, refund }: { number: string; items: s
   const list = items.join(', ');
   return [
     `⚠️ ຄຳສັ່ງຊື້ ${number} ຖືກຍົກເລີກ ເພາະສິນຄ້າໝົດ: ${list}.`,
-    `• ລູກຄ້າ: ຂໍອະໄພໃນຄວາມບໍ່ສະດວກ. ${refund ? `Taladonline ຈະຄືນເງິນ ${refund} ໃຫ້ທ່ານໂດຍກົງ.` : 'ທ່ານບໍ່ໄດ້ຖືກເກັບເງິນ.'} ທ່ານສາມາດຖາມຮ້ານເລື່ອງສິນຄ້າທົດແທນໃນແຊັດນີ້ໄດ້.`,
+    `• ລູກຄ້າ: ຂໍອະໄພໃນຄວາມບໍ່ສະດວກ. ${refund ? `Vreview ຈະຄືນເງິນ ${refund} ໃຫ້ທ່ານໂດຍກົງ.` : 'ທ່ານບໍ່ໄດ້ຖືກເກັບເງິນ.'} ທ່ານສາມາດຖາມຮ້ານເລື່ອງສິນຄ້າທົດແທນໃນແຊັດນີ້ໄດ້.`,
     `• ຮ້ານ: ສະຕັອກຂອງສິນຄ້ານີ້ຖືກຕັ້ງເປັນ 0 ແລ້ວ, ອັບເດດສະຕັອກເມື່ອມີເຄື່ອງ.`,
     '',
     `⚠️ Order ${number} was cancelled because it is out of stock: ${list}.`,
-    `• Customer: sorry for the trouble. ${refund ? `Taladonline will refund ${refund} to you directly.` : 'You were not charged.'} You can ask the shop about an alternative here.`,
+    `• Customer: sorry for the trouble. ${refund ? `Vreview will refund ${refund} to you directly.` : 'You were not charged.'} You can ask the shop about an alternative here.`,
     `• Shop: the stock of these items is now 0; update it when they are back.`,
   ].join('\n');
 }

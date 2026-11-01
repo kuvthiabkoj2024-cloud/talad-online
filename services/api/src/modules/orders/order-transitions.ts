@@ -1,3 +1,4 @@
+import { RETURN_RULES, pointsForTotal, type PointTier } from '@talad/shared';
 import type { ActorType, OrderStatus, Prisma } from '../../generated/prisma/client.js';
 
 /** Puts a cancelled or returned order's units back on sale. */
@@ -28,7 +29,7 @@ export async function clearStock(tx: Prisma.TransactionClient, shopOrderId: stri
 }
 
 /**
- * A Taladonline message in the shop–customer chat (both sides see it, both get an unread),
+ * A Vreview message in the shop–customer chat (both sides see it, both get an unread),
  * creating the conversation if they never chatted.
  */
 export async function postSystemMessage(tx: Prisma.TransactionClient, shopId: string, customerId: string, text: string): Promise<void> {
@@ -55,6 +56,25 @@ export async function addSold(tx: Prisma.TransactionClient, shopOrderId: string)
   }
 }
 
+/** A completed order that was returned no longer counts towards "sold". */
+export async function removeSold(tx: Prisma.TransactionClient, shopOrderId: string): Promise<void> {
+  const items = await tx.orderItem.groupBy({ by: ['productId'], where: { shopOrderId }, _sum: { quantity: true } });
+  for (const i of items) {
+    await tx.product.updateMany({ where: { id: i.productId, soldCount: { gte: i._sum.quantity ?? 0 } }, data: { soldCount: { decrement: i._sum.quantity ?? 0 } } });
+  }
+}
+
+/**
+ * Completed orders a payout can settle: transfers (the shop already holds COD cash) past the
+ * return window, so a refund never has to be recovered from money the shop was already paid.
+ */
+export const settleableOrders = (now: Date): Prisma.ShopOrderWhereInput => ({
+  status: 'COMPLETED',
+  payoutId: null,
+  payments: { none: { method: 'COD' } },
+  history: { some: { toStatus: 'COMPLETED', createdAt: { lte: new Date(now.getTime() - RETURN_RULES.windowDays * 86_400_000) } } },
+});
+
 /**
  * Moves a shop order from `from` to `to`, only if it is still in `from` (so two clicks or
  * a click racing the deadline sweep can't both apply). Returns false if it had moved on.
@@ -67,7 +87,8 @@ export async function moveOrder(
   data: Prisma.ShopOrderUpdateManyMutationInput,
   history: { actorType: ActorType | null; actorId: string | null; note?: string | null },
 ): Promise<boolean> {
-  const { count } = await tx.shopOrder.updateMany({ where: { id: shopOrderId, status: from }, data: { ...data, status: to } });
+  // A wrong bill only matters while the parcel is on its way, and no order moves back to that.
+  const { count } = await tx.shopOrder.updateMany({ where: { id: shopOrderId, status: from }, data: { ...data, status: to, billIssueAt: null } });
   if (count === 0) return false;
   await tx.orderStatusHistory.create({
     data: { shopOrderId, fromStatus: from, toStatus: to, actorType: history.actorType, actorId: history.actorId, note: history.note ?? null },
@@ -75,8 +96,11 @@ export async function moveOrder(
   return true;
 }
 
-/** `Setting.points`: kip per point earned, kip one point is worth when spent, days until it expires. */
-export type PointRules = { earnPer?: number; redeemValue?: number; expiryDays?: number };
+/**
+ * `Setting.points`: points per order total, kip one point is worth when spent, days until it
+ * expires. `earnPer` (1 point per this many kip) is the older rule, used until ranges are saved.
+ */
+export type PointRules = { earnTiers?: PointTier[]; earnPer?: number; redeemValue?: number; expiryDays?: number };
 export const pointRules = async (db: Pick<Prisma.TransactionClient, 'setting'>): Promise<PointRules> =>
   ((await db.setting.findUnique({ where: { key: 'points' } }))?.value ?? {}) as PointRules;
 
@@ -96,23 +120,42 @@ export async function returnPoints(tx: Prisma.TransactionClient, shopOrderId: st
   return so.pointsRedeemed;
 }
 
-/** Points an order of `total` kip earns: 1 per `earnPer` kip (0 when earning is off). */
-export async function pointsFor(db: Pick<Prisma.TransactionClient, 'setting'>, total: number): Promise<number> {
-  const { earnPer } = await pointRules(db);
-  return earnPer && earnPer > 0 ? Math.floor(total / earnPer) : 0;
+/**
+ * A returned order gives back the points it earned (once). All of them: if the customer already
+ * spent them the balance goes below zero, and points earned later pay that off first.
+ */
+export async function revokeEarnedPoints(tx: Prisma.TransactionClient, shopOrderId: string, note = 'Points taken back (order returned)'): Promise<number> {
+  const so = await tx.shopOrder.findUnique({ where: { id: shopOrderId }, select: { pointsEarned: true, order: { select: { id: true, customerId: true } } } });
+  if (!so || so.pointsEarned <= 0) return 0;
+  const { count } = await tx.shopOrder.updateMany({ where: { id: shopOrderId, pointsEarned: so.pointsEarned }, data: { pointsEarned: 0 } });
+  if (!count) return 0;
+  const points = so.pointsEarned;
+  await tx.pointTransaction.create({
+    data: { customerId: so.order.customerId, type: 'ADJUST', points: -points, orderId: so.order.id, note },
+  });
+  await tx.customer.update({ where: { id: so.order.customerId }, data: { pointsBalance: { decrement: points } } });
+  return points;
+}
+
+const earnedFor = (rules: PointRules, total: number): number =>
+  rules.earnTiers ? pointsForTotal(rules.earnTiers, total) : rules.earnPer && rules.earnPer > 0 ? Math.floor(total / rules.earnPer) : 0;
+
+/** Points an order earns (0 when earning is off, or nothing in it qualifies). */
+export async function pointsFor(db: Pick<Prisma.TransactionClient, 'setting'>, order: { pointsBase: Prisma.Decimal | null; total: Prisma.Decimal }): Promise<number> {
+  return earnedFor(await pointRules(db), (order.pointsBase ?? order.total).toNumber());
 }
 
 /**
- * Loyalty points (§2.4): 1 point per `earnPer` kip, expiring after `expiryDays`. Only when the
+ * Loyalty points (§2.4): by `pointsBase`, expiring after `expiryDays`. Only when the
  * customer confirms they received the order — one that completes on its own earns nothing.
  */
 export async function awardPoints(tx: Prisma.TransactionClient, shopOrderId: string): Promise<number> {
   const [order, rules] = await Promise.all([
-    tx.shopOrder.findUnique({ where: { id: shopOrderId }, select: { total: true, order: { select: { id: true, customerId: true } } } }),
+    tx.shopOrder.findUnique({ where: { id: shopOrderId }, select: { total: true, pointsBase: true, order: { select: { id: true, customerId: true } } } }),
     pointRules(tx),
   ]);
-  if (!order || !rules.earnPer || rules.earnPer <= 0) return 0;
-  const points = Math.floor(order.total.toNumber() / rules.earnPer);
+  if (!order) return 0;
+  const points = earnedFor(rules, (order.pointsBase ?? order.total).toNumber());
   if (points <= 0) return 0;
   await tx.pointTransaction.create({
     data: {
@@ -125,5 +168,6 @@ export async function awardPoints(tx: Prisma.TransactionClient, shopOrderId: str
     },
   });
   await tx.customer.update({ where: { id: order.order.customerId }, data: { pointsBalance: { increment: points } } });
+  await tx.shopOrder.update({ where: { id: shopOrderId }, data: { pointsEarned: points } });
   return points;
 }

@@ -100,9 +100,10 @@ export function CheckoutForm({
   // A method is usable when the platform allows it and every shop in the order takes it.
   const usable = (m: CheckoutPaymentMethod) => (m === "BANK_TRANSFER" ? quote.transferAvailable : m === "COD" ? quote.codAvailable : true);
   const [payment, setPayment] = useState<CheckoutPaymentMethod>(() => methods.find(usable) ?? methods[0] ?? "BANK_TRANSFER");
-  // One transfer to Taladonline for the whole order: up to MAX_PAYMENT_SLIPS slips, each with
+  // One transfer to Vreview for the whole order: up to MAX_PAYMENT_SLIPS slips, each with
   // its storage key once uploaded (sent with the order) and its UI state.
   const [slips, setSlips] = useState<(SlipState & { key: string | null })[]>([]);
+  const [depositSlips, setDepositSlips] = useState<Record<string, SlipState & { key: string | null }>>({});
   const [slipNotice, setSlipNotice] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [picker, setPicker] = useState<"list" | "new" | null>(null);
@@ -117,7 +118,41 @@ export function CheckoutForm({
   // Every slip uploaded (none still sending or failed), and at least one.
   // Points that cover the whole order leave nothing to transfer.
   const paidByPoints = quote.total === 0 && quote.points.used > 0;
-  const slipsMissing = isTransfer && !paidByPoints && (slipKeys.length === 0 || slips.some((x) => !x.key));
+  const transferSlipsMissing = isTransfer && !paidByPoints && (slipKeys.length === 0 || slips.some((x) => !x.key));
+  // COD: each shop asking for a deposit is paid before the order is placed, with its own slip.
+  const depositShops = payment === "COD" ? quote.shops.filter((s) => s.deposit > 0) : [];
+  const depositsMissing = depositShops.some((s) => !depositSlips[s.shop.id]?.key);
+  const slipsMissing = transferSlipsMissing || depositsMissing;
+
+  async function pickDepositSlip(shopId: string, original: File) {
+    const file = await compressImage(original);
+    const preview = URL.createObjectURL(file);
+    setDepositSlips((all) => ({ ...all, [shopId]: { ...emptySlip, preview, uploading: true, key: null } }));
+    const form = new FormData();
+    form.set("slip", file);
+    const res = await uploadCheckoutSlip(form);
+    setDepositSlips((all) =>
+      all[shopId]?.preview === preview
+        ? {
+            ...all,
+            [shopId]: {
+              ...all[shopId],
+              uploading: false,
+              attached: res.ok,
+              key: res.ok ? res.slipKey : null,
+              error: res.ok ? null : (cartErrors[res.error as keyof typeof cartErrors] ?? cartErrors.generic),
+            },
+          }
+        : all,
+    );
+  }
+
+  /** A slip paid the old deposit: a new amount needs a new one. */
+  function dropChangedDeposits(next: CheckoutQuote) {
+    setDepositSlips((all) =>
+      Object.fromEntries(Object.entries(all).filter(([id]) => next.shops.find((s) => s.shop.id === id)?.deposit === quote.shops.find((s) => s.shop.id === id)?.deposit)),
+    );
+  }
 
   async function pickSlip(original: File) {
     if (slips.length >= MAX_PAYMENT_SLIPS) return;
@@ -201,6 +236,7 @@ export function CheckoutForm({
       const next = res.quote;
       // The slips paid the old total; a new amount needs new ones.
       if (next.total !== quote.total && slips.length) clearSlips();
+      dropChangedDeposits(next);
       setFresh({ from: initialQuote, quote: next });
       if (couponCode) setCouponMessage(next.couponError ? cartErrors[next.couponError] : null);
       syncUrl({ courier: next.delivery.selectedId, coupon: next.coupon?.code });
@@ -274,6 +310,7 @@ export function CheckoutForm({
         ...(quote.shops.some((s) => s.pickupSelected) && { pickupShopIds: quote.shops.filter((s) => s.pickupSelected).map((s) => s.shop.id) }),
         ...(quote.points.used > 0 && { usePoints: true }),
         ...(isTransfer && !paidByPoints && { slipKeys }),
+        ...(depositShops.length > 0 && { depositSlips: Object.fromEntries(depositShops.map((s) => [s.shop.id, depositSlips[s.shop.id]?.key ?? ""])) }),
         ...(note.trim() && { note: note.trim() }),
       });
       if (res.ok) {
@@ -613,11 +650,11 @@ export function CheckoutForm({
             </Card>
           )}
 
-          {/* Manual QR payment: one transfer to Taladonline for the whole order */}
+          {/* Manual QR payment: one transfer to Vreview for the whole order */}
           {isTransfer && quote.transfer && !paidByPoints && (
             <div className="flex flex-col gap-2">
               <PaymentPanel
-                title={dict.payTaladonline}
+                title={dict.payVreview}
                 qrSrc={quote.transfer.hasQr ? "/api/payment-qr" : null}
                 amount={formatMoney(quote.total, locale)}
                 transfer={quote.transfer}
@@ -633,6 +670,26 @@ export function CheckoutForm({
               {slipNotice && <p role="alert" className="px-1 text-sm text-sale">{slipNotice}</p>}
             </div>
           )}
+
+          {/* COD with a deposit: paid to each shop's own QR, and the shop confirms it. */}
+          {depositShops.map((s) => (
+            <div key={s.shop.id} className="flex flex-col gap-2">
+              <PaymentPanel
+                title={interpolate(dict.depositFor, { shop: s.shop.name })}
+                scanTitle={interpolate(dict.depositScanTitle, { shop: s.shop.name })}
+                scanBody={dict.depositScanBody}
+                qrSrc={`/api/shops/${s.shop.id}/deposit-qr`}
+                amount={formatMoney(s.deposit, locale)}
+                transfer={s.depositAccount ?? { bankCode: null, accountName: null, accountNumber: null, hasQr: true }}
+                slips={depositSlips[s.shop.id] ? [depositSlips[s.shop.id]] : []}
+                onPickSlip={(file) => void pickDepositSlip(s.shop.id, file)}
+                dict={dict}
+              />
+              <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-inset ring-amber-200">
+                {interpolate(dict.depositTerms, { rest: formatMoney(s.total - s.deposit, locale) })}
+              </p>
+            </div>
+          ))}
 
           {/* Discount coupon */}
           <Card>
@@ -713,7 +770,7 @@ export function CheckoutForm({
           <div aria-busy={requoting} className={`flex flex-col gap-3 transition-opacity ${requoting ? "opacity-40" : ""}`}>
             <SummaryRows quote={quote} locale={locale} dict={dict} accountDict={accountDict} />
           </div>
-          {slipsMissing && <SlipWarning text={dict.slipRequired} />}
+          {slipsMissing && <SlipWarning text={depositsMissing ? dict.depositRequired : dict.slipRequired} />}
           {error && <p role="alert" className="rounded-xl bg-sale/10 px-3 py-2 text-sm text-sale">{error}</p>}
           {placeButton}
         </aside>
@@ -721,7 +778,7 @@ export function CheckoutForm({
 
       {/* Phones: total + place order pinned to the bottom */}
       <div data-bottom-bar className="fixed inset-x-0 bottom-0 z-30 flex flex-col gap-2 border-t border-border bg-card px-4 py-3 shadow-[0_-4px_12px_rgb(0_0_0/0.06)] lg:hidden">
-        {slipsMissing && <SlipWarning text={dict.slipRequired} />}
+        {slipsMissing && <SlipWarning text={depositsMissing ? dict.depositRequired : dict.slipRequired} />}
         {error && <p role="alert" className="text-sm text-sale">{error}</p>}
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">

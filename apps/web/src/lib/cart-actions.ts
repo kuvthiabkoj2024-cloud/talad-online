@@ -31,6 +31,7 @@ const KNOWN = new Set<CartErrorCode>([
   "COUPON_ALREADY_USED",
   "COUPON_MIN_ORDER",
   "COUPON_OWN_SHOP",
+  "DEPOSIT_SLIP_REQUIRED",
 ]);
 
 async function send<T>(
@@ -116,15 +117,39 @@ export async function placeOrder(input: {
   usePoints?: boolean;
   paymentMethod: CheckoutPaymentMethod;
   expectedTotal: number;
-  /** BANK_TRANSFER: 1–3 slip keys for the whole order (one transfer to Taladonline). */
+  /** BANK_TRANSFER: 1–3 slip keys for the whole order (one transfer to Vreview). */
   slipKeys?: string[];
+  /** COD: the slip for each shop asking for a deposit, by shop id. */
+  depositSlips?: Record<string, string>;
   note?: string;
 }): Promise<CartResult<{ order: PlacedOrder }>> {
   const res = await send<PlacedOrder>("POST", "/me/checkout", input);
   return res.ok ? { ok: true, order: res.data } : res;
 }
 
-/** "I received it": completes a delivered order now (interim — returns come later). */
+/** A return request: the reason and the keys of the files uploaded for it. */
+export async function requestReturn(shopOrderNumber: string, input: { reason: string; details?: string; evidenceKeys: string[] }): Promise<CartResult> {
+  const res = await send("POST", `/me/orders/${encodeURIComponent(shopOrderNumber)}/return`, input);
+  return res.ok ? { ok: true } : res;
+}
+
+/** `slip` in the form data: a new deposit slip after the shop rejected one. */
+export async function resendDepositSlip(shopOrderNumber: string, form: FormData): Promise<CartResult> {
+  const slip = form.get("slip");
+  if (!(slip instanceof File) || slip.size === 0) return { ok: false, error: "INVALID_IMAGE" };
+  const upload = new FormData();
+  upload.set("file", slip);
+  const res = await send("POST", `/me/orders/${encodeURIComponent(shopOrderNumber)}/deposit-slip`, upload);
+  return res.ok ? { ok: true } : res;
+}
+
+/** The courier's bill is wrong: asks the shop for a new one. */
+export async function reportShippingBill(shopOrderNumber: string): Promise<CartResult> {
+  const res = await send("POST", `/me/orders/${encodeURIComponent(shopOrderNumber)}/shipping-bill/report`);
+  return res.ok ? { ok: true } : res;
+}
+
+/** "I received it": completes a delivered order now (a problem can still be reported afterwards). */
 export async function receiveOrder(shopOrderNumber: string): Promise<CartResult> {
   const res = await send("POST", `/me/orders/${encodeURIComponent(shopOrderNumber)}/receive`);
   return res.ok ? { ok: true } : res;

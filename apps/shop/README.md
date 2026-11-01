@@ -1,6 +1,6 @@
 # @talad/shop — Seller Center
 
-Vendor tools (scope §3). Shop owners sign in with the same Taladonline account they shop
+Vendor tools (scope §3). Shop owners sign in with the same Vreview account they shop
 with (phone + SMS code); the account must own a shop (`Shop.ownerId`).
 
 Vite 8 + React 19 + TypeScript, React Router 8, TanStack Query, and the shared

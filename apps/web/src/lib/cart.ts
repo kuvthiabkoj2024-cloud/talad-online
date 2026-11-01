@@ -31,7 +31,7 @@ export interface CartView {
   count: number;
 }
 
-/** Taladonline's account a customer transfers to (an admin checks the slips). */
+/** Vreview's account a customer transfers to (an admin checks the slips). */
 export interface TransferAccount {
   bankCode: string | null;
   accountName: string | null;
@@ -54,7 +54,8 @@ export type CouponErrorCode =
   | "COUPON_USED_UP"
   | "COUPON_ALREADY_USED"
   | "COUPON_MIN_ORDER"
-  | "COUPON_OWN_SHOP";
+  | "COUPON_OWN_SHOP"
+  | "DEPOSIT_SLIP_REQUIRED";
 
 export interface CheckoutQuote {
   /** `cod`: the shop offers cash on delivery (each shop decides). */
@@ -70,6 +71,10 @@ export interface CheckoutQuote {
     pickup: { address: string | null; latitude: number | null; longitude: number | null } | null;
     pickupSelected: boolean;
     shippingFee: number;
+    /** Paid to this shop before ordering if the customer chooses COD, out of `total`. */
+    deposit: number;
+    /** Where to pay it (null without a deposit). */
+    depositAccount: TransferAccount | null;
     /** Points spent on this shop and their kip value (already off `total`). */
     points: number;
     pointsDiscount: number;
@@ -78,7 +83,7 @@ export interface CheckoutQuote {
   points: { balance: number; value: number; usable: number; used: number; discount: number };
   subtotal: number;
   discountTotal: number;
-  /** Urgent delivery fees (couriers are paid outside Taladonline). */
+  /** Urgent delivery fees (couriers are paid outside Vreview). */
   shippingTotal: number;
   total: number;
   /** `needed`: some shop goes by courier (not urgent delivery or pickup). */
@@ -87,7 +92,7 @@ export interface CheckoutQuote {
   coupon: { code: string; shopId: string | null; discount: number } | null;
   couponError: CouponErrorCode | null;
   issues: { itemId: string; code: "UNAVAILABLE" | "QUANTITY_EXCEEDS_STOCK" | "OWN_PRODUCT" }[];
-  /** Where to transfer: Taladonline's account, one payment for the whole order. */
+  /** Where to transfer: Vreview's account, one payment for the whole order. */
   transfer: TransferAccount | null;
   transferAvailable: boolean;
   /** Cash on delivery needs every shop in the order to offer it. */

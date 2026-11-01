@@ -1,5 +1,5 @@
 /*
- * Taladonline storefront service worker (installable PWA + offline fallback).
+ * Vreview storefront service worker (installable PWA + offline fallback).
  *
  * - Pages always come from the network (prices, stock and carts must be fresh); when the
  *   network is down the visitor gets /offline.html instead of the browser's error page.

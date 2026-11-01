@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Query, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, ParseUUIDPipe, Post, Put, Query, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { BANK_CODES, isShopOrderTab, type BankCode } from '@talad/shared';
@@ -20,7 +20,7 @@ class AdminOrdersQuery extends AdminPageQuery {
   @IsUUID('7')
   customerId?: string;
 
-  /** `transfer` (checked by Taladonline) or `cod`; omitted = both. */
+  /** `transfer` (checked by Vreview) or `cod`; omitted = both. */
   @IsOptional()
   @IsIn(['transfer', 'cod'])
   method?: 'transfer' | 'cod';
@@ -44,7 +44,16 @@ const PAYOUT_STATUSES: PayoutStatus[] = ['SCHEDULED', 'PROCESSING', 'PAID', 'FAI
 @Permission('orders')
 @Controller('admin/orders')
 export class AdminOrdersController {
-  constructor(private readonly orders: ShopOrdersService) {}
+  constructor(
+    private readonly orders: ShopOrdersService,
+    private readonly admin: AdminOrdersService,
+  ) {}
+
+  /** Removes the points an order earned, for a return settled outside the app. */
+  @Post(':number/revoke-points')
+  revokePoints(@CurrentAdmin() a: AdminUser, @Param('number') number: string, @Body() dto: ReasonDto, @ClientIp() ip: string) {
+    return this.admin.revokeOrderPoints(a, number, dto.reason?.trim() || null, ip);
+  }
 
   /** `?method=transfer|cod&status=<shop order tab>&q=&shopId=&customerId=&page=` */
   @Get()
@@ -73,6 +82,12 @@ export class AdminOrdersController {
 @Controller('admin/disputes')
 export class AdminDisputesController {
   constructor(private readonly admin: AdminOrdersService) {}
+
+  @Get(':id/evidence/:index')
+  async evidence(@Param('id', id) disputeId: string, @Param('index', ParseIntPipe) index: number) {
+    const file = await this.admin.disputeEvidence(disputeId, index);
+    return new StreamableFile(file.body, { type: file.contentType, length: file.contentLength, disposition: 'inline' });
+  }
 
   @Get()
   list(@Query() q: AdminPageQuery) {
@@ -120,7 +135,7 @@ export class AdminPayoutsController {
     return new StreamableFile(file.body, { type: file.contentType, length: file.contentLength, disposition: 'inline' });
   }
 
-  /** Taladonline's transfer slip (multipart field `file`), before marking it paid. */
+  /** Vreview's transfer slip (multipart field `file`), before marking it paid. */
   @Post(':id/slip')
   @HttpCode(200)
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024, files: 1 } }))
@@ -151,7 +166,7 @@ class RejectPaymentDto {
 }
 
 /**
- * Transfers to check (§2.10): customers pay Taladonline's account and send slips; approving
+ * Transfers to check (§2.10): customers pay Vreview's account and send slips; approving
  * sends the order to its shops as paid, rejecting asks the customer for new slips.
  */
 @ApiTags('admin')
@@ -191,7 +206,7 @@ export class AdminPaymentsController {
   }
 }
 
-/** Paid orders that were cancelled (out of stock, cancelled by the shop): Taladonline refunds the customer. */
+/** Paid orders that were cancelled (out of stock, cancelled by the shop): Vreview refunds the customer. */
 @ApiTags('admin')
 @ApiBearerAuth()
 @UseGuards(AdminAuthGuard)
@@ -236,7 +251,7 @@ class PaymentAccountDto {
   accountNumber: string | null = null;
 }
 
-/** Taladonline's account customers transfer to (shown at checkout). */
+/** Vreview's account customers transfer to (shown at checkout). */
 @ApiTags('admin')
 @ApiBearerAuth()
 @UseGuards(AdminAuthGuard)

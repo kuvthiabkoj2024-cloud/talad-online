@@ -42,7 +42,7 @@ export class AdminCustomersService {
           pointsBalance: true,
           createdAt: true,
           shop: { select: { id: true, name: true, status: true } },
-          _count: { select: { orders: true } },
+          _count: { select: { orders: true, feedPosts: true } },
         },
       }),
       this.prisma.customer.count({ where }),
@@ -57,7 +57,7 @@ export class AdminCustomersService {
       : [];
     const spent = new Map(spend.map((s) => [s.id, s.spent ? Number(s.spent) : 0]));
     return {
-      items: rows.map(({ _count, ...c }) => ({ ...c, orderCount: _count.orders, totalSpent: spent.get(c.id) ?? 0 })),
+      items: rows.map(({ _count, ...c }) => ({ ...c, orderCount: _count.orders, videoCount: _count.feedPosts, totalSpent: spent.get(c.id) ?? 0 })),
       page: filter.page,
       pageSize: filter.pageSize,
       total,

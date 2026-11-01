@@ -1,4 +1,4 @@
-import { CHECKOUT_PAYMENT_METHODS } from '@talad/shared';
+import { CHECKOUT_PAYMENT_METHODS, POINT_TIER_RULES } from '@talad/shared';
 import { Transform, Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsIn, IsInt, IsNumber, IsOptional, IsString, Length, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 import { cleanPageBody } from './page-html.js';
@@ -27,12 +27,28 @@ export class CmsPageDto {
   en?: PageTextDto;
 }
 
-export class PointRulesDto {
-  /** Kip spent per point earned. */
+export class PointTierDto {
+  /** Highest order total in this range; null = any amount above the other ranges. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(POINT_TIER_RULES.amountMax)
+  upTo: number | null;
+
   @IsInt()
   @Min(0)
-  @Max(10_000_000)
-  earnPer: number;
+  @Max(POINT_TIER_RULES.pointsMax)
+  points: number;
+}
+
+export class PointRulesDto {
+  /** Omitted: keep the older "1 point per kip" rule until ranges are added. Empty: earning is off. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(POINT_TIER_RULES.maxTiers)
+  @ValidateNested({ each: true })
+  @Type(() => PointTierDto)
+  earnTiers?: PointTierDto[];
 
   /** Kip a point is worth when redeemed. */
   @IsInt()

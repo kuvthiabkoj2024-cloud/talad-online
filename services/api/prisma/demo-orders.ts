@@ -110,7 +110,7 @@ export async function seedDemoOrders(prisma: PrismaClient, customerId: string): 
 
     const subtotal = lines.reduce((sum, l) => sum + l.lineTotal, 0);
     const discount = s.discount ?? 0;
-    // Delivery is paid to the courier, not through Taladonline.
+    // Delivery is paid to the courier, not through Vreview.
     const total = subtotal - discount;
     const reached = (status: OrderStatus) => path.includes(status);
     const paid = s.status !== 'PENDING' && s.status !== 'CANCELLED' && (s.method !== 'COD' || reached('DELIVERED'));

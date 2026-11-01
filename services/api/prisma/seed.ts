@@ -115,7 +115,7 @@ async function main() {
     taxRate: 0,
     defaultCommissionRate: 5,
     productModeration: 'pre',
-    points: { earnPer: 10000, redeemValue: 100, expiryDays: 365 },
+    points: { earnTiers: [{ upTo: 100000, points: 10 }, { upTo: null, points: 20 }], redeemValue: 100, expiryDays: 365 },
     orderDeadlines: { maxExtensions: 2, extensionHours: 48 },
   };
   for (const [key, value] of Object.entries(settings)) {
@@ -174,10 +174,10 @@ async function seedDemoCatalog() {
   });
   const shop = await prisma.shop.upsert({
     where: { slug: 'talad-demo' },
-    update: { description, ownerId: owner.id, name: 'Taladonline Demo Shop' },
+    update: { description, ownerId: owner.id, name: 'Vreview Demo Shop' },
     create: {
       slug: 'talad-demo',
-      name: 'Taladonline Demo Shop',
+      name: 'Vreview Demo Shop',
       ownerName: 'Demo Owner',
       email: 'demo-shop@talad.local',
       phone: '+8562000000000',
@@ -237,7 +237,7 @@ async function seedDemoCatalog() {
 
   for (const [i, [slug, name, category, unit, price, compareAtPrice, soldCount]] of products.entries()) {
     const description =
-      `${name}. Demo listing from Taladonline Demo Shop — replace with real product ` +
+      `${name}. Demo listing from Vreview Demo Shop — replace with real product ` +
       `details (materials, size, origin, care instructions) when onboarding shops.`;
     const videoKey = DEMO_PRODUCT_VIDEOS[slug]?.url;
     const product = await prisma.product.upsert({
@@ -297,7 +297,7 @@ async function seedShopPayment(shopId: string, existingQrKey: string | null) {
   const { BUNNY_STORAGE_ZONE, BUNNY_API_KEY, BUNNY_BASE_HOSTNAME = 'storage.bunnycdn.com' } = process.env;
   if (BUNNY_STORAGE_ZONE && BUNNY_API_KEY) {
     try {
-      const png = await QRCode.toBuffer('DEMO ONLY - Taladonline Demo Shop - not a real bank account', {
+      const png = await QRCode.toBuffer('DEMO ONLY - Vreview Demo Shop - not a real bank account', {
         width: 512,
         margin: 2,
       });

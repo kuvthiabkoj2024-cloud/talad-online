@@ -120,7 +120,7 @@ export class CustomerAuthService {
     this.assertFlow(dto.flow, existing, dto.name);
 
     const { code, expiresAt } = await this.otp.create(phone, PURPOSE[dto.flow]);
-    await this.sms.send(phone, `Taladonline: your verification code is ${code}. It expires in 5 minutes.`);
+    await this.sms.send(phone, `Vreview: your verification code is ${code}. It expires in 5 minutes.`);
 
     return { phone, expiresAt, resendAfterSeconds: 60, ...(this.dev() && { devCode: code }) };
   }
@@ -198,7 +198,7 @@ export class CustomerAuthService {
     const existing = await this.prisma.customer.findUnique({ where: { phone } });
     this.assertFlow('login', existing);
     const { code, expiresAt } = await this.otp.create(phone, 'customer_reset');
-    await this.sms.send(phone, `Taladonline: your password reset code is ${code}. It expires in 5 minutes.`);
+    await this.sms.send(phone, `Vreview: your password reset code is ${code}. It expires in 5 minutes.`);
     return { phone, expiresAt, resendAfterSeconds: 60, ...(this.dev() && { devCode: code }) };
   }
 
@@ -283,7 +283,7 @@ export class CustomerAuthService {
     let devCode: string | undefined;
     if (method === 'SMS') {
       const { code } = await this.otp.create(customer.phone!, 'customer_2fa');
-      await this.sms.send(customer.phone!, `Taladonline: your sign-in code is ${code}. It expires in 5 minutes.`);
+      await this.sms.send(customer.phone!, `Vreview: your sign-in code is ${code}. It expires in 5 minutes.`);
       if (this.dev()) devCode = code;
     }
     const expiresAt = existing ? new Date(this.readChallenge(existing).exp) : new Date(Date.now() + CHALLENGE_TTL_MS);

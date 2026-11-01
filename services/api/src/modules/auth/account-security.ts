@@ -74,7 +74,7 @@ export class AccountSecurityService {
   async sendCode(c: Customer) {
     if (!c.phone) throw new BadRequestException(authError('PHONE_REQUIRED', 'No phone number on this account'));
     const { code, expiresAt } = await this.otp.create(c.phone, 'customer_2fa');
-    await this.sms.send(c.phone, `Taladonline: your security code is ${code}. It expires in 5 minutes.`);
+    await this.sms.send(c.phone, `Vreview: your security code is ${code}. It expires in 5 minutes.`);
     const dev = this.config.get('NODE_ENV', { infer: true }) !== 'production';
     return { expiresAt, resendAfterSeconds: 60, ...(dev && { devCode: code }) };
   }

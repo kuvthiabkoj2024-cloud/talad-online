@@ -1,4 +1,4 @@
-import type { OrderStatus, OrderTab, PaymentMethod } from "@talad/shared";
+import type { DepositStatus, GuaranteeUnit, OrderStatus, OrderTab, PaymentMethod, PointTier } from "@talad/shared";
 import type { TransferAccount } from "./cart";
 
 /** Mirrors the customer orders API (services/api orders module). */
@@ -11,12 +11,13 @@ export interface OrderLine {
   unitPrice: number;
   lineTotal: number;
   imageUrl: string | null;
+  guarantee?: { duration: number; unit: GuaranteeUnit; terms: string | null } | null;
 }
 
 export interface OrderSummary {
   number: string;
   status: OrderStatus;
-  /** Transfer slips sent, waiting for Taladonline's check. */
+  /** Transfer slips sent, waiting for Vreview's check. */
   awaitingConfirmation: boolean;
   /** Where the transfer stands while the order waits for payment. */
   paymentCheck: PaymentCheck;
@@ -41,7 +42,7 @@ export interface OrderList {
 
 export type PaymentStatus = "PENDING" | "PAID" | "FAILED" | "REFUNDED" | "EXPIRED";
 
-/** Taladonline's check of the transfer: being checked, rejected (send new slips) or approved. */
+/** Vreview's check of the transfer: being checked, rejected (send new slips) or approved. */
 export type PaymentCheck = "reviewing" | "rejected" | "approved" | null;
 
 export interface PaymentSlip {
@@ -62,6 +63,10 @@ export interface ShippingAddress {
 
 export interface OrderDetail extends Omit<OrderSummary, "shop"> {
   orderNumber: string;
+  /** The customer can ask to return it now; for a completed order, until `returnDeadline`. */
+  returnable: boolean;
+  returnDeadline: string | null;
+  returnRequest: { raisedBy: string; reason: string; details: string | null; status: string; resolution: string | null; files: number; createdAt: string } | null;
   updatedAt: string;
   subtotal: number;
   discountTotal: number;
@@ -70,6 +75,10 @@ export interface OrderDetail extends Omit<OrderSummary, "shop"> {
   trackingNumber: string | null;
   /** The shop photographed the courier's bill when shipping. */
   hasShippingBill?: boolean;
+  /** When the customer reported the bill as wrong, until the shop uploads a new one. */
+  billIssueAt?: string | null;
+  /** The bill can be reported as wrong now. */
+  billReportable?: boolean;
   /** Urgent delivery by the shop itself (its fee is `shippingFee`). */
   urgentDelivery?: boolean;
   /** Collected at the shop: where to go. */
@@ -85,10 +94,10 @@ export interface OrderDetail extends Omit<OrderSummary, "shop"> {
     status: PaymentStatus;
     amount: number;
     paidAt: string | null;
-    /** A paid order that was cancelled: when Taladonline sent the money back. */
+    /** A paid order that was cancelled: when Vreview sent the money back. */
     refundedAt: string | null;
   } | null;
-  /** Taladonline's account to transfer to (while the order waits for payment). */
+  /** Vreview's account to transfer to (while the order waits for payment). */
   transfer: TransferAccount | null;
   /** One transfer pays the whole checkout (all its shops). */
   orderTotal: number;
@@ -96,6 +105,23 @@ export interface OrderDetail extends Omit<OrderSummary, "shop"> {
   slips: PaymentSlip[];
   /** Loyalty points for confirming receipt (none if it completes on its own). */
   pointsOnReceive: number;
+  /** Loyalty points this order earned: they're taken back if it is returned. */
+  pointsEarned: number;
+  /** When the order completed: any guarantees start here. Null if it isn't complete. */
+  completedAt: string | null;
+  deposit: {
+    amount: number;
+    status: DepositStatus;
+    rejectReason: string | null;
+    dueAt: string | null;
+    shopId: string;
+    /** Where to send the money again, while the shop waits for a new slip. */
+    account: TransferAccount | null;
+  } | null;
+  /** What's left to pay in cash on delivery (the total less the deposit). */
+  collectOnDelivery: number;
+  /** Nothing in this order earns points: promotion goods or a coupon. */
+  noPoints: boolean;
   /** Points spent on this order (their value is in `discountTotal`). */
   pointsUsed: number;
   note: string | null;
@@ -128,8 +154,10 @@ export function formatDate(iso: string, locale: keyof typeof DATE_LOCALES, withT
 /** Mirrors `PointsView` (GET /me/points). */
 export interface PointsView {
   balance: number;
+  owed: number;
   pointValue: number;
   worth: number;
+  earnTiers: PointTier[];
   earnPer: number;
   expiryDays: number | null;
   items: { id: string; type: "EARN" | "REDEEM" | "EXPIRE" | "ADJUST"; points: number; note: string | null; orderNumber: string | null; expiresAt: string | null; createdAt: string }[];

@@ -4,10 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@talad/ui/components/c
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@talad/ui/components/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@talad/ui/components/table'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Copy, ImageOff, Landmark, LoaderCircle, Users } from 'lucide-react'
+import { Check, Clapperboard, Copy, ImageOff, Landmark, LoaderCircle, UserRound, Users } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
+import { can, useAuth } from '@/auth/context'
 import { FlagBadge, OrderStatusBadge, ShopStatusBadge } from '@/components/badges'
 import { ConfirmDialog, type ConfirmOptions } from '@/components/confirm-dialog'
 import { FilterTabs, Pager, SearchBox } from '@/components/list-controls'
@@ -16,7 +17,7 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/states'
 import { useSearchParamInput, useUrlParams } from '@/hooks/use-url-params'
 import { useI18n } from '@/i18n/context'
 import { api, send } from '@/lib/api'
-import { formatDate, formatMoney, formatNumber } from '@/lib/format'
+import { fill, formatDate, formatMoney, formatNumber } from '@/lib/format'
 import { usePrivateImage } from '@/lib/private-file'
 import type { CustomerDetail, CustomerRow, OrderList, Paged } from '@/lib/types'
 
@@ -25,6 +26,7 @@ const FILTERS = ['all', 'active', 'suspended', 'sellers'] as const
 /** Customer accounts (§2.4). `?status=active|suspended|sellers&q=` */
 export function CustomersPage() {
   const { t, locale } = useI18n()
+  const { admin } = useAuth()
   const { params, set, page } = useUrlParams()
   const status = (FILTERS as readonly string[]).includes(params.get('status') ?? '') ? (params.get('status') as (typeof FILTERS)[number]) : 'all'
   const q = params.get('q') ?? ''
@@ -64,7 +66,8 @@ export function CustomersPage() {
                     <TableHead>{t.customers.spent}</TableHead>
                     <TableHead>{t.customers.points}</TableHead>
                     <TableHead>{t.customers.joined}</TableHead>
-                    <TableHead className="pr-4">{t.common.status}</TableHead>
+                    <TableHead>{t.common.status}</TableHead>
+                    <TableHead className="pr-4 text-right">{t.customers.actions}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -80,10 +83,28 @@ export function CustomersPage() {
                       <TableCell className="tabular-nums">{formatMoney(c.totalSpent, locale)}</TableCell>
                       <TableCell className="tabular-nums">{formatNumber(c.pointsBalance, locale)}</TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(c.createdAt, locale)}</TableCell>
-                      <TableCell className="pr-4">
+                      <TableCell>
                         <span className="flex flex-wrap gap-1">
                           {c.isActive ? <FlagBadge tone="good">{t.common.active}</FlagBadge> : <FlagBadge tone="bad">{t.customers.suspended}</FlagBadge>}
                           {c.shop && <FlagBadge tone="info">{t.customers.seller}</FlagBadge>}
+                        </span>
+                      </TableCell>
+                      <TableCell className="pr-4">
+                        <span className="flex justify-end gap-1.5">
+                          <Button variant="outline" size="sm" asChild>
+                            <Link to={`/customers/${c.id}`}>
+                              <UserRound />
+                              {t.customers.viewDetail}
+                            </Link>
+                          </Button>
+                          {can(admin, 'videos') && (
+                            <Button variant="outline" size="sm" asChild>
+                              <Link to={`/customers/${c.id}/videos`}>
+                                <Clapperboard />
+                                {fill(t.customers.viewVideos, { n: formatNumber(c.videoCount, locale) })}
+                              </Link>
+                            </Button>
+                          )}
                         </span>
                       </TableCell>
                     </TableRow>

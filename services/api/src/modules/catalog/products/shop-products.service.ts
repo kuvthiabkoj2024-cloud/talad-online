@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { MEDIA_LIMITS, PRODUCT_STATUSES, slugify, type ProductStatus } from '@talad/shared';
+import { DEPOSIT_RULES, MEDIA_LIMITS, PRODUCT_STATUSES, slugify, type DepositType, type GuaranteeUnit, type ProductStatus } from '@talad/shared';
 import { randomUUID } from 'node:crypto';
 import { open } from 'node:fs/promises';
 import { Prisma, type Shop } from '../../../generated/prisma/client.js';
@@ -57,6 +57,8 @@ export interface ShopProductDetail {
   sku: string;
   price: number;
   compareAtPrice: number | null;
+  guarantee: { duration: number; unit: GuaranteeUnit; terms: string | null } | null;
+  deposit: { type: DepositType; value: number } | null;
   stock: number;
   lowStockThreshold: number;
   images: { key: string; url: string }[];
@@ -187,6 +189,8 @@ export class ShopProductsService {
       sku: p.sku,
       price: p.price.toNumber(),
       compareAtPrice: p.compareAtPrice?.toNumber() ?? null,
+      guarantee: p.guaranteeDuration && p.guaranteeUnit ? { duration: p.guaranteeDuration, unit: p.guaranteeUnit, terms: p.guaranteeTerms } : null,
+      deposit: p.depositType && p.depositValue ? { type: p.depositType, value: p.depositValue.toNumber() } : null,
       stock: p.stock,
       lowStockThreshold: p.lowStockThreshold,
       images: p.images.map((i) => ({ key: i.key, url: this.media.publicUrl(i.key) })),
@@ -256,6 +260,8 @@ export class ShopProductsService {
         this.prisma.product.update({
           where: { id },
           data: {
+            // Vreview hid the old video; a new one starts visible.
+            ...((dto.videoKey ?? null) !== current.videoKey && { videoHidden: false, videoHiddenReason: null, videoHiddenAt: null }),
             ...this.fields(dto),
             status,
             ...(status !== current.status && status !== 'REJECTED' && { rejectionReason: null }),
@@ -338,6 +344,11 @@ export class ShopProductsService {
       sku: dto.sku,
       price: dto.price,
       compareAtPrice: dto.compareAtPrice ?? null,
+      guaranteeDuration: dto.guarantee?.duration ?? null,
+      guaranteeUnit: dto.guarantee?.unit ?? null,
+      guaranteeTerms: dto.guarantee?.terms || null,
+      depositType: dto.deposit?.type ?? null,
+      depositValue: dto.deposit?.value ?? null,
       stock: dto.variants.length ? 0 : dto.stock,
       lowStockThreshold: dto.lowStockThreshold,
       videoKey: dto.videoKey ?? null,
@@ -361,6 +372,14 @@ export class ShopProductsService {
     if (!category) throw new BadRequestException({ code: 'INVALID_CATEGORY', message: 'Unknown category' });
     if (!unit) throw new BadRequestException({ code: 'INVALID_UNIT', message: 'Unknown unit' });
 
+    if (dto.deposit) {
+      if (dto.deposit.type === 'PERCENT' && dto.deposit.value > DEPOSIT_RULES.percentMax) {
+        throw new BadRequestException({ code: 'INVALID_DEPOSIT', message: 'A deposit can be at most 100%' });
+      }
+      // Customers pay it to the shop's QR at checkout.
+      const shop = await this.prisma.shop.findUnique({ where: { id: shopId }, select: { paymentQrKey: true } });
+      if (!shop?.paymentQrKey) throw new BadRequestException({ code: 'DEPOSIT_QR_REQUIRED', message: 'Add your payment QR before asking for a deposit' });
+    }
     if (dto.compareAtPrice != null && dto.compareAtPrice <= dto.price) {
       throw new BadRequestException({ code: 'INVALID_COMPARE_PRICE', message: 'Compare-at price must be higher' });
     }

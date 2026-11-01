@@ -56,7 +56,7 @@ function addressLines(o: ShopOrderDetail, locale: Locale) {
 /** Is cash still to be collected at the door, and how much? */
 function cod(o: ShopOrderDetail) {
   const due = o.payment?.method === 'COD' && o.payment.status !== 'PAID'
-  return { due, amount: o.total }
+  return { due, amount: o.collectOnDelivery }
 }
 
 /** A4 bill (invoice) with the shop, customer, delivery, payment, every item and the totals. */

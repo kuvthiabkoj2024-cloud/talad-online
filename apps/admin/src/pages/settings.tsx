@@ -1,4 +1,4 @@
-import { BANK_CODES, CHECKOUT_PAYMENT_METHODS, LAO_BANKS } from '@talad/shared'
+import { BANK_CODES, CHECKOUT_PAYMENT_METHODS, LAO_BANKS, pointTiersValid } from '@talad/shared'
 import { Button } from '@talad/ui/components/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@talad/ui/components/card'
 import { Input } from '@talad/ui/components/input'
@@ -9,9 +9,11 @@ import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Field } from '@/components/field'
 import { PageBody, PageIntro, TopBar } from '@/components/page-header'
+import { PointTiersField } from '@/components/point-tiers-field'
 import { ErrorState, LoadingState } from '@/components/states'
 import { useI18n } from '@/i18n/context'
 import { api, send, upload } from '@/lib/api'
+import { rowsOf, tiersOf } from '@/lib/point-tiers'
 import { usePrivateImage } from '@/lib/private-file'
 import type { PaymentAccount, Settings } from '@/lib/types'
 
@@ -39,17 +41,22 @@ function SettingsForm({ value }: { value: Settings }) {
   const [moderation, setModeration] = useState(value.productModeration)
   const [commission, setCommission] = useState(String(value.defaultCommissionRate))
   const [methods, setMethods] = useState(value.paymentMethods)
-  const [points, setPoints] = useState({ earnPer: String(value.points.earnPer), redeemValue: String(value.points.redeemValue), expiryDays: String(value.points.expiryDays) })
+  const [points, setPoints] = useState({ redeemValue: String(value.points.redeemValue), expiryDays: String(value.points.expiryDays) })
+  const [tierRows, setTierRows] = useState(() => rowsOf(value.points.earnTiers))
+  const tiers = tiersOf(tierRows)
+  // Still on the older rule with no ranges added: saving other settings leaves it as it is.
+  const keepLegacy = value.points.legacyEarnPer !== null && tiers.length === 0
   const save = useMutation({
     mutationFn: () =>
       send<Settings>('PUT', '/admin/settings', {
         productModeration: moderation,
         defaultCommissionRate: Number(commission) || 0,
         paymentMethods: methods,
-        points: { earnPer: Number(points.earnPer) || 0, redeemValue: Number(points.redeemValue) || 0, expiryDays: Number(points.expiryDays) || 0 },
+        points: { ...(!keepLegacy && { earnTiers: tiers }), redeemValue: Number(points.redeemValue) || 0, expiryDays: Number(points.expiryDays) || 0 },
       }),
     onSuccess: (saved) => {
       queryClient.setQueryData(KEY, saved)
+      setTierRows(rowsOf(saved.points.earnTiers))
       toast.success(t.settings.saved)
     },
     onError: () => toast.error(t.common.saveError),
@@ -63,6 +70,7 @@ function SettingsForm({ value }: { value: Settings }) {
       onSubmit={(e) => {
         e.preventDefault()
         if (methods.length === 0) return toast.error(t.settings.NO_PAYMENT_METHOD)
+        if (!pointTiersValid(tiers)) return toast.error(t.settings.POINT_TIERS_INVALID)
         save.mutate()
       }}
     >
@@ -88,10 +96,8 @@ function SettingsForm({ value }: { value: Settings }) {
         ))}
       </Section>
       <Section title={t.settings.points}>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Field required id="earn" label={t.settings.earnPer} hint={t.settings.earnPerHint}>
-            <MoneyInput id="earn" value={points.earnPer} onValueChange={(v) => setPoints((p) => ({ ...p, earnPer: v }))} />
-          </Field>
+        <PointTiersField rows={tierRows} onChange={setTierRows} pointValue={Number(points.redeemValue) || 0} legacyEarnPer={value.points.legacyEarnPer} />
+        <div className="grid gap-4 border-t pt-4 sm:grid-cols-2">
           <Field required id="redeem" label={t.settings.redeemValue} hint={t.settings.redeemHint}>
             <MoneyInput id="redeem" value={points.redeemValue} onValueChange={(v) => setPoints((p) => ({ ...p, redeemValue: v }))} />
           </Field>
@@ -134,7 +140,7 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
 
 const ACCOUNT_KEY = ['admin', 'payment-account'] as const
 
-/** Taladonline's receiving account: customers transfer here at checkout; admins check the slips. */
+/** Vreview's receiving account: customers transfer here at checkout; admins check the slips. */
 function PaymentAccountCard() {
   const { t } = useI18n()
   const account = useQuery({ queryKey: ACCOUNT_KEY, queryFn: () => api<PaymentAccount>('/admin/settings/payment-account') })

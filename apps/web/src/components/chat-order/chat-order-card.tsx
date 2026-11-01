@@ -291,7 +291,7 @@ export function ChatOrderCard({ orderId, summary, locale, dicts }: { orderId: st
           </Row>
           {view.paymentMethod === "BANK_TRANSFER" && view.transfer && (
             <PaymentPanel
-              title={dicts.checkout.payTaladonline}
+              title={dicts.checkout.payVreview}
               qrSrc={view.transfer.hasQr ? "/api/payment-qr" : null}
               amount={formatMoney(view.total, locale)}
               transfer={view.transfer}

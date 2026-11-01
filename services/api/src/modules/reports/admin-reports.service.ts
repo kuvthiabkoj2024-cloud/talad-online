@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { settleableOrders } from '../orders/order-transitions.js';
 
 const DAY = 86_400_000;
 const toDay = (d: Date) => new Date(d.getTime() + 7 * 3_600_000).toISOString().slice(0, 10);
@@ -80,8 +81,8 @@ export class AdminReportsService {
         SELECT COUNT(*)::int AS n FROM "Product" p
         WHERE p.status = 'PUBLISHED' AND COALESCE((SELECT SUM(v.stock) FROM "ProductVariant" v WHERE v."productId" = p.id), p.stock) <= p."lowStockThreshold"`,
       this.prisma.payout.aggregate({ where: { status: { in: ['SCHEDULED', 'PROCESSING'] } }, _count: { _all: true }, _sum: { netAmount: true } }),
-      // Completed orders a payout will settle (cash on delivery is the shop's already).
-      this.prisma.shopOrder.count({ where: { status: 'COMPLETED', payoutId: null, payments: { none: { method: 'COD' } } } }),
+      // Completed orders a payout will settle now (cash on delivery is the shop's already).
+      this.prisma.shopOrder.count({ where: settleableOrders(new Date()) }),
       // Transfers waiting for a check, and paid orders cancelled that still need a refund.
       this.prisma.order.count({ where: { shopOrders: { some: { status: 'PENDING' } }, slips: { some: { status: 'PENDING' } } } }),
       this.prisma.shopOrder.count({ where: { status: 'CANCELLED', payments: { some: { method: { not: 'COD' }, status: 'PAID', amount: { gt: 0 } } } } }),
@@ -145,7 +146,7 @@ export class AdminReportsService {
       orders: gross._count._all,
       completedSales: num(completed._sum.total),
       commissionCollected: num(completed._sum.commissionAmount),
-      /** Platform coupons on completed orders: Taladonline's cost, paid back to shops with their payouts. */
+      /** Platform coupons on completed orders: Vreview's cost, paid back to shops with their payouts. */
       platformCoupons: num(completed._sum.platformDiscount),
       refundsIssued: { count: refunded._count._all, amount: num(refunded._sum.total) },
       payoutsPaid: { count: payouts._count._all, amount: num(payouts._sum.netAmount) },

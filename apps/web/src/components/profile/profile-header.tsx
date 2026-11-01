@@ -34,12 +34,15 @@ export function ProfileHeader({
   dict,
   shareDict,
   backLabel,
+  backToProfile,
 }: {
   profile: CustomerProfile;
   locale: Locale;
   dict: Dict;
   shareDict: ShareSheetDict;
   backLabel: string;
+  /** On a tab other than the videos: back goes to the profile itself, with this label. */
+  backToProfile: string | null;
 }) {
   const { customer } = useSession();
   const router = useRouter();
@@ -61,7 +64,8 @@ export function ProfileHeader({
 
   // Back: to the account page from one's own profile, else wherever the viewer came from.
   function back() {
-    if (mine) router.push(`/${locale}/account`);
+    if (backToProfile) router.replace(`/${locale}/u/${profile.id}`, { scroll: false });
+    else if (mine) router.push(`/${locale}/account`);
     else if (window.history.length > 1) router.back();
     else router.push(`/${locale}/feed`);
   }
@@ -88,8 +92,8 @@ export function ProfileHeader({
 
   const joined = new Intl.DateTimeFormat(DATE_LOCALES[locale], { month: "long", year: "numeric" }).format(new Date(profile.joinedAt));
   const stats = [
-    { label: dict.following, value: profile.following },
-    { label: dict.followers, value: followers },
+    { label: dict.following, value: profile.following, tab: "following" },
+    { label: dict.followers, value: followers, tab: "followers" },
     { label: dict.likes, value: profile.likes },
   ];
   const action = "flex h-11 items-center justify-center gap-2 rounded-xl px-6 text-sm font-semibold transition active:scale-[0.98]";
@@ -105,8 +109,8 @@ export function ProfileHeader({
       <button
         type="button"
         onClick={back}
-        aria-label={backLabel}
-        title={backLabel}
+        aria-label={backToProfile ?? backLabel}
+        title={backToProfile ?? backLabel}
         className="absolute left-3 top-[max(0.75rem,env(safe-area-inset-top))] z-10 flex size-10 items-center justify-center rounded-full bg-black/20 text-white backdrop-blur-sm transition hover:bg-black/30 active:scale-95"
       >
         <ArrowLeft className="size-5" />
@@ -128,14 +132,23 @@ export function ProfileHeader({
           {interpolate(dict.joined, { date: joined })}
         </p>
 
-        <dl className="mt-5 flex items-stretch justify-center">
+        <div className="mt-5 flex items-stretch justify-center">
           {stats.map((s, i) => (
-            <div key={s.label} className={`flex min-w-24 flex-col-reverse items-center gap-0.5 px-4 ${i > 0 ? "border-l border-border" : ""}`}>
-              <dt className="text-xs text-muted-foreground">{s.label}</dt>
-              <dd className="text-lg font-bold leading-tight tabular-nums">{formatCount(s.value, locale)}</dd>
+            <div key={s.label} className={`min-w-24 px-1 ${i > 0 ? "border-l border-border" : ""}`}>
+              {s.tab ? (
+                <Link href={`/${locale}/u/${profile.id}?tab=${s.tab}`} scroll={false} replace className="flex flex-col-reverse items-center gap-0.5 rounded-lg px-3 py-1 transition-colors hover:bg-muted">
+                  <span className="text-xs text-muted-foreground">{s.label}</span>
+                  <span className="text-lg font-bold leading-tight tabular-nums">{formatCount(s.value, locale)}</span>
+                </Link>
+              ) : (
+                <div className="flex flex-col-reverse items-center gap-0.5 px-3 py-1">
+                  <span className="text-xs text-muted-foreground">{s.label}</span>
+                  <span className="text-lg font-bold leading-tight tabular-nums">{formatCount(s.value, locale)}</span>
+                </div>
+              )}
             </div>
           ))}
-        </dl>
+        </div>
 
         <div className="mt-5 flex w-full max-w-xs gap-2">
           {mine ? (

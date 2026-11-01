@@ -76,7 +76,7 @@ export const REQUIRED_KYC_DOCUMENTS: readonly KycDocumentType[] = ['NATIONAL_ID'
 export const SHOP_RULES = {
   nameMin: 2,
   nameMax: 80,
-  /** Storefront address: taladonline.com/s/<slug>. */
+  /** Storefront address: vreview.app/s/<slug>. */
   slugPattern: /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/,
   descriptionMax: 1000,
   addressMax: 300,

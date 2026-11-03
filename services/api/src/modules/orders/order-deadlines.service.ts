@@ -12,7 +12,7 @@ const EVERY = 5 * 60_000;
 /**
  * Order deadlines (§3.6), checked every few minutes in-process:
  * - unpaid orders are cancelled when the payment window ends, unless slips are waiting for
- *   (or passed) Vreview's check — rejected slips don't count;
+ *   (or passed) MC Mart's check — rejected slips don't count;
  * - a COD order whose deposit nobody settled in time is cancelled (the shop owes back a slip it never rejected);
  * - sent orders complete AUTO_COMPLETE_DAYS after shipping unless the customer confirmed
  *   sooner (they count as sold and cash on delivery as paid, but earn no loyalty points).

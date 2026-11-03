@@ -179,7 +179,7 @@ function CopyRow({ label, value, display, mono }: { label: string; value: string
   )
 }
 
-/** Vreview's transfer slip; tap to see it full size. */
+/** MC Mart's transfer slip; tap to see it full size. */
 function PayoutSlip({ id }: { id: string }) {
   const { t } = useI18n()
   const slip = usePrivateImage(`/admin/payouts/${id}/slip`)

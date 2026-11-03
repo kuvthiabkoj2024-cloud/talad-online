@@ -20,7 +20,7 @@ export function CheckoutHeader({
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:py-4">
         <Link href={`/${locale}`} className="flex shrink-0 items-center gap-1.5 text-xl font-bold tracking-tight sm:text-2xl">
           <BrandLogo className="size-8" />
-          Vreview
+          MC Mart
         </Link>
         <span aria-hidden className="hidden h-6 w-px bg-white/30 sm:block" />
         <span className="hidden items-center gap-1.5 text-sm font-medium text-primary-foreground/90 sm:flex">
@@ -48,7 +48,7 @@ export function CheckoutFooter({ locale, dict }: { locale: Locale; dict: Diction
   return (
     <footer className="mt-8 border-t border-border py-5 text-xs text-muted-foreground">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-4 gap-y-2 px-4 sm:justify-between">
-        <p>© {new Date().getFullYear()} Vreview</p>
+        <p>© {new Date().getFullYear()} MC Mart</p>
         <nav className="flex gap-4">
           {links.map(([slug, label]) => (
             <Link key={slug} href={`/${locale}/pages/${slug}`} className="hover:text-foreground hover:underline">

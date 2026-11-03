@@ -11,7 +11,7 @@ import { ClipService } from '../image-search/clip.service.js';
 import { ImageIndexService } from '../image-search/image-index.service.js';
 import { PhotoSearchService } from '../image-search/photo-search.service.js';
 import { ProductsService, type ProductCard } from '../products/products.service.js';
-import { extractQuery, hasColor, isGreeting, isThanks, labelOf, replyLanguage, takeColor, toConcepts, type ChatLocale, type Color, type Concept } from './chat-text.js';
+import { extractQuery, hasColor, isGreeting, isThanks, labelOf, replyLanguage, takeColor, toConcepts, type ChatLocale, type Color, type Concept, relatedWords } from './chat-text.js';
 
 /** Market Chat shows up to this many product cards under a reply. */
 const MAX_PRODUCTS = 20;
@@ -58,7 +58,7 @@ const SUGGESTIONS: Record<ChatLocale, string[]> = {
 const SEARCH_TOOL: Tool = {
   name: 'search_products',
   description:
-    'Search the Vreview catalog. Always call this before recommending products. Give search words in BOTH English and Lao (product names may be in either language). Returns the best matches, marked exact or related.',
+    'Search the MC Mart catalog. Always call this before recommending products. Give search words in BOTH English and Lao (product names may be in either language). Returns the best matches, marked exact or related.',
   input_schema: {
     type: 'object',
     properties: {
@@ -224,7 +224,7 @@ export class ChatService {
     const concepts = toConcepts(query.keywords);
     const fallback = concepts.filter((c) => c.known);
     const exact = [concepts, ...(fallback.length && fallback.length < concepts.length ? [fallback] : [])];
-    const found = await this.find(exact, concepts.flatMap((c) => c.alternatives), null, query.maxPrice);
+    const found = await this.find(exact, relatedWords(concepts), null, query.maxPrice);
     const q = query.keywords.join(' ');
     const exactCount = found.cards.filter((c) => c.exact).length;
     const reply =
@@ -474,7 +474,7 @@ export class ChatService {
       return `${c.slug} (${n.en ?? ''} / ${n.lo ?? ''})`;
     });
     return [
-      'You are "Market Chat" (ແຊັດຕະຫຼາດ in Lao), the friendly shopping assistant of Vreview, an online marketplace for local shops in Laos.',
+      'You are "Market Chat" (ແຊັດຕະຫຼາດ in Lao), the friendly shopping assistant of MC Mart, an online marketplace for local shops in Laos.',
       `Reply in the customer's language: Lao if they write in Lao, English if they write in English (app language: ${lang === 'lo' ? 'Lao' : 'English'}).`,
       'Keep replies short and chatty, like a helpful shop assistant on a messaging app: 1–3 sentences, an emoji at most.',
       'For any product question, call search_products first, with words in both English and Lao. Never invent products, prices or shops — only mention what the tool returned.',
@@ -482,7 +482,7 @@ export class ChatService {
       'If results are only "related", say you could not find exactly that and suggest the related ones. If nothing is found, say so and suggest other words or sending a photo.',
       'Follow-ups refer to the conversation ("in pink?" = the product discussed). If a requested colour, size or option is not available, just say sorry, it is not available (and which options exist) — do not suggest unrelated products.',
       'The app shows the product cards under your message, so mention at most 3 products by name (with price in kip, ₭) instead of listing them all.',
-      'You may ask one short question to narrow down (size, budget, use). Politely decline topics unrelated to shopping on Vreview.',
+      'You may ask one short question to narrow down (size, budget, use). Politely decline topics unrelated to shopping on MC Mart.',
       `Catalog categories: ${list.join('; ')}`,
     ].join('\n');
   }

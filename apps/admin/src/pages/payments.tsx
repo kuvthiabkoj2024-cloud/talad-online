@@ -31,7 +31,7 @@ const SLIP_TONE: Record<SlipStatus, string> = {
 }
 
 /**
- * Transfers to check: customers pay Vreview and send slips; approving sends the order to
+ * Transfers to check: customers pay MC Mart and send slips; approving sends the order to
  * its shops as paid, rejecting asks the customer for new slips.
  */
 export function PaymentsPage() {

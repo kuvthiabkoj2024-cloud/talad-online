@@ -327,7 +327,11 @@ function TryCard() {
                   {turn.reply.handoff && <span className="rounded-full bg-amber-100 px-1.5 font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">{t.chatbot.handoff}</span>}
                   {turn.reply.order && <span className="rounded-full bg-primary/10 px-1.5 font-medium text-primary">🛍 {t.chatbot.orderCard}</span>}
                 </span>
-                <p className="rounded-2xl rounded-br-md bg-brand-soft px-3 py-2 text-sm break-words whitespace-pre-wrap shadow-sm ring-1 ring-primary/20">{turn.reply.text}</p>
+                {turn.reply.silent ? (
+                  <p className="rounded-2xl rounded-br-md border border-dashed px-3 py-2 text-sm text-muted-foreground italic">{t.chatbot.silent}</p>
+                ) : (
+                  <p className="rounded-2xl rounded-br-md bg-brand-soft px-3 py-2 text-sm break-words whitespace-pre-wrap shadow-sm ring-1 ring-primary/20">{turn.reply.text}</p>
+                )}
                 {turn.reply.products.length > 0 && <BotProducts products={turn.reply.products} />}
               </div>
             ),

@@ -44,7 +44,7 @@ export default async function GuaranteePage({ params }: Props) {
         <article key={item.sku} className="break-inside-avoid rounded-2xl border-2 border-primary/40 bg-card p-6 sm:p-8 print:mb-6">
           <header className="flex items-start justify-between gap-4 border-b border-border pb-4">
             <div>
-              <p className="text-sm font-semibold text-primary">Vreview</p>
+              <p className="text-sm font-semibold text-primary">MC Mart</p>
               <h1 className="text-xl font-bold sm:text-2xl">{g.title}</h1>
             </div>
             <ShieldCheck className="size-10 shrink-0 text-primary" strokeWidth={1.5} />

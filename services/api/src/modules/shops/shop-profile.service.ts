@@ -101,7 +101,7 @@ export class ShopProfileService {
       throw new BadRequestException({ code: 'INVALID_BANK', message: 'Unknown bank' });
     }
 
-    // Turning COD on means accepting its terms (Vreview is not responsible for COD
+    // Turning COD on means accepting its terms (MC Mart is not responsible for COD
     // losses); the acceptance time is kept as the record.
     const turningCodOn = dto.codEnabled === true && !shop.codEnabled;
     if (turningCodOn && !dto.codTermsAccepted) {

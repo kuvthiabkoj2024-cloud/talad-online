@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Vreview Seller Center",
+  "name": "MC Mart Seller Center",
   "short_name": "Seller Center",
-  "description": "Run your Vreview shop: products, orders, payments and stats — ສູນຜູ້ຂາຍ Vreview",
+  "description": "Run your MC Mart shop: products, orders, payments and stats — ສູນຜູ້ຂາຍ MC Mart",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",

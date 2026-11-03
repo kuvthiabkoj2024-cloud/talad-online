@@ -31,7 +31,7 @@ export interface CartView {
   count: number;
 }
 
-/** Vreview's account a customer transfers to (an admin checks the slips). */
+/** MC Mart's account a customer transfers to (an admin checks the slips). */
 export interface TransferAccount {
   bankCode: string | null;
   accountName: string | null;
@@ -83,7 +83,7 @@ export interface CheckoutQuote {
   points: { balance: number; value: number; usable: number; used: number; discount: number };
   subtotal: number;
   discountTotal: number;
-  /** Urgent delivery fees (couriers are paid outside Vreview). */
+  /** Urgent delivery fees (couriers are paid outside MC Mart). */
   shippingTotal: number;
   total: number;
   /** `needed`: some shop goes by courier (not urgent delivery or pickup). */
@@ -92,7 +92,7 @@ export interface CheckoutQuote {
   coupon: { code: string; shopId: string | null; discount: number } | null;
   couponError: CouponErrorCode | null;
   issues: { itemId: string; code: "UNAVAILABLE" | "QUANTITY_EXCEEDS_STOCK" | "OWN_PRODUCT" }[];
-  /** Where to transfer: Vreview's account, one payment for the whole order. */
+  /** Where to transfer: MC Mart's account, one payment for the whole order. */
   transfer: TransferAccount | null;
   transferAvailable: boolean;
   /** Cash on delivery needs every shop in the order to offer it. */

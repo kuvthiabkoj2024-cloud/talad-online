@@ -174,10 +174,10 @@ async function seedDemoCatalog() {
   });
   const shop = await prisma.shop.upsert({
     where: { slug: 'talad-demo' },
-    update: { description, ownerId: owner.id, name: 'Vreview Demo Shop' },
+    update: { description, ownerId: owner.id, name: 'MC Mart Demo Shop' },
     create: {
       slug: 'talad-demo',
-      name: 'Vreview Demo Shop',
+      name: 'MC Mart Demo Shop',
       ownerName: 'Demo Owner',
       email: 'demo-shop@talad.local',
       phone: '+8562000000000',
@@ -237,7 +237,7 @@ async function seedDemoCatalog() {
 
   for (const [i, [slug, name, category, unit, price, compareAtPrice, soldCount]] of products.entries()) {
     const description =
-      `${name}. Demo listing from Vreview Demo Shop — replace with real product ` +
+      `${name}. Demo listing from MC Mart Demo Shop — replace with real product ` +
       `details (materials, size, origin, care instructions) when onboarding shops.`;
     const videoKey = DEMO_PRODUCT_VIDEOS[slug]?.url;
     const product = await prisma.product.upsert({
@@ -297,7 +297,7 @@ async function seedShopPayment(shopId: string, existingQrKey: string | null) {
   const { BUNNY_STORAGE_ZONE, BUNNY_API_KEY, BUNNY_BASE_HOSTNAME = 'storage.bunnycdn.com' } = process.env;
   if (BUNNY_STORAGE_ZONE && BUNNY_API_KEY) {
     try {
-      const png = await QRCode.toBuffer('DEMO ONLY - Vreview Demo Shop - not a real bank account', {
+      const png = await QRCode.toBuffer('DEMO ONLY - MC Mart Demo Shop - not a real bank account', {
         width: 512,
         margin: 2,
       });

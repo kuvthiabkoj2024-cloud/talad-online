@@ -86,7 +86,7 @@ export function itemCommissions(
 }
 
 /**
- * What a shop is owed for an order: what the customer paid it, plus the discount Vreview
+ * What a shop is owed for an order: what the customer paid it, plus the discount MC Mart
  * funds (platform coupons, paid back to the shop), minus commission.
  */
 export function shopNet(o: { total: number; platformDiscount: number; commission: number }): number {

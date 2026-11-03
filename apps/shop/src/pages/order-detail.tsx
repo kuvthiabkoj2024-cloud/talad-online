@@ -72,7 +72,7 @@ export function OrderDetailPage() {
   const actions = o.actions
     .filter((a) => !HIDDEN.includes(a))
     .sort((a, b) => Number(PRIMARY.includes(b)) - Number(PRIMARY.includes(a)))
-  // The shop's next step, shown on top of the timeline (a rejected return waits on Vreview).
+  // The shop's next step, shown on top of the timeline (a rejected return waits on MC Mart).
   const next =
     o.status === 'CONFIRMED' || o.status === 'PACKED'
       ? t.orders.next.ship
@@ -81,7 +81,7 @@ export function OrderDetailPage() {
         : o.status === 'RETURN_REQUESTED' && !o.dispute
           ? t.orders.next.return
           : null
-  // A platform coupon is Vreview's discount: it's paid back to the shop.
+  // A platform coupon is MC Mart's discount: it's paid back to the shop.
   const net = o.total + o.platformDiscount - o.commissionAmount
   // Printed on bills and stickers: the profile has the address, the shop the logo and contacts.
   const printShop = {
@@ -571,7 +571,7 @@ function OrderSteps({ order: o }: { order: ShopOrderDetail }) {
       <CardContent className="px-4">
         <ol className="grid grid-cols-3">
           {steps.map((step, i) => {
-            // Reached: green check. Next: amber, in progress. A return request waits on Vreview.
+            // Reached: green check. Next: amber, in progress. A return request waits on MC Mart.
             const done = i <= reached
             const progressing = i === reached + 1 && o.status !== 'RETURN_REQUESTED'
             const Icon = STEP_ICONS[i]

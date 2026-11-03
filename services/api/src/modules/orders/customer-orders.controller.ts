@@ -32,7 +32,7 @@ export class CustomerOrdersController {
     return this.orders.detail(customer.id, number);
   }
 
-  /** Cancel an unpaid transfer whose slips Vreview rejected (or that has none). */
+  /** Cancel an unpaid transfer whose slips MC Mart rejected (or that has none). */
   @Post(':number/cancel')
   cancel(@CurrentCustomer() customer: Customer, @Param('number') number: string) {
     return this.orders.cancel(customer.id, number);
@@ -59,7 +59,7 @@ export class CustomerOrdersController {
     return this.returns.uploadForCustomer(customer.id, number, file);
   }
 
-  /** Asks Vreview to take the order back: a reason and at least one photo or clip. */
+  /** Asks MC Mart to take the order back: a reason and at least one photo or clip. */
   @Post(':number/return')
   requestReturn(@CurrentCustomer() customer: Customer, @Param('number') number: string, @Body() dto: CustomerReturnDto) {
     return this.returns.requestByCustomer(customer.id, number, dto);

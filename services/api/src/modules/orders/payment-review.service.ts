@@ -46,7 +46,7 @@ function queueWhere(queue: PaymentQueue): Prisma.OrderWhereInput {
 }
 
 /**
- * Vreview checks customers' transfers (§2.10): a transfer order reaches its shops only
+ * MC Mart checks customers' transfers (§2.10): a transfer order reaches its shops only
  * once an admin approves its slips; a rejection asks the customer for new ones. Paid orders a
  * shop can't fill come back here as refunds to make.
  */
@@ -102,7 +102,7 @@ export class PaymentReviewService {
       await tx.paymentSlip.updateMany({ where: { orderId: o.id, status: 'PENDING' }, data: { status: 'APPROVED', reviewedById: admin.id, reviewedAt: now } });
       for (const so of o.shopOrders) {
         if (so.status !== 'PENDING') continue;
-        const moved = await moveOrder(tx, so.id, 'PENDING', 'CONFIRMED', {}, { actorType: 'ADMIN', actorId: admin.id, note: 'Payment checked by Vreview' });
+        const moved = await moveOrder(tx, so.id, 'PENDING', 'CONFIRMED', {}, { actorType: 'ADMIN', actorId: admin.id, note: 'Payment checked by MC Mart' });
         if (!moved) continue;
         await tx.payment.updateMany({ where: { shopOrderId: so.id, status: 'PENDING' }, data: { status: 'PAID', paidAt: now } });
         await this.notifications.notifyOrder(
@@ -154,8 +154,8 @@ export class PaymentReviewService {
           o.customer.id,
           'ORDER',
           {
-            lo: { title: `ກະລຸນາສົ່ງສະລິບໃໝ່ · ${o.number.replace(/^O/, '')}`, body: `Vreview ກວດບໍ່ພົບການໂອນ: ${reason}. ສົ່ງສະລິບໃໝ່ໄດ້ສູງສຸດ 3 ຮູບ.` },
-            en: { title: `Please send a new slip · ${o.number.replace(/^O/, '')}`, body: `Vreview couldn't confirm your transfer: ${reason}. You can send up to 3 new slips.` },
+            lo: { title: `ກະລຸນາສົ່ງສະລິບໃໝ່ · ${o.number.replace(/^O/, '')}`, body: `MC Mart ກວດບໍ່ພົບການໂອນ: ${reason}. ສົ່ງສະລິບໃໝ່ໄດ້ສູງສຸດ 3 ຮູບ.` },
+            en: { title: `Please send a new slip · ${o.number.replace(/^O/, '')}`, body: `MC Mart couldn't confirm your transfer: ${reason}. You can send up to 3 new slips.` },
           },
           { link: `/account/orders/${first.number}` },
         );
@@ -203,8 +203,8 @@ export class PaymentReviewService {
         so.order.customer.id,
         'ORDER',
         {
-          lo: { title: `ຄືນເງິນແລ້ວ ${so.number}`, body: `Vreview ໂອນຄືນ ${formatMoney(num(payment.amount), 'lo')} ໃຫ້ທ່ານແລ້ວ.` },
-          en: { title: `Refunded ${so.number}`, body: `Vreview sent ${formatMoney(num(payment.amount), 'en')} back to you.` },
+          lo: { title: `ຄືນເງິນແລ້ວ ${so.number}`, body: `MC Mart ໂອນຄືນ ${formatMoney(num(payment.amount), 'lo')} ໃຫ້ທ່ານແລ້ວ.` },
+          en: { title: `Refunded ${so.number}`, body: `MC Mart sent ${formatMoney(num(payment.amount), 'en')} back to you.` },
         },
         { link: `/account/orders/${so.number}` },
       );

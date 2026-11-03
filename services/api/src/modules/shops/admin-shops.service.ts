@@ -21,20 +21,20 @@ const DECISIONS: Record<ShopDecision, { from: ShopStatus[]; to: ShopStatus }> = 
 
 const OWNER_TEXT: Record<ShopDecision, { lo: { title: string; body: string }; en: { title: string; body: string } }> = {
   approve: {
-    lo: { title: 'ຮ້ານຂອງທ່ານໄດ້ຮັບການອະນຸມັດແລ້ວ 🎉', body: '{shop} ເປີດຂາຍໃນ Vreview ແລ້ວ. ສິນຄ້າທີ່ເຜີຍແຜ່ຈະສະແດງໃຫ້ລູກຄ້າເຫັນ.' },
-    en: { title: 'Your shop is approved 🎉', body: '{shop} is now open on Vreview. Published products are visible to customers.' },
+    lo: { title: 'ຮ້ານຂອງທ່ານໄດ້ຮັບການອະນຸມັດແລ້ວ 🎉', body: '{shop} ເປີດຂາຍໃນ MC Mart ແລ້ວ. ສິນຄ້າທີ່ເຜີຍແຜ່ຈະສະແດງໃຫ້ລູກຄ້າເຫັນ.' },
+    en: { title: 'Your shop is approved 🎉', body: '{shop} is now open on MC Mart. Published products are visible to customers.' },
   },
   reject: {
     lo: { title: 'ຄຳຮ້ອງເປີດຮ້ານບໍ່ໄດ້ຮັບການອະນຸມັດ', body: 'ເຫດຜົນ: {reason}. ແກ້ໄຂຄຳຮ້ອງໃນສູນຜູ້ຂາຍແລ້ວສົ່ງໃໝ່.' },
     en: { title: 'Your shop application was not approved', body: 'Reason: {reason}. Update it in Seller Center and send it again.' },
   },
   suspend: {
-    lo: { title: 'ຮ້ານຂອງທ່ານຖືກລະງັບ', body: 'ເຫດຜົນ: {reason}. ກະລຸນາຕິດຕໍ່ຝ່າຍຊ່ວຍເຫຼືອ Vreview.' },
-    en: { title: 'Your shop has been suspended', body: 'Reason: {reason}. Please contact Vreview support.' },
+    lo: { title: 'ຮ້ານຂອງທ່ານຖືກລະງັບ', body: 'ເຫດຜົນ: {reason}. ກະລຸນາຕິດຕໍ່ຝ່າຍຊ່ວຍເຫຼືອ MC Mart.' },
+    en: { title: 'Your shop has been suspended', body: 'Reason: {reason}. Please contact MC Mart support.' },
   },
   reinstate: {
-    lo: { title: 'ຮ້ານຂອງທ່ານເປີດອີກຄັ້ງແລ້ວ', body: '{shop} ກັບມາຂາຍໃນ Vreview ແລ້ວ.' },
-    en: { title: 'Your shop is open again', body: '{shop} is back on Vreview.' },
+    lo: { title: 'ຮ້ານຂອງທ່ານເປີດອີກຄັ້ງແລ້ວ', body: '{shop} ກັບມາຂາຍໃນ MC Mart ແລ້ວ.' },
+    en: { title: 'Your shop is open again', body: '{shop} is back on MC Mart.' },
   },
 };
 
@@ -161,7 +161,7 @@ export class AdminShopsService {
       documents: shop.kycDocuments.map((d) => ({ id: d.id, type: d.type, createdAt: d.createdAt, reviewedAt: d.reviewedAt, ext: d.fileKey.split('.').pop() })),
       productCounts: Object.fromEntries(products.map((p) => [p.status, p._count._all])),
       orderCounts: Object.fromEntries(orders.map((o) => [o.status, o._count._all])),
-      // What customers paid plus platform coupons Vreview pays back.
+      // What customers paid plus platform coupons MC Mart pays back.
       completedRevenue: (revenue._sum.total?.toNumber() ?? 0) + (revenue._sum.platformDiscount?.toNumber() ?? 0),
       commissionEarned: revenue._sum.commissionAmount?.toNumber() ?? 0,
     };

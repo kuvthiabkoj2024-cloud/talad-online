@@ -26,7 +26,7 @@ export interface VideoCommentView {
 
 /** A shop's video with its numbers, for Seller Center. */
 export interface ShopVideoView {
-  /** Vreview hid it from customers; a new video clears this. */
+  /** MC Mart hid it from customers; a new video clears this. */
   hidden: boolean;
   hiddenReason: string | null;
   productId: string;

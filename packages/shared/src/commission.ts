@@ -1,5 +1,5 @@
 /**
- * Vreview's commission (§2.3): a percent of what an item sold for, or a fixed amount per
+ * MC Mart's commission (§2.3): a percent of what an item sold for, or a fixed amount per
  * unit sold (for high-cost goods, where a percent would eat the shop's margin).
  */
 export const COMMISSION_TYPES = ['PERCENT', 'FIXED'] as const;

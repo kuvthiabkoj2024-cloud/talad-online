@@ -44,7 +44,7 @@ export function AppSidebar() {
                     <img src={shop.logoUrl} alt="" className="size-full object-cover" />
                   </span>
                 ) : (
-                  <img src="/icons/logo-transparent.png" alt="" className="aspect-square size-8" />
+                  <img src="/icons/brand-logo.png" alt="" className="aspect-square size-8" />
                 )}
                 <span className="grid flex-1 text-left leading-tight">
                   <span className="truncate font-semibold">{shop?.name ?? account?.shop?.name}</span>

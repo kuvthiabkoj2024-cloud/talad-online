@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import { OPEN_SHOP_URL } from "@/lib/customer";
 
-/** Vreview's own contact and social accounts. */
+/** MC Mart's own contact and social accounts. */
 const CONTACT = {
   phone: "+8562077802519",
   phoneLabel: "020 7780 2519",
@@ -183,7 +183,7 @@ export function SiteFooter({ locale, dict }: { locale: Locale; dict: Dictionary[
         </section>
       </div>
       <p className="border-t border-white/20 py-5 text-center text-xs text-white/75">
-        © {new Date().getFullYear()} Vreview. {dict.rights}
+        © {new Date().getFullYear()} MC Mart. {dict.rights}
       </p>
     </footer>
   );

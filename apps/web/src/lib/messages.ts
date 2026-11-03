@@ -24,7 +24,7 @@ export interface ShopChatMessage {
   mine: boolean;
   /** The shop's auto-reply (its chat bot). */
   bot: boolean;
-  /** A Vreview notice to both sides (e.g. an order out of stock). */
+  /** A MC Mart notice to both sides (e.g. an order out of stock). */
   system?: boolean;
   /** A shared location (e.g. where to deliver). */
   location?: { lat: number; lng: number } | null;

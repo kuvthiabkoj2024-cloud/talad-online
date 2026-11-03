@@ -61,7 +61,7 @@ export default async function OrderDetailPage({ params }: Props) {
   const billVersion = order.history.findLast((h) => h.note === BILL_REPLACED_NOTE)?.at;
   const billSrc = `/api/orders/${encodeURIComponent(order.number)}/shipping-bill${billVersion ? `?v=${encodeURIComponent(billVersion)}` : ""}`;
   const payment = order.payment;
-  // Manual transfer still open: the customer pays Vreview (QR + slips) or sends new slips.
+  // Manual transfer still open: the customer pays MC Mart (QR + slips) or sends new slips.
   const payable =
     order.status === "PENDING" &&
     payment?.status === "PENDING" &&
@@ -197,7 +197,7 @@ export default async function OrderDetailPage({ params }: Props) {
       {order.status === "CANCELLED" && (
         <Notice tone="grey" icon={CircleX} title={dict.cancelledTitle}>
           {order.cancelReason && noteText(order.cancelReason, dict.timelineNotes)}
-          {/* A paid transfer: Vreview sends the money back. */}
+          {/* A paid transfer: MC Mart sends the money back. */}
           {payment && payment.method !== "COD" && (payment.status === "PAID" || payment.refundedAt) && (
             <span className="mt-1 block font-medium text-foreground">
               {payment.refundedAt

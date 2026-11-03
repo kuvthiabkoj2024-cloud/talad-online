@@ -1,7 +1,7 @@
 import type { OrderStatus } from "@talad/shared";
 import { Check, CircleCheckBig, ClipboardList, LoaderCircle, PackageCheck, Truck, type LucideIcon } from "lucide-react";
 
-/** The order's journey: placed → paid (Vreview checked it, or COD confirmed) → sent → completed. */
+/** The order's journey: placed → paid (MC Mart checked it, or COD confirmed) → sent → completed. */
 const STEPS: { status: OrderStatus; icon: LucideIcon }[] = [
   { status: "PENDING", icon: ClipboardList },
   { status: "CONFIRMED", icon: PackageCheck },

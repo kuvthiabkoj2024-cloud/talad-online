@@ -16,7 +16,7 @@ import { emptySlip, PaymentPanel } from "./payment-panel";
 type Picked = { file: File; preview: string };
 
 /**
- * Paying an existing order by transfer to Vreview: while slips are being checked it shows
+ * Paying an existing order by transfer to MC Mart: while slips are being checked it shows
  * them; with none yet, or after a rejection (with the reason), the customer sends up to
  * MAX_PAYMENT_SLIPS new ones.
  */

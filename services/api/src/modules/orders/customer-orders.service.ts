@@ -24,7 +24,7 @@ export interface OrderLine {
 export interface OrderSummary {
   number: string;
   status: OrderStatus;
-  /** Transfer slips sent and waiting for Vreview's check. */
+  /** Transfer slips sent and waiting for MC Mart's check. */
   awaitingConfirmation: boolean;
   /** Where the transfer stands: being checked, rejected (send new slips), approved. */
   paymentCheck: PaymentCheck;
@@ -71,14 +71,14 @@ export interface OrderDetail extends Omit<OrderSummary, 'items'> {
     status: PaymentStatus;
     amount: number;
     paidAt: Date | null;
-    /** A paid order that was cancelled: when Vreview sent the money back. */
+    /** A paid order that was cancelled: when MC Mart sent the money back. */
     refundedAt: Date | null;
   } | null;
-  /** Vreview's account to transfer to (null when transfers aren't set up). */
+  /** MC Mart's account to transfer to (null when transfers aren't set up). */
   transfer: PlatformAccount | null;
   /** One transfer pays the whole checkout (all its shops): this much. */
   orderTotal: number;
-  /** Slips sent for the checkout, newest first, with Vreview's verdict. */
+  /** Slips sent for the checkout, newest first, with MC Mart's verdict. */
   slips: SlipView[];
   /** Loyalty points this order earned: they're taken back if it is returned. */
   pointsEarned: number;
@@ -227,7 +227,7 @@ export class CustomerOrdersService {
   }
 
   /**
-   * The customer gives up on an unpaid transfer: allowed once Vreview rejected the slips (or
+   * The customer gives up on an unpaid transfer: allowed once MC Mart rejected the slips (or
    * none were sent), never while slips wait for the check or after one was approved. One transfer
    * pays the whole checkout, so every shop in it is cancelled; stock and points come back.
    */

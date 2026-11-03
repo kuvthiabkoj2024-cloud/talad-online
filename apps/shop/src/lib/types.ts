@@ -97,7 +97,7 @@ export interface ShopProductRow {
 /** Mirrors `ShopVideoView` / `ShopVideoList` (API `me/shop/videos`). */
 export interface ShopVideo {
   productId: string
-  /** Vreview hid it from customers; a new video clears this. */
+  /** MC Mart hid it from customers; a new video clears this. */
   hidden: boolean
   hiddenReason: string | null
   name: string
@@ -265,7 +265,7 @@ export interface ShopOrderDetail extends Omit<ShopOrderSummary, 'customer' | 'pa
   subtotal: number
   discountTotal: number
   shippingFee: number
-  /** Part of the discount Vreview funds (platform coupon), paid back to the shop. */
+  /** Part of the discount MC Mart funds (platform coupon), paid back to the shop. */
   platformDiscount: number
   commissionAmount: number
   note: string | null
@@ -360,7 +360,7 @@ export interface ShopFinance {
   }
   inProgress: { orders: number; amount: number }
   refunded: { orders: number; amount: number }
-  /** Everything Vreview still has to pay the shop, whatever the period. */
+  /** Everything MC Mart still has to pay the shop, whatever the period. */
   pending: {
     count: number
     amount: number
@@ -385,7 +385,7 @@ export interface ShopPayout {
   status: 'SCHEDULED' | 'PROCESSING' | 'PAID' | 'FAILED'
   paidAt: string | null
   reference: string | null
-  /** Vreview's transfer slip (GET /me/shop/finance/payouts/:id/slip). */
+  /** MC Mart's transfer slip (GET /me/shop/finance/payouts/:id/slip). */
   hasSlip: boolean
 }
 
@@ -488,7 +488,7 @@ export interface ChatMessage {
   mine: boolean
   /** The shop's chat bot replied automatically. */
   bot: boolean
-  /** A Vreview notice to both sides (e.g. an order out of stock). */
+  /** A MC Mart notice to both sides (e.g. an order out of stock). */
   system?: boolean
   /** A shared location (e.g. where the customer wants delivery). */
   location?: { lat: number; lng: number } | null
@@ -526,7 +526,7 @@ export interface ChatbotOverview {
 }
 
 export type BotTopic =
-  | 'faq' | 'greeting' | 'thanks' | 'order' | 'hours' | 'location' | 'payment' | 'delivery' | 'discount'
+  | 'faq' | 'greeting' | 'silent' | 'order' | 'hours' | 'location' | 'payment' | 'delivery' | 'discount'
   | 'color' | 'size' | 'price' | 'stock' | 'cheaper' | 'search' | 'buy' | 'unknown' | 'photo' | 'ai'
 
 export interface BotPreview {
@@ -537,6 +537,8 @@ export interface BotPreview {
   engine: 'ai' | 'basic'
   /** An order card for the shown product would go with the reply. */
   order: boolean
+  /** Nothing was asked: the bot sends no reply. */
+  silent?: boolean
 }
 
 /** Buy by chat: an order card in a chat, as both sides see it. */
@@ -566,7 +568,7 @@ export interface InboxPage {
   nextCursor: string | null
 }
 
-/** A month of cash-on-delivery sales and the commission owed to Vreview (`GET /me/shop/cod`). */
+/** A month of cash-on-delivery sales and the commission owed to MC Mart (`GET /me/shop/cod`). */
 export interface CodMonth {
   month: string
   from: string
@@ -576,16 +578,16 @@ export interface CodMonth {
   commission: number
   /** commission ÷ sales, percent */
   rate: number
-  /** Vreview-funded discounts (coupons, points) on these orders: off what the shop owes. */
+  /** MC Mart-funded discounts (coupons, points) on these orders: off what the shop owes. */
   credit: number
-  /** commission − credit; negative = Vreview owes the shop. */
+  /** commission − credit; negative = MC Mart owes the shop. */
   toTransfer: number
   inProgress: { orders: number; sales: number }
   items: { number: string; completedAt: string; customer: string; sales: number; commission: number }[]
   account: { bankCode: string | null; accountName: string | null; accountNumber: string | null; hasQr: boolean } | null
 }
 
-/** Vreview's commission on one product and the shop's latest request for its own (§2.3). */
+/** MC Mart's commission on one product and the shop's latest request for its own (§2.3). */
 export interface ProductCommission {
   current: { commission: Commission; source: 'PRODUCT' | 'CATEGORY' | 'SHOP' | 'DEFAULT' }
   request: {

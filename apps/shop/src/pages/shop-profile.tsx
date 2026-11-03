@@ -528,7 +528,7 @@ function ShopLinkCard({ url, name, live }: { url: string; name: string; live: bo
 }
 
 /**
- * Cash on delivery, the shop's own choice. Turning it on opens the COD terms (Vreview is
+ * Cash on delivery, the shop's own choice. Turning it on opens the COD terms (MC Mart is
  * not responsible for COD losses), which must be ticked and accepted first.
  */
 function CodCard({

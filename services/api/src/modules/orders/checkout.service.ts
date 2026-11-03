@@ -29,7 +29,7 @@ export interface QuoteIssue {
 
 /**
  * Courier the customer can pick. No courier has an API yet, so there is no price:
- * the delivery fee is paid to the courier, outside Vreview.
+ * the delivery fee is paid to the courier, outside MC Mart.
  */
 export interface DeliveryOption {
   id: string;
@@ -59,7 +59,7 @@ export interface PlaceOrderInput extends CheckoutSelection {
   addressId: string;
   paymentMethod: CheckoutPaymentMethod;
   expectedTotal: number;
-  /** BANK_TRANSFER: 1–MAX_PAYMENT_SLIPS slip keys for the whole order (one transfer to Vreview). */
+  /** BANK_TRANSFER: 1–MAX_PAYMENT_SLIPS slip keys for the whole order (one transfer to MC Mart). */
   slipKeys?: string[];
   /** COD: the deposit slip (a key from the slip upload) for each shop asking for one. */
   depositSlips?: Record<string, string>;
@@ -83,7 +83,7 @@ export class CheckoutService {
 
   /**
    * Totals for the selected cart lines, split per shop, with the coupon discount and where to
-   * transfer (Vreview's account, for the whole order). Delivery isn't priced (paid to the courier). An unusable coupon is
+   * transfer (MC Mart's account, for the whole order). Delivery isn't priced (paid to the courier). An unusable coupon is
    * reported in `couponError`, not thrown.
    */
   async quote(customerId: string, selection: CheckoutSelection) {
@@ -137,7 +137,7 @@ export class CheckoutService {
         cod: cod.has(g.shop.id),
       };
     });
-    // Loyalty points pay part (or all) of the order; Vreview pays their value back to the
+    // Loyalty points pay part (or all) of the order; MC Mart pays their value back to the
     // shops like a platform coupon. Spread over the shops in proportion to what each costs.
     const [rules, customer] = await Promise.all([pointRules(this.prisma), this.prisma.customer.findUnique({ where: { id: customerId }, select: { pointsBalance: true } })])
     const pointValue = rules.redeemValue && rules.redeemValue > 0 ? rules.redeemValue : 0;
@@ -183,7 +183,7 @@ export class CheckoutService {
         delivery: { options, selectedId: courier?.id ?? null, needed: priced.some((s) => !s.urgentSelected && !s.pickupSelected) },
         coupon: coupon ? { code: coupon.code, shopId: coupon.shopId, discount: discountTotal } : null,
         couponError,
-        // Transfers go to Vreview's account (checked by an admin), once one is set up.
+        // Transfers go to MC Mart's account (checked by an admin), once one is set up.
         transfer: transfer as PlatformAccount | null,
         transferAvailable: transfer !== null,
         // Likewise COD: every shop in the order must have turned it on.
@@ -244,7 +244,7 @@ export class CheckoutService {
     const defaultRate = await this.defaultCommissionRate();
     const now = new Date();
     // COD (and an order paid in full with points) goes straight to the shops. A transfer waits in
-    // "to pay" until Vreview checks the slips.
+    // "to pay" until MC Mart checks the slips.
     const status: OrderStatus = isTransfer ? 'PENDING' : 'CONFIRMED';
     const note = input.note?.trim() || null;
     const shippingAddress = {
@@ -318,7 +318,7 @@ export class CheckoutService {
           const shopOrders: string[] = [];
           for (const [i, group] of quote.shops.entries()) {
             const groupLines = lines.filter((l) => l.shop.id === group.shop.id);
-            // A shop coupon is the shop's own discount; a platform coupon is funded by Vreview.
+            // A shop coupon is the shop's own discount; a platform coupon is funded by MC Mart.
             const shopDiscount = couponRule?.shopId ? group.discount : 0;
             const platformDiscount = couponRule && !couponRule.shopId ? group.discount : 0;
             const commissions = new Map(groupLines.map((l) => [l.id, l.internal.commission ?? { type: 'PERCENT' as const, value: defaultRate }]));
@@ -336,7 +336,7 @@ export class CheckoutService {
                 // Unpaid orders are cancelled when the shop's payment window ends (OrderDeadlinesService).
                 paymentDueAt: status === 'PENDING' ? new Date(now.getTime() + groupLines[0].internal.paymentWindowHrs * 3_600_000) : null,
                 subtotal: group.subtotal,
-                // Points are Vreview's discount too (paid back to the shop).
+                // Points are MC Mart's discount too (paid back to the shop).
                 discountTotal: group.discount + group.pointsDiscount,
                 platformDiscount: platformDiscount + group.pointsDiscount,
                 pointsRedeemed: group.points,
@@ -407,7 +407,7 @@ export class CheckoutService {
             });
             shopOrders.push(shopNumber);
             // Cash on delivery: the shop hears about it right away (live, with a sound). A
-            // transfer reaches the shop only once Vreview approves the payment.
+            // transfer reaches the shop only once MC Mart approves the payment.
             if (slipFor.has(group.shop.id)) {
               await this.notifications.toShop(
                 tx,

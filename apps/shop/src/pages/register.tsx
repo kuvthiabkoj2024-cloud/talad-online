@@ -68,7 +68,7 @@ const EDITABLE: ShopStatus[] = ['PENDING', 'REJECTED']
 
 /**
  * Open a shop (§3.1): business details, pickup address and KYC documents. The shop is
- * PENDING until Vreview approves it; pending or rejected applications can be edited.
+ * PENDING until MC Mart approves it; pending or rejected applications can be edited.
  */
 export function RegisterPage() {
   const { account } = useAuth()

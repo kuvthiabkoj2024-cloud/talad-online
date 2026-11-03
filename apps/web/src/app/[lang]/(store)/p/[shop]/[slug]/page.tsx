@@ -34,14 +34,14 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
   const { lang, shop, slug } = await props.params;
   const path = `/${lang}/p/${shop}/${slug}`;
   // Shared links show this text under the photo; without a description, the shop's name.
-  const description = product.description?.slice(0, 160) || `${product.shop.name} · Vreview`;
+  const description = product.description?.slice(0, 160) || `${product.shop.name} · MC Mart`;
   return {
     title: product.name,
     description,
     alternates: { canonical: path },
     openGraph: {
       type: "website",
-      siteName: "Vreview",
+      siteName: "MC Mart",
       url: path,
       title: product.name,
       description,
@@ -92,8 +92,9 @@ export default async function ProductPage(props: Props) {
         ]}
       />
 
-      <section className="grid gap-6 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border sm:p-6 md:grid-cols-2 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-10">
-        <div className="flex flex-col gap-4">
+      {/* Phones too get a sized column (grid-cols-1), so the thumbnail strip scrolls instead of widening the page. */}
+      <section className="grid grid-cols-1 gap-6 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border sm:p-6 md:grid-cols-2 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-10">
+        <div className="flex min-w-0 flex-col gap-4">
           <ProductGallery
             images={product.imageUrls}
             videoUrl={product.videoUrl}

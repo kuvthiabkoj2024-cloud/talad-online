@@ -65,7 +65,7 @@ export function SiteHeader({
             className="flex shrink-0 items-center gap-1.5 text-xl font-bold tracking-tight sm:gap-2 sm:text-2xl md:text-3xl"
           >
             <BrandLogo className="size-8 sm:size-9 md:size-10" />
-            Vreview
+            MC Mart
           </Link>
 
           {/* Hidden on focus pages (cart, order history): see focus-routes.tsx. */}

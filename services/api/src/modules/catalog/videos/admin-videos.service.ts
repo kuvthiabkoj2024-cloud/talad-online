@@ -209,12 +209,12 @@ export class AdminVideosService {
     const en = name ? `The video of ${name}` : 'Your video';
     return hidden
       ? {
-          lo: { title: `Vreview ຊ່ອນ${lo}`, body: `ລູກຄ້າຈະບໍ່ເຫັນວິດີໂອນີ້ອີກ. ເຫດຜົນ: ${reason}` },
-          en: { title: `Vreview hid ${name ? en.toLowerCase() : 'your video'}`, body: `Customers no longer see it. Reason: ${reason}` },
+          lo: { title: `MC Mart ຊ່ອນ${lo}`, body: `ລູກຄ້າຈະບໍ່ເຫັນວິດີໂອນີ້ອີກ. ເຫດຜົນ: ${reason}` },
+          en: { title: `MC Mart hid ${name ? en.toLowerCase() : 'your video'}`, body: `Customers no longer see it. Reason: ${reason}` },
         }
       : {
-          lo: { title: `${lo} ກັບມາສະແດງແລ້ວ`, body: 'Vreview ເປີດໃຫ້ລູກຄ້າເຫັນວິດີໂອນີ້ອີກຄັ້ງ.' },
-          en: { title: `${en} is back`, body: 'Vreview made it visible to customers again.' },
+          lo: { title: `${lo} ກັບມາສະແດງແລ້ວ`, body: 'MC Mart ເປີດໃຫ້ລູກຄ້າເຫັນວິດີໂອນີ້ອີກຄັ້ງ.' },
+          en: { title: `${en} is back`, body: 'MC Mart made it visible to customers again.' },
         };
   }
 

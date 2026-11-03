@@ -260,7 +260,7 @@ export class ShopProductsService {
         this.prisma.product.update({
           where: { id },
           data: {
-            // Vreview hid the old video; a new one starts visible.
+            // MC Mart hid the old video; a new one starts visible.
             ...((dto.videoKey ?? null) !== current.videoKey && { videoHidden: false, videoHiddenReason: null, videoHiddenAt: null }),
             ...this.fields(dto),
             status,

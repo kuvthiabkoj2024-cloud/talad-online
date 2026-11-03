@@ -37,7 +37,7 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild tooltip={`${t.app.brand} ${t.app.name}`}>
               <NavLink to="/">
-                <img src="/logo-transparent.png" alt="" className="aspect-square size-8" />
+                <img src="/brand-logo.png" alt="" className="aspect-square size-8" />
                 <span className="grid flex-1 text-left leading-tight">
                   <span className="truncate font-semibold">{t.app.brand}</span>
                   <span className="truncate text-xs text-sidebar-foreground/70">{t.app.name}</span>

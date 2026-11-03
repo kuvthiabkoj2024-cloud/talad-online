@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Vreview — Shop local",
+    "title": "MC Mart — Shop local",
     "description": "Shop from local sellers across Laos. Fast delivery, secure payments."
   },
   "header": {
@@ -61,14 +61,14 @@
     "privacy": "Privacy Policy",
     "faq": "FAQ",
     "help": "Help",
-    "sell": "Sell on Vreview",
+    "sell": "Sell on MC Mart",
     "payments": "Payment methods",
     "delivery": "Delivery services",
     "follow": "Follow us",
     "getApp": "Download the app",
     "rights": "All rights reserved.",
-    "contactUs": "Contact Vreview",
-    "aboutVreview": "About Vreview",
+    "contactUs": "Contact MC Mart",
+    "aboutVreview": "About MC Mart",
     "banks": "Banks",
     "wallets": "E-Wallet",
     "appSoon": "The mobile app is coming soon"
@@ -254,7 +254,7 @@
     "cancelledTitle": "This order was cancelled",
     "returns": {
       "title": "Problem with your order?",
-      "body": "Send the reason with photos or a video clip. Vreview reviews it directly and tells you the outcome.",
+      "body": "Send the reason with photos or a video clip. MC Mart reviews it directly and tells you the outcome.",
       "until": "You can ask for a return until {date}.",
       "open": "Request a return",
       "reason": "Reason",
@@ -271,7 +271,7 @@
       "filesHint": "At least 1. Up to {files} files, with 1 video of up to {mb} MB.",
       "addFiles": "Add",
       "remove": "Remove",
-      "send": "Send to Vreview",
+      "send": "Send to MC Mart",
       "uploading": "Sending… {percent}%",
       "errors": {
         "generic": "Couldn't send it. Please try again.",
@@ -284,12 +284,12 @@
         "RETURN_ALREADY_REQUESTED": "A return was already requested for this order."
       },
       "notCollectedTitle": "The shop reported this order as not collected",
-      "notCollectedBody": "Vreview is reviewing it. Contact us if you did receive this order.",
+      "notCollectedBody": "MC Mart is reviewing it. Contact us if you did receive this order.",
       "rejectedTitle": "Your return wasn't approved",
       "pointsNote": "If this return is approved, the {n} points you earned from this order are removed."
     },
     "refundTitle": "Return/refund requested",
-    "refundBody": "Vreview is reviewing your request. We'll let you know when there's an update.",
+    "refundBody": "MC Mart is reviewing your request. We'll let you know when there's an update.",
     "chatWithShop": "Chat with shop",
     "buyAgain": "Buy again",
     "orderStatus": {
@@ -398,7 +398,7 @@
     "phoneLocked": "Your phone number is used to sign in, so it can't be changed here.",
     "saved": "Saved",
     "myShop": "My shop",
-    "myShopDescription": "You can sell on Vreview and still shop from other stores with this account.",
+    "myShopDescription": "You can sell on MC Mart and still shop from other stores with this account.",
     "viewStorefront": "View storefront",
     "manageShop": "Manage in Seller Center",
     "shopStatus": {
@@ -410,7 +410,7 @@
     "viewAllOrders": "View all",
     "backToAccount": "Back to Profile",
     "openShop": "Open your shop",
-    "openShopDescription": "Sell on Vreview with this account — free to join.",
+    "openShopDescription": "Sell on MC Mart with this account — free to join.",
     "messages": "Messages",
     "receiveTitle": "Got your order?",
     "receive": "I received it",
@@ -421,7 +421,7 @@
     "timelineNext": {
       "pickup": "Ready: collect it at the shop, then confirm you received it",
       "payment": "Waiting for your payment",
-      "reviewing": "Vreview is checking your payment",
+      "reviewing": "MC Mart is checking your payment",
       "rejected": "Send new payment slips",
       "preparing": "The shop is preparing your order",
       "receive": "Waiting for you to confirm you received it",
@@ -429,7 +429,7 @@
     },
     "timelineNotes": {
       "Payment slip submitted": "Payment slip sent",
-      "Payment checked by Vreview": "Payment checked by Vreview",
+      "Payment checked by MC Mart": "Payment checked by MC Mart",
       "Cash on delivery": "Cash on delivery",
       "Received by customer": "You confirmed you received it",
       "Confirmed automatically": "Completed automatically",
@@ -516,7 +516,7 @@
       "returnDueTitle": "The shop must return your {amount} deposit",
       "returnDueBody": "{shop} pays it back to you directly. Contact the shop in chat if you need to arrange it.",
       "returnedTitle": "Deposit of {amount} returned",
-      "returnedBody": "The shop says it sent this back to you. If you didn't get it, contact the shop or Vreview.",
+      "returnedBody": "The shop says it sent this back to you. If you didn't get it, contact the shop or MC Mart.",
       "keptTitle": "The shop kept your {amount} deposit",
       "keptBody": "The order wasn't collected, so the deposit isn't returned.",
       "status": {
@@ -541,6 +541,8 @@
     "emptyTitle": "Your cart is empty",
     "emptyBody": "Browse products and add something you like.",
     "continueShopping": "Continue shopping",
+    "recentOrders": "Your recent orders",
+    "allOrders": "View all",
     "selected": "{n} selected",
     "subtotal": "Subtotal",
     "checkout": "Check out ({n})",
@@ -582,11 +584,11 @@
       "BCEL_ONE": "Pay with the BCEL One app",
       "LAPNET": "Pay by LAPNet QR from any member bank",
       "U_MONEY": "Pay with your U-Money wallet",
-      "BANK_TRANSFER": "Transfer to Vreview's QR with any bank app, then upload the slip"
+      "BANK_TRANSFER": "Transfer to MC Mart's QR with any bank app, then upload the slip"
     },
     "payShop": "Pay {shop}",
-    "scanTitle": "Scan QR to pay Vreview",
-    "scanBody": "Scan with BCEL One or any bank app and transfer the exact amount below to Vreview. Keep your transfer slip.",
+    "scanTitle": "Scan QR to pay MC Mart",
+    "scanBody": "Scan with BCEL One or any bank app and transfer the exact amount below to MC Mart. Keep your transfer slip.",
     "amountToPay": "Amount to pay",
     "downloadQr": "Download QR",
     "saveQrHint": "Screenshot or download the QR",
@@ -613,7 +615,7 @@
     "noteLabel": "Note (optional)",
     "notePlaceholder": "Colour, size or other instructions",
     "verifying": "Checking your payment",
-    "slipReceived": "We've received your slip. Vreview is checking the transfer — your order goes to the shop once it's confirmed.",
+    "slipReceived": "We've received your slip. MC Mart is checking the transfer — your order goes to the shop once it's confirmed.",
     "payNowTitle": "Pay for this order",
     "viewSlip": "View slip",
     "slipSentOn": "Slip sent {date}",
@@ -631,9 +633,9 @@
     "addSlip": "Add slip",
     "removeSlip": "Remove slip",
     "slipFailed": "Upload failed",
-    "payVreview": "Pay Vreview",
+    "payVreview": "Pay MC Mart",
     "slipRejectedTitle": "Payment not confirmed",
-    "slipRejectedBody": "Vreview couldn't confirm your transfer: {reason}. Please send new slips (up to {n}).",
+    "slipRejectedBody": "MC Mart couldn't confirm your transfer: {reason}. Please send new slips (up to {n}).",
     "sendSlips": "Send slips",
     "sendingSlips": "Sending…",
     "slipsSent": "Slips sent {date}",
@@ -642,8 +644,8 @@
       "APPROVED": "Approved",
       "REJECTED": "Rejected"
     },
-    "paymentConfirmed": "Payment confirmed by Vreview",
-    "refundPending": "Vreview will refund {amount} to you.",
+    "paymentConfirmed": "Payment confirmed by MC Mart",
+    "refundPending": "MC Mart will refund {amount} to you.",
     "refundDone": "Refunded {amount} on {date}.",
     "pointsTitle": "Loyalty points",
     "pointsUse": "Use {n} points (−{amount})",
@@ -652,7 +654,7 @@
     "pointsLine": "Points ({n})",
     "depositFor": "Deposit for {shop}",
     "depositScanTitle": "Scan to pay the deposit to {shop}",
-    "depositScanBody": "This goes straight to the shop's own account, not Vreview. Transfer the exact amount below and keep your slip.",
+    "depositScanBody": "This goes straight to the shop's own account, not MC Mart. Transfer the exact amount below and keep your slip.",
     "depositTerms": "The shop checks your deposit before preparing the order. Pay the remaining {rest} in cash on delivery. If you don't collect the order, the shop keeps the deposit. If the shop cancels it, or the order is returned, the shop gives it back to you directly.",
     "depositRequired": "Please attach the deposit slip before confirming the order."
   },
@@ -823,7 +825,7 @@
     "changeVideo": "Choose another video",
     "caption": "Caption",
     "captionPlaceholder": "Say something about your video…",
-    "rules": "Only post your own videos, nothing offensive, dangerous or misleading. Vreview may remove videos that break the rules.",
+    "rules": "Only post your own videos, nothing offensive, dangerous or misleading. MC Mart may remove videos that break the rules.",
     "uploading": "Uploading… {n}%",
     "post": "Post",
     "errors": {
@@ -836,7 +838,7 @@
   },
   "notifications": {
     "title": "Notifications",
-    "description": "Order updates, promotions and news from Vreview.",
+    "description": "Order updates, promotions and news from MC Mart.",
     "markAllRead": "Mark all as read",
     "all": "All",
     "orders": "Orders",
@@ -857,7 +859,7 @@
     "pushEnabled": "Notifications are on for this device",
     "pushTurnOff": "Turn off",
     "pushDenied": "Notifications are blocked. Allow them in your browser's site settings.",
-    "pushInstall": "On iPhone and iPad, add Vreview to your Home Screen first to get notifications.",
+    "pushInstall": "On iPhone and iPad, add MC Mart to your Home Screen first to get notifications.",
     "pushFailed": "Couldn't turn them on. Please try again."
   },
   "catalog": {
@@ -875,11 +877,11 @@
     "missing": "This page isn’t available yet."
   },
   "pwa": {
-    "title": "Get the Vreview app",
+    "title": "Get the MC Mart app",
     "body": "Install it on your phone for faster shopping and order updates — no app store needed.",
     "install": "Install",
     "later": "Not now",
-    "iosTitle": "Add Vreview to your Home Screen",
+    "iosTitle": "Add MC Mart to your Home Screen",
     "iosStep1": "Tap {icon} Share in Safari",
     "iosStep2": "Choose {icon} Add to Home Screen"
   },

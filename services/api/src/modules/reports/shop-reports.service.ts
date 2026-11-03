@@ -21,9 +21,9 @@ export interface ShopFinance {
   to: Date;
   /** Completed orders in the period: what the shop has earned. */
   /**
-   * `gross` = what customers paid + platform coupons Vreview pays back; `net` = gross − commission.
+   * `gross` = what customers paid + platform coupons MC Mart pays back; `net` = gross − commission.
    * `discounts`: what the shop's prices were lowered by — flash sales and its own coupons (both
-   * the shop's cost) and platform coupons (funded by Vreview, included in `gross`).
+   * the shop's cost) and platform coupons (funded by MC Mart, included in `gross`).
    */
   earned: {
     orders: number;
@@ -35,7 +35,7 @@ export interface ShopFinance {
   /** Paid or cash orders still on their way to the customer. */
   inProgress: { orders: number; amount: number };
   refunded: { orders: number; amount: number };
-  /** Everything Vreview still has to pay the shop, whatever the period. */
+  /** Everything MC Mart still has to pay the shop, whatever the period. */
   pending: {
     count: number;
     amount: number;
@@ -87,7 +87,7 @@ export class ShopReportsService {
     private readonly storage: StorageService,
   ) {}
 
-  /** Vreview's transfer slip for one of the shop's payouts. */
+  /** MC Mart's transfer slip for one of the shop's payouts. */
   async payoutSlip(shopId: string, id: string) {
     const p = await this.prisma.payout.findFirst({ where: { id, shopId }, select: { slipKey: true } });
     if (!p?.slipKey) throw new NotFoundException('No transfer slip');
@@ -114,7 +114,7 @@ export class ShopReportsService {
         _count: { _all: true },
         _sum: { total: true },
       }),
-      // What Vreview owes the shop: cash on delivery is already the shop's (it pays that commission monthly).
+      // What MC Mart owes the shop: cash on delivery is already the shop's (it pays that commission monthly).
       this.prisma.shopOrder.aggregate({ where: unpaid, _count: { _all: true }, _sum: { total: true, commissionAmount: true, platformDiscount: true } }),
       this.prisma.shopOrder.findMany({
         where: unpaid,

@@ -24,7 +24,7 @@ async function getProfile(id: string): Promise<CustomerProfile> {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const profile = await getProfile(id);
-  return { title: profile.name, description: `${profile.name} · Vreview`, robots: { index: false } };
+  return { title: profile.name, description: `${profile.name} · MC Mart`, robots: { index: false } };
 }
 
 /** A customer's public video profile: who they are, their videos and their followers. */

@@ -27,7 +27,7 @@ const METHODS = ['transfer', 'cod'] as const
 type Method = (typeof METHODS)[number]
 
 /**
- * Every order on the platform, in two tabs: transfers (checked by Vreview before the shop
+ * Every order on the platform, in two tabs: transfers (checked by MC Mart before the shop
  * gets them — "Check payment" opens the slips to approve) and cash on delivery.
  * `?method=cod&status=<tab>&q=`
  */
@@ -195,7 +195,7 @@ export function OrderDetailPage() {
         </div>
         {o.cancelReason && o.status === 'CANCELLED' && <Note>{fill(t.orders.cancelReason, { reason: o.cancelReason })}</Note>}
         {o.dispute && <Note danger>{fill(t.orders.disputeOpen, { reason: o.dispute.reason })}</Note>}
-        {/* A transfer waiting for Vreview: check the slips and approve right here. */}
+        {/* A transfer waiting for MC Mart: check the slips and approve right here. */}
         {o.status === 'PENDING' && o.payment && o.payment.method !== 'COD' && can(admin, 'payments') && (
           <PaymentCheckPanel number={o.orderNumber} title={t.orders.paymentCheck} hint={t.orders.paymentCheckHint} />
         )}

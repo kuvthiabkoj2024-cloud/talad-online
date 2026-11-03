@@ -24,7 +24,7 @@ const dueAt = () => new Date(Date.now() + DEPOSIT_RULES.reviewHours * 3_600_000)
 
 /**
  * An order that fell through settles its deposit. `KEPT`: the customer didn't collect it, so the
- * shop keeps what it confirmed. Otherwise the shop owes it back; it pays directly and Vreview
+ * shop keeps what it confirmed. Otherwise the shop owes it back; it pays directly and MC Mart
  * only records that. A rejected slip means nothing was received, so there is nothing to settle.
  */
 export async function settleDeposit(tx: Prisma.TransactionClient, notifications: NotificationsService, shopOrderId: string, outcome: 'RETURN_DUE' | 'KEPT') {
@@ -162,7 +162,7 @@ export class OrderDepositsService {
     if (row.depositSlipKey) await this.storage.remove(row.depositSlipKey);
   }
 
-  /** The shop sent the money back; Vreview only records it. */
+  /** The shop sent the money back; MC Mart only records it. */
   async markReturned(shop: Shop, number: string) {
     const row = await this.forShop(shop, number);
     await this.prisma.$transaction(async (tx) => {
@@ -172,8 +172,8 @@ export class OrderDepositsService {
         row.order.customerId,
         'ORDER',
         {
-          lo: { title: `ຮ້ານຄືນເງິນມັດຈຳແລ້ວ ${row.number}`, body: `${shop.name} ແຈ້ງວ່າຄືນເງິນມັດຈຳໃຫ້ທ່ານແລ້ວ. ຖ້າຍັງບໍ່ໄດ້ຮັບ ກະລຸນາຕິດຕໍ່ຮ້ານ ຫຼື Vreview.` },
-          en: { title: `Deposit returned for ${row.number}`, body: `${shop.name} says it returned your deposit. If you didn't get it, contact the shop or Vreview.` },
+          lo: { title: `ຮ້ານຄືນເງິນມັດຈຳແລ້ວ ${row.number}`, body: `${shop.name} ແຈ້ງວ່າຄືນເງິນມັດຈຳໃຫ້ທ່ານແລ້ວ. ຖ້າຍັງບໍ່ໄດ້ຮັບ ກະລຸນາຕິດຕໍ່ຮ້ານ ຫຼື MC Mart.` },
+          en: { title: `Deposit returned for ${row.number}`, body: `${shop.name} says it returned your deposit. If you didn't get it, contact the shop or MC Mart.` },
         },
         { link: `/account/orders/${row.number}` },
       );

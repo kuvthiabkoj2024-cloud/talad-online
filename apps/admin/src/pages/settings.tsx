@@ -140,7 +140,7 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
 
 const ACCOUNT_KEY = ['admin', 'payment-account'] as const
 
-/** Vreview's receiving account: customers transfer here at checkout; admins check the slips. */
+/** MC Mart's receiving account: customers transfer here at checkout; admins check the slips. */
 function PaymentAccountCard() {
   const { t } = useI18n()
   const account = useQuery({ queryKey: ACCOUNT_KEY, queryFn: () => api<PaymentAccount>('/admin/settings/payment-account') })

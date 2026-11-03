@@ -8,21 +8,21 @@ export const DEMO_PAGES: Record<string, { lo: Page; en: Page }> = {
   about: {
     lo: {
       title: 'ກ່ຽວກັບພວກເຮົາ',
-      body: 'Vreview ແມ່ນຕະຫຼາດອອນລາຍຂອງລາວ ທີ່ເຊື່ອມຕໍ່ຮ້ານຄ້າທ້ອງຖິ່ນກັບລູກຄ້າທົ່ວປະເທດ.\n\n# ພາລະກິດຂອງພວກເຮົາ\nຊ່ວຍໃຫ້ຜູ້ຂາຍລາວເຕີບໂຕ ແລະ ໃຫ້ລູກຄ້າຊື້ສິນຄ້າທີ່ໄວ້ໃຈໄດ້ຢ່າງງ່າຍດາຍ.',
+      body: 'MC Mart ແມ່ນຕະຫຼາດອອນລາຍຂອງລາວ ທີ່ເຊື່ອມຕໍ່ຮ້ານຄ້າທ້ອງຖິ່ນກັບລູກຄ້າທົ່ວປະເທດ.\n\n# ພາລະກິດຂອງພວກເຮົາ\nຊ່ວຍໃຫ້ຜູ້ຂາຍລາວເຕີບໂຕ ແລະ ໃຫ້ລູກຄ້າຊື້ສິນຄ້າທີ່ໄວ້ໃຈໄດ້ຢ່າງງ່າຍດາຍ.',
     },
     en: {
       title: 'About us',
-      body: 'Vreview is a Lao online marketplace connecting local shops with customers across the country.\n\n# Our mission\nHelp Lao sellers grow, and make it easy for customers to buy from shops they can trust.',
+      body: 'MC Mart is a Lao online marketplace connecting local shops with customers across the country.\n\n# Our mission\nHelp Lao sellers grow, and make it easy for customers to buy from shops they can trust.',
     },
   },
   terms: {
     lo: {
       title: 'ຂໍ້ກຳນົດ ແລະ ເງື່ອນໄຂ',
-      body: '# ການໃຊ້ບໍລິການ\nເມື່ອໃຊ້ Vreview ທ່ານຍອມຮັບເງື່ອນໄຂເຫຼົ່ານີ້.\n\n# ຄຳສັ່ງຊື້ ແລະ ການຊຳລະ\nແຕ່ລະຮ້ານຮັບຜິດຊອບສິນຄ້າ ແລະ ການຈັດສົ່ງຂອງຕົນ. ການຊຳລະຕ້ອງເຮັດພາຍໃນເວລາທີ່ກຳນົດ.\n\n# ການຄືນສິນຄ້າ\nທ່ານສາມາດຂໍຄືນສິນຄ້າໄດ້ຫຼັງໄດ້ຮັບສິນຄ້າ ຕາມນະໂຍບາຍຂອງຮ້ານ ແລະ Vreview.',
+      body: '# ການໃຊ້ບໍລິການ\nເມື່ອໃຊ້ MC Mart ທ່ານຍອມຮັບເງື່ອນໄຂເຫຼົ່ານີ້.\n\n# ຄຳສັ່ງຊື້ ແລະ ການຊຳລະ\nແຕ່ລະຮ້ານຮັບຜິດຊອບສິນຄ້າ ແລະ ການຈັດສົ່ງຂອງຕົນ. ການຊຳລະຕ້ອງເຮັດພາຍໃນເວລາທີ່ກຳນົດ.\n\n# ການຄືນສິນຄ້າ\nທ່ານສາມາດຂໍຄືນສິນຄ້າໄດ້ຫຼັງໄດ້ຮັບສິນຄ້າ ຕາມນະໂຍບາຍຂອງຮ້ານ ແລະ MC Mart.',
     },
     en: {
       title: 'Terms & Conditions',
-      body: '# Using Vreview\nBy using Vreview you agree to these terms.\n\n# Orders and payment\nEach shop is responsible for its products and delivery. Payment must be made within the shown deadline.\n\n# Returns\nYou can request a return after delivery, following the shop’s and Vreview’s policy.',
+      body: '# Using MC Mart\nBy using MC Mart you agree to these terms.\n\n# Orders and payment\nEach shop is responsible for its products and delivery. Payment must be made within the shown deadline.\n\n# Returns\nYou can request a return after delivery, following the shop’s and MC Mart’s policy.',
     },
   },
   privacy: {
@@ -38,11 +38,11 @@ export const DEMO_PAGES: Record<string, { lo: Page; en: Page }> = {
   faq: {
     lo: {
       title: 'ຄຳຖາມທີ່ພົບເລື້ອຍ',
-      body: '# ຂ້ອຍຈະຊຳລະເງິນແນວໃດ?\nໂອນຜ່ານທະນາຄານ (ສະແກນ QR ແລ້ວອັບໂຫຼດສະລິບ) ຫຼື ເກັບເງິນປາຍທາງ.\n\n# ຂ້ອຍຈະເປີດຮ້ານໄດ້ແນວໃດ?\nກົດ “ຂາຍໃນ Vreview” ແລ້ວສົ່ງຄຳຮ້ອງ. ພວກເຮົາກວດສອບພາຍໃນ 1–2 ວັນລັດຖະການ.',
+      body: '# ຂ້ອຍຈະຊຳລະເງິນແນວໃດ?\nໂອນຜ່ານທະນາຄານ (ສະແກນ QR ແລ້ວອັບໂຫຼດສະລິບ) ຫຼື ເກັບເງິນປາຍທາງ.\n\n# ຂ້ອຍຈະເປີດຮ້ານໄດ້ແນວໃດ?\nກົດ “ຂາຍໃນ MC Mart” ແລ້ວສົ່ງຄຳຮ້ອງ. ພວກເຮົາກວດສອບພາຍໃນ 1–2 ວັນລັດຖະການ.',
     },
     en: {
       title: 'FAQ',
-      body: '# How do I pay?\nBy bank transfer (scan the QR, then upload the slip) or cash on delivery.\n\n# How do I open a shop?\nTap “Sell on Vreview” and send an application. We review it within 1–2 working days.',
+      body: '# How do I pay?\nBy bank transfer (scan the QR, then upload the slip) or cash on delivery.\n\n# How do I open a shop?\nTap “Sell on MC Mart” and send an application. We review it within 1–2 working days.',
     },
   },
 };

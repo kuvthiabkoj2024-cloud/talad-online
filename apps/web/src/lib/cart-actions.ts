@@ -117,7 +117,7 @@ export async function placeOrder(input: {
   usePoints?: boolean;
   paymentMethod: CheckoutPaymentMethod;
   expectedTotal: number;
-  /** BANK_TRANSFER: 1–3 slip keys for the whole order (one transfer to Vreview). */
+  /** BANK_TRANSFER: 1–3 slip keys for the whole order (one transfer to MC Mart). */
   slipKeys?: string[];
   /** COD: the slip for each shop asking for a deposit, by shop id. */
   depositSlips?: Record<string, string>;

@@ -162,7 +162,7 @@ class EnvironmentVariables {
   @IsString()
   SMTP_PASS?: string;
 
-  /** Sender shown on emails, e.g. "Vreview <no-reply@vreview.app>"; defaults to SMTP_USER. */
+  /** Sender shown on emails, e.g. "MC Mart <no-reply@vreview.app>"; defaults to SMTP_USER. */
   @IsOptional()
   @IsString()
   SMTP_FROM?: string;

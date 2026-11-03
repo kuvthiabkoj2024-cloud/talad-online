@@ -4,7 +4,7 @@ import { PrismaService } from '../../../prisma/prisma.service.js';
 import { AnthropicService, replyText, type ContentBlock, type Message, type Tool } from '../../ai/anthropic.service.js';
 import type { VirtualItem } from '../../cart/cart.service.js';
 import { detectIntent, normalizeSize, stripIntentWords } from '../../catalog/chat/chat-intents.js';
-import { extractQuery, hasColor, labelOf, replyLanguage, takeColor, toConcepts, type ChatLocale } from '../../catalog/chat/chat-text.js';
+import { extractQuery, hasColor, labelOf, relatedWords, replyLanguage, takeColor, toConcepts, type ChatLocale } from '../../catalog/chat/chat-text.js';
 import { PhotoSearchService } from '../../catalog/image-search/photo-search.service.js';
 import { ProductsService, type ProductCard } from '../../catalog/products/products.service.js';
 import { CmsService } from '../../cms/cms.service.js';
@@ -18,6 +18,8 @@ const MAX_PRODUCTS = 8;
 const MAX_TOOL_ROUNDS = 3;
 /** The seller wrote within this long: they're chatting, so the bot doesn't add "the shop will reply". */
 const SELLER_ACTIVE_MS = 10 * 60_000;
+/** A greeting is answered again only after this long without a reply from the shop or the bot. */
+const GREET_AGAIN_MS = 12 * 60 * 60_000;
 
 export interface BotTurn {
   role: 'user' | 'assistant';
@@ -31,6 +33,8 @@ export interface BotAnswer {
   topic: BotTopic['kind'] | 'photo' | 'ai';
   /** Nothing the bot can answer: the seller has to (the reply just says so). */
   handoff: boolean;
+  /** Nothing was asked (thanks, "ok", "I've ordered"): no reply is sent, the seller answers if they want. */
+  silent?: boolean;
   engine: 'ai' | 'basic';
   /** The customer wants to buy: an order card for this goes with the reply. */
   order?: VirtualItem & { quantitySaid: boolean };
@@ -55,7 +59,7 @@ interface ShopFacts {
  * the shop's private chat. It first works out what is asked — information (hours, address,
  * payment, delivery, promotions, the seller's FAQ) is answered in text only; product
  * questions get the answer plus that shop's matching products. Anything else (an order, a
- * return…) is left to the seller. Claude writes the reply when configured; otherwise, or if
+ * return…) is left to the seller, and a message that asks nothing gets no reply at all. Claude writes the reply when configured; otherwise, or if
  * it fails, the built-in rules do.
  */
 @Injectable()
@@ -90,6 +94,9 @@ export class ShopBotService {
       const draft = await this.chatOrders.openDraftFor(conversationId);
       const draftProductId = draft ? (draft.items as unknown as VirtualItem[])[0].productId : null;
       const answer = await this.answer(conv.shopId, { text: last.text, photo, history, focusId, lastShown, draftProductId });
+      if (answer.silent) return;
+      // Greet once: not again while the seller or the bot is already talking with this customer.
+      if (answer.topic === 'greeting' && recent.some((m) => m.sender !== 'CUSTOMER' && Date.now() - m.createdAt.getTime() < GREET_AGAIN_MS)) return;
 
       if (answer.handoff) {
         // Don't repeat "the shop will reply" while the seller is chatting or after saying it once.
@@ -139,9 +146,17 @@ export class ShopBotService {
     const text = input.text.trim().slice(0, 1000);
     const lang = replyLanguage(text, input.history, 'lo');
     const shop = await this.facts(shopId);
-    if (input.photo) return this.photoAnswer(shop, input.photo, lang);
-    // Ordering is never left to the AI: the card is built from the catalog by these rules.
     const topic = analyse(text, shop.faqs.map((f) => f.question));
+    if (input.photo) {
+      // A photo with a caption that asks nothing ("ສັ່ງແລ້ວເດີ" under an order screenshot) isn't a
+      // product search; one about an order goes to the seller.
+      if (text && topic.kind === 'silent') return silent('basic');
+      if (text && topic.kind === 'order') return { text: B[lang].order(shop.name), productIds: [], topic: 'order', handoff: true, engine: 'basic' };
+      return this.photoAnswer(shop, input.photo, lang);
+    }
+    // Statements are decided by these rules before any AI call, so they never get a reply.
+    if (topic.kind === 'silent') return silent('basic');
+    // Ordering is never left to the AI: the card is built from the catalog by these rules.
     if (topic.kind === 'buy') return this.buyAnswer(shop, text, topic.quantity, input.draftProductId ?? input.focusId, input.lastShown ?? [], lang);
     if (this.claude.enabled) {
       try {
@@ -168,7 +183,7 @@ export class ShopBotService {
       description: shop.description,
       address: shop.address,
       hours: shop.businessHours as BusinessHours | null,
-      // Transfers go to Vreview's account (as at checkout).
+      // Transfers go to MC Mart's account (as at checkout).
       transfer: (await this.account.available()) !== null,
       cod: shop.codEnabled,
       faqs: shop.faqs,
@@ -194,8 +209,8 @@ export class ShopBotService {
         return say(shop.faqs[topic.index].answer);
       case 'greeting':
         return say(t.greeting(shop.name));
-      case 'thanks':
-        return say(t.thanks);
+      case 'silent':
+        return silent('basic');
       case 'order':
         return say(t.order(shop.name), [], true);
       case 'hours': {
@@ -279,7 +294,7 @@ export class ShopBotService {
     const known = concepts.filter((c) => c.known);
     let ids = await this.products.matchAll(concepts.map((c) => c.alternatives), MAX_PRODUCTS * 2, shopId);
     if (!ids.length && known.length) ids = await this.products.matchAll(known.map((c) => c.alternatives), MAX_PRODUCTS * 2, shopId);
-    if (!ids.length) ids = (await this.products.keywordMatches(concepts.flatMap((c) => c.alternatives), null, MAX_PRODUCTS * 2, shopId)).map((r) => r.productId);
+    if (!ids.length) ids = (await this.products.keywordMatches(relatedWords(concepts), null, MAX_PRODUCTS * 2, shopId)).map((r) => r.productId);
     return ids;
   }
 
@@ -391,7 +406,7 @@ export class ShopBotService {
 
   private async paymentMethods(shop: ShopFacts, lang: ChatLocale) {
     const { paymentMethods } = await this.cms.publicSettings();
-    // Transfers need Vreview's account set up, COD the shop's own opt-in (as at checkout).
+    // Transfers need MC Mart's account set up, COD the shop's own opt-in (as at checkout).
     const usable = paymentMethods.filter((m) => (m === 'BANK_TRANSFER' ? shop.transfer : m === 'COD' ? shop.cod : true));
     return { names: usable.map((m) => PAYMENT_NAMES[m]?.[lang] ?? m), cod: usable.includes('COD') };
   }
@@ -467,8 +482,10 @@ export class ShopBotService {
     const focus = focusId ? (await this.products.cardsByIds([focusId]))[0] : undefined;
     const focusDetail = focus ? await this.options([focus.id]) : [];
     return [
-      `You are the auto-reply assistant of "${shop.name}", a shop on Vreview (an online marketplace in Laos), answering a customer in the shop's private chat.`,
+      `You are the auto-reply assistant of "${shop.name}", a shop on MC Mart (an online marketplace in Laos), answering a customer in the shop's private chat.`,
       `Reply in the customer's language (Lao or English; default ${lang === 'lo' ? 'Lao' : 'English'}). Be short and friendly like a shop owner on a messaging app: 1–3 sentences.`,
+      'Read the whole message, and the chat before it, as one sentence in context before deciding. Lao is written without spaces: never pull one word out of a sentence and treat it as a product (in "ຫວ່າງຈະເຂົ້າໄປເບິ່ງເຄື່ອງ", ເຂົ້າໄປ means "go in", not rice).',
+      'If the customer is not asking or requesting anything — thanks, "ok", an emoji, telling you they have ordered or paid, saying they will visit or decide later, small talk — reply with only the line "SILENT". The shop owner answers those themselves. Never show products then.',
       'First decide what the customer wants:',
       '- INFORMATION (opening hours, address, payment, delivery, promotions, policies, anything in the FAQ): answer only from the shop facts below. Do NOT search or show products.',
       '- PRODUCTS (looking for, or asking about the size/colour/price/stock of a product): call search_shop_products (words in English and Lao), then answer from the results only. Never invent products or prices.',
@@ -507,13 +524,19 @@ const SEARCH_TOOL: Tool = {
   },
 };
 
-/** Claude's reply without its "SHOW:" / "HANDOFF" lines, and the products it chose. */
+/** Claude's reply without its "SHOW:" / "HANDOFF" lines, and the products it chose; "SILENT" means no reply. */
 export function parseAiReply(raw: string, results: { id: string }[], fallback: string): BotAnswer {
+  if (/^\s*SILENT\s*$/im.test(raw)) return { ...silent('ai'), topic: 'ai' };
   const show = /^\s*SHOW:\s*([\d,\s]+)$/im.exec(raw);
   const handoff = /^\s*HANDOFF\s*$/im.test(raw);
   const text = raw.replace(/^\s*SHOW:.*$/gim, '').replace(/^\s*HANDOFF\s*$/gim, '').trim();
   const picks = show ? [...new Set(show[1].split(/[,\s]+/).map(Number))].flatMap((n) => (results[n - 1] ? [results[n - 1].id] : [])) : [];
   return { text: text || fallback, productIds: picks.slice(0, MAX_PRODUCTS), topic: 'ai', handoff, engine: 'ai' };
+}
+
+/** No reply: the message asks nothing. */
+function silent(engine: BotAnswer['engine']): BotAnswer {
+  return { text: '', productIds: [], topic: 'silent', handoff: false, silent: true, engine };
 }
 
 /** Earlier turns as alternating messages, starting with the customer (Claude requires it). */
@@ -546,7 +569,6 @@ const PAYMENT_NAMES: Record<string, Record<ChatLocale, string>> = {
 const B = {
   en: {
     greeting: (shop: string) => `Hi! 👋 Welcome to ${shop}. Ask me about our products, prices, delivery or payment — or send a photo of what you're looking for.`,
-    thanks: "You're welcome! 😊 Anything else I can help with?",
     handoff: (shop: string) => `Thanks for your message! 🙏 ${shop} will reply to you here soon.`,
     order: (shop: string) => `Thanks — I've passed this to ${shop}. They'll check and reply to you here soon. 🙏`,
     hours: (h: string) => `Our opening hours: ${h}.`,
@@ -580,7 +602,6 @@ const B = {
   },
   lo: {
     greeting: (shop: string) => `ສະບາຍດີ! 👋 ຍິນດີຕ້ອນຮັບສູ່ ${shop}. ຖາມກ່ຽວກັບສິນຄ້າ, ລາຄາ, ການຈັດສົ່ງ ຫຼື ການຈ່າຍເງິນໄດ້ເລີຍ — ຫຼື ສົ່ງຮູບສິນຄ້າທີ່ຊອກຫາມາ.`,
-    thanks: 'ຍິນດີເດີ້! 😊 ມີຫຍັງໃຫ້ຊ່ວຍອີກບໍ່?',
     handoff: (shop: string) => `ຂອບໃຈສຳລັບຂໍ້ຄວາມ! 🙏 ${shop} ຈະຕອບກັບຢູ່ນີ້ໄວໆນີ້.`,
     order: (shop: string) => `ຂອບໃຈເດີ້ — ໄດ້ແຈ້ງໃຫ້ ${shop} ແລ້ວ. ຮ້ານຈະກວດເບິ່ງ ແລະ ຕອບກັບຢູ່ນີ້ໄວໆນີ້. 🙏`,
     hours: (h: string) => `ເວລາເປີດຮ້ານ: ${h}.`,

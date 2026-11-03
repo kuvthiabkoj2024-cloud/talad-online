@@ -59,7 +59,7 @@ function uploadFile(number: string, file: File, onProgress: (fraction: number) =
   });
 }
 
-/** Asking for a return: a reason and photos or a clip, sent directly to Vreview. */
+/** Asking for a return: a reason and photos or a clip, sent directly to MC Mart. */
 export function ReturnRequest({ orderNumber, deadline, pointsNote, labels }: { orderNumber: string; deadline: string | null; pointsNote: string | null; labels: ReturnLabels }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);

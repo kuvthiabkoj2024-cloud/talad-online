@@ -101,7 +101,7 @@ export class ShopOrdersController {
     return this.returns.uploadForShop(shop, number, file);
   }
 
-  /** The customer never took this COD order: goes to Vreview, and no commission once approved. */
+  /** The customer never took this COD order: goes to MC Mart, and no commission once approved. */
   @Post(':number/return')
   reportNotCollected(@CurrentShop() shop: Shop, @Param('number') number: string, @Body() dto: ShopReturnDto) {
     return this.returns.requestByShop(shop, number, dto);
@@ -121,7 +121,7 @@ class CodMonthQuery {
   month?: string;
 }
 
-/** Cash on delivery: the month's COD sales and the commission the shop transfers to Vreview. */
+/** Cash on delivery: the month's COD sales and the commission the shop transfers to MC Mart. */
 @ApiTags('seller')
 @ApiBearerAuth()
 @UseGuards(ShopOwnerGuard)
@@ -134,7 +134,7 @@ export class ShopCodController {
     return this.cod.month(shop.id, q.month);
   }
 
-  /** Vreview's QR to transfer the commission to. */
+  /** MC Mart's QR to transfer the commission to. */
   @Get('payment-qr')
   async qr() {
     const file = await this.cod.platformQr();

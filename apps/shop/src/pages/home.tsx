@@ -60,7 +60,7 @@ export function HomePage() {
   /** New things per tile: orders and video activity (unread notifications), unread chats. */
   const badge: Record<string, number | undefined> = { '/orders': badges?.orders, '/messages': unread, '/videos': badges?.videos }
   const s = summary.data
-  // The public shop page exists only once Vreview approves the shop.
+  // The public shop page exists only once MC Mart approves the shop.
   const storeLink =
     account?.shop?.status === 'APPROVED' ? storefrontUrl.shop(locale, account.shop.slug) : undefined
 

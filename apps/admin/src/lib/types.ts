@@ -61,7 +61,7 @@ export interface Alerts {
 export type PaymentQueue = 'review' | 'rejected' | 'approved'
 export type SlipStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 
-/** A checkout's transfer to Vreview and its slips (admin Payments). */
+/** A checkout's transfer to MC Mart and its slips (admin Payments). */
 export interface PaymentReview {
   number: string
   createdAt: string
@@ -336,7 +336,7 @@ export interface PayoutDetail {
   status: PayoutStatus
   paidAt: string | null
   reference: string | null
-  /** Vreview's transfer slip was uploaded (GET /admin/payouts/:id/slip). */
+  /** MC Mart's transfer slip was uploaded (GET /admin/payouts/:id/slip). */
   hasSlip: boolean
   createdAt: string
   orders: {

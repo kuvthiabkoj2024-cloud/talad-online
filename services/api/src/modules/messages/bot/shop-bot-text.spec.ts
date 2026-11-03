@@ -6,7 +6,7 @@ describe('Shop chat bot: what is the customer asking?', () => {
   it('answers information questions without products', () => {
     for (const [text, expected] of [
       ['ສະບາຍດີ', 'greeting'],
-      ['Thanks!', 'thanks'],
+      ['Thanks!', 'silent'],
       ['ຮ້ານເປີດຈັກໂມງ?', 'hours'],
       ['What time do you open?', 'hours'],
       ['ຮ້ານຢູ່ໃສ?', 'location'],
@@ -53,6 +53,36 @@ describe('Shop chat bot: what is the customer asking?', () => {
   });
 });
 
+describe('Shop chat bot: stays quiet when nothing is asked', () => {
+  it('lets the seller answer thanks, "ok", news and plans', () => {
+    for (const text of [
+      'ຂອບໃຈ ຫວ່າງຈະເຂົ້າໄປເບິ່ງເຄື່ອງເດີ', // thanks, I'll come and look when I'm free (not "rice")
+      'ສັ່ງແລ້ວເດີ', // I've ordered
+      'ເຈົ້າ, ຂອບໃຈເດີ',
+      'ດຽວໄປເບິ່ງ ແລະ ລອງເຄື່ອງກ່ອນເດີ', // I'll go and try it first
+      'ໂອນເງິນແລ້ວ',
+      'ໂອເຄ',
+      'ok 👍',
+      '🙏😊',
+      'ບໍ່ເປັນຫຍັງ',
+      'Thank you so much!',
+      "I've paid already",
+    ]) expect([text, kind(text)]).toEqual([text, 'silent']);
+  });
+
+  it('still answers questions and requests, even with thanks or news in them', () => {
+    expect(kind('ສົ່ງແຜນທີ່ຮ້ານໃຫ້ແດ່?')).toBe('location');
+    expect(kind('ຂອບໃຈ ຮ້ານຢູ່ໃສ?')).toBe('location');
+    expect(kind('ຂອບໃຈ ເອົາ 1 ອັນ')).toBe('buy');
+    expect(kind('ເອົາ 2 ອັນເດີ')).toBe('buy');
+    expect(kind('ສັ່ງແລ້ວ ຈະໄດ້ຮັບມື້ໃດ?')).toBe('order');
+    expect(kind('ບໍ່ມີແບບນີ້ບໍ່')).not.toBe('silent');
+    expect(kind('ລາຄາເທົ່າໃດ')).toBe('price');
+    expect(kind('ມີແທ້ຫວ່າ')).not.toBe('silent');
+    expect(kind('ສະບາຍດີ')).toBe('greeting');
+  });
+});
+
 describe('Shop chat bot: Claude replies', () => {
   it('takes the products Claude chose and drops its control lines', async () => {
     const { parseAiReply } = await import('./shop-bot.service.js');
@@ -61,6 +91,7 @@ describe('Shop chat bot: Claude replies', () => {
     expect(parseAiReply('We open at 8.', results, 'fallback')).toMatchObject({ text: 'We open at 8.', productIds: [] });
     expect(parseAiReply('The shop will reply soon.\nHANDOFF', results, 'fallback')).toMatchObject({ text: 'The shop will reply soon.', handoff: true });
     expect(parseAiReply('', results, 'fallback').text).toBe('fallback');
+    expect(parseAiReply('SILENT', results, 'fallback')).toMatchObject({ silent: true, text: '', productIds: [] });
   });
 });
 

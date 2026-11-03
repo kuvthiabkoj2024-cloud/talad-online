@@ -1,4 +1,4 @@
-// Vreview — marketplace data model (MVP / Phase 1).
+// MC Mart — marketplace data model (MVP / Phase 1).
 // Section references (§) point to marketplace-project-scope.md.
 // Enum values must stay in sync with @talad/shared.
 
@@ -101,7 +101,7 @@ enum PaymentStatus {
   EXPIRED
 }
 
-/// Vreview's check of a customer's transfer slip.
+/// MC Mart's check of a customer's transfer slip.
 enum SlipStatus {
   PENDING
   APPROVED
@@ -263,7 +263,7 @@ model Shop {
   paymentBankCode      String?
   paymentAccountName   String?
   paymentAccountNumber String?
-  /// Cash on delivery: each shop opts in after accepting the COD terms (Vreview takes no
+  /// Cash on delivery: each shop opts in after accepting the COD terms (MC Mart takes no
   /// part in collecting the cash and is not responsible for COD losses).
   codEnabled           Boolean    @default(false)
   /// When the owner last accepted those terms (required to turn COD on).
@@ -337,7 +337,7 @@ model Payout {
   status           PayoutStatus @default(SCHEDULED)
   paidAt           DateTime?
   reference        String?
-  /// Photo of Vreview's transfer slip (private storage key), shown to admins and the shop.
+  /// Photo of MC Mart's transfer slip (private storage key), shown to admins and the shop.
   slipKey          String?
   createdAt        DateTime     @default(now())
 
@@ -498,7 +498,7 @@ model Product {
   rejectionReason   String?
   /// The single short product video (§2.5); transcoded asset key.
   videoKey          String?
-  /// Hidden by Vreview (moderation): customers no longer see it. A new video clears this.
+  /// Hidden by MC Mart (moderation): customers no longer see it. A new video clears this.
   videoHidden       Boolean       @default(false)
   videoHiddenReason String?
   videoHiddenAt     DateTime?
@@ -612,7 +612,7 @@ model Order {
   @@index([customerId, createdAt])
 }
 
-/// A transfer slip for a whole order (all its shops), paid into Vreview's account. An admin
+/// A transfer slip for a whole order (all its shops), paid into MC Mart's account. An admin
 /// approves (the shops then get the order, paid) or rejects (the customer sends new ones).
 model PaymentSlip {
   id           String     @id @default(uuid(7))
@@ -640,7 +640,7 @@ model ShopOrder {
   status             OrderStatus @default(PENDING)
   subtotal           Decimal     @db.Decimal(14, 2)
   discountTotal      Decimal     @default(0) @db.Decimal(14, 2)
-  /// The part of `discountTotal` Vreview funds (platform coupons, loyalty points): paid back to the shop.
+  /// The part of `discountTotal` MC Mart funds (platform coupons, loyalty points): paid back to the shop.
   platformDiscount   Decimal     @default(0) @db.Decimal(14, 2)
   /// Loyalty points the customer spent on this shop order (their value is in `platformDiscount`).
   /// Returned to the customer, and set back to 0, if the order is cancelled.
@@ -755,7 +755,7 @@ model Payment {
   /// Older orders: the transfer slip checked by the shop (new orders use PaymentSlip).
   slipKey        String?
   slipUploadedAt DateTime?
-  /// A paid order that was cancelled is refunded by Vreview; when and how (bank reference).
+  /// A paid order that was cancelled is refunded by MC Mart; when and how (bank reference).
   refundedAt     DateTime?
   refundRef      String?
   createdAt      DateTime      @default(now())
@@ -935,7 +935,7 @@ model FeedPost {
   /// Public storage key (c-<customerId>/videos/).
   videoKey     String
   caption      String   @default("")
-  /// Hidden by Vreview (moderation): gone from the feed, the profile and shared links.
+  /// Hidden by MC Mart (moderation): gone from the feed, the profile and shared links.
   isHidden     Boolean  @default(false)
   hiddenReason String?
   hiddenAt     DateTime?
@@ -1146,7 +1146,7 @@ model ShopConversation {
 model ShopMessage {
   id             String   @id @default(uuid(7))
   conversationId String
-  /// "CUSTOMER" | "SHOP" | "BOT" (the shop's auto-reply) | "SYSTEM" (a Vreview notice to both sides)
+  /// "CUSTOMER" | "SHOP" | "BOT" (the shop's auto-reply) | "SYSTEM" (a MC Mart notice to both sides)
   sender         String
   text           String   @default("")
   /// Private photo (storage key); served only to the conversation's two sides.

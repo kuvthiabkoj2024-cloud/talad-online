@@ -16,16 +16,16 @@ export interface CodMonth {
   /** Completed COD orders this month: what customers paid the shop in cash. */
   orders: number;
   sales: number;
-  /** Vreview's commission on them (each item at its own rate), to transfer at month end. */
+  /** MC Mart's commission on them (each item at its own rate), to transfer at month end. */
   commission: number;
   /** commission ÷ sales, in percent (one decimal). */
   rate: number;
   /**
-   * Discounts Vreview funds on these orders (customers' points, platform coupons): the shop
+   * Discounts MC Mart funds on these orders (customers' points, platform coupons): the shop
    * collected less cash, so this comes off what it owes.
    */
   credit: number;
-  /** commission − credit; negative = Vreview owes the shop that much. */
+  /** commission − credit; negative = MC Mart owes the shop that much. */
   toTransfer: number;
   /** COD orders still on their way: they count in the month they complete. */
   inProgress: { orders: number; sales: number };
@@ -38,7 +38,7 @@ export interface CodMonth {
 const monthOf = (d: Date) => new Date(d.getTime() + 7 * 3_600_000).toISOString().slice(0, 7);
 
 /**
- * Cash on delivery for the shop (§6): the shop keeps the cash, so Vreview's commission on
+ * Cash on delivery for the shop (§6): the shop keeps the cash, so MC Mart's commission on
  * COD sales is not deducted from a payout — the shop transfers it at the end of each month.
  */
 @Injectable()

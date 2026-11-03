@@ -19,7 +19,7 @@ import { fill, formatDate, formatMoney } from '@/lib/format'
 import { billHtml, combineHtml, printHtml, stickerHtml } from '@/lib/print-order'
 import type { ShopOrderDetail, ShopOrderList, ShopOrderSummary } from '@/lib/types'
 
-// Unpaid transfers are Vreview's to check; shops get orders once they are paid.
+// Unpaid transfers are MC Mart's to check; shops get orders once they are paid.
 const TABS = (Object.keys(SHOP_ORDER_TABS) as ShopOrderTab[]).filter((t) => t !== 'to-pay')
 const PAGE_SIZES = [10, 20, 50]
 const DEFAULT_PAGE_SIZE = 20

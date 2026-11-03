@@ -170,7 +170,7 @@ export class ChatOrdersService {
       delivery: quote.delivery,
       paymentMethods,
       paymentMethod,
-      // Vreview's account (an admin checks the slip before the shop gets the order).
+      // MC Mart's account (an admin checks the slip before the shop gets the order).
       transfer: quote.transfer,
       slipAttached: !!order.slipKey,
       coupon: quote.coupon,

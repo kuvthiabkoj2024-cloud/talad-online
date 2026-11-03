@@ -153,7 +153,7 @@ export class CheckoutController {
     return image(await this.deposits.shopQr(shopId));
   }
 
-  /** Vreview's receiving QR (LAO QR) for transfers. */
+  /** MC Mart's receiving QR (LAO QR) for transfers. */
   @Get('payment-qr')
   async platformQr() {
     return image(await this.slips.platformQr());
@@ -192,7 +192,7 @@ export class OrderPaymentController {
     return image(await this.shopOrders.bill(null, number, c.id));
   }
 
-  /** The order's slips and whether Vreview approved or rejected them. */
+  /** The order's slips and whether MC Mart approved or rejected them. */
   @Get('payment-slips')
   slipList(@CurrentCustomer() c: Customer, @Param('number') number: string) {
     return this.slips.slips(c.id, number);

@@ -38,7 +38,7 @@ type Row = Prisma.ShopOrderGetPayload<{ select: typeof select }>;
 
 /**
  * Returns (Terms §13–16). The customer, or the shop for a cash-on-delivery order nobody took,
- * sends the reason and photos or a clip directly to Vreview as a dispute; the order waits in
+ * sends the reason and photos or a clip directly to MC Mart as a dispute; the order waits in
  * RETURN_REQUESTED until an admin decides (AdminOrdersService.decideDispute). Only an approved
  * return drops the commission: a shop can't cancel a COD sale it collected by reporting it.
  */
@@ -134,8 +134,8 @@ export class OrderReturnsService {
         row.shopId,
         'ORDER',
         {
-          lo: { title: `ລູກຄ້າຂໍຄືນສິນຄ້າ ${row.number}`, body: 'Vreview ກຳລັງກວດສອບ ແລະ ຈະແຈ້ງຜົນໃຫ້ທ່ານຮູ້.' },
-          en: { title: `Return requested ${row.number}`, body: 'Vreview is reviewing it and will let you know the outcome.' },
+          lo: { title: `ລູກຄ້າຂໍຄືນສິນຄ້າ ${row.number}`, body: 'MC Mart ກຳລັງກວດສອບ ແລະ ຈະແຈ້ງຜົນໃຫ້ທ່ານຮູ້.' },
+          en: { title: `Return requested ${row.number}`, body: 'MC Mart is reviewing it and will let you know the outcome.' },
         },
         { link: `/orders/${row.number}` },
       );
@@ -167,8 +167,8 @@ export class OrderReturnsService {
         row.order.customerId,
         'ORDER',
         {
-          lo: { title: `ຮ້ານແຈ້ງວ່າບໍ່ໄດ້ຮັບສິນຄ້າ ${row.number}`, body: `${row.shop.name} ແຈ້ງວ່າທ່ານບໍ່ໄດ້ຮັບສິນຄ້ານີ້. Vreview ກຳລັງກວດສອບ.` },
-          en: { title: `Shop reported ${row.number} not collected`, body: `${row.shop.name} says you did not take this order. Vreview is reviewing it.` },
+          lo: { title: `ຮ້ານແຈ້ງວ່າບໍ່ໄດ້ຮັບສິນຄ້າ ${row.number}`, body: `${row.shop.name} ແຈ້ງວ່າທ່ານບໍ່ໄດ້ຮັບສິນຄ້ານີ້. MC Mart ກຳລັງກວດສອບ.` },
+          en: { title: `Shop reported ${row.number} not collected`, body: `${row.shop.name} says you did not take this order. MC Mart is reviewing it.` },
         },
         { link: `/account/orders/${row.number}` },
       );

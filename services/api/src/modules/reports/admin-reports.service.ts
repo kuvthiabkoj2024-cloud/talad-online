@@ -146,7 +146,7 @@ export class AdminReportsService {
       orders: gross._count._all,
       completedSales: num(completed._sum.total),
       commissionCollected: num(completed._sum.commissionAmount),
-      /** Platform coupons on completed orders: Vreview's cost, paid back to shops with their payouts. */
+      /** Platform coupons on completed orders: MC Mart's cost, paid back to shops with their payouts. */
       platformCoupons: num(completed._sum.platformDiscount),
       refundsIssued: { count: refunded._count._all, amount: num(refunded._sum.total) },
       payoutsPaid: { count: payouts._count._all, amount: num(payouts._sum.netAmount) },

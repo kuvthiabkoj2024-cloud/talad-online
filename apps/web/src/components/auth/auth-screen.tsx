@@ -30,7 +30,7 @@ export async function AuthScreen({
       <aside className="relative hidden overflow-hidden rounded-3xl bg-gradient-to-br from-[#43a047] via-primary to-[#1b5e20] p-10 text-primary-foreground lg:flex lg:flex-col lg:justify-between">
         <div className="flex items-center gap-2 text-2xl font-bold">
           <BrandLogo className="size-10" />
-          Vreview
+          MC Mart
         </div>
         <div className="relative z-10">
           <h1 className="text-4xl font-extrabold leading-tight">{dict.brandTitle}</h1>

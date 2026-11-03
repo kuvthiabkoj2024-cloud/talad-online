@@ -1,5 +1,5 @@
 /*
- * Vreview Seller Center service worker (installable PWA + offline shell).
+ * MC Mart Seller Center service worker (installable PWA + offline shell).
  *
  * - Navigations are network-first; the last good index.html is kept so the app still opens
  *   offline (its screens then show "check your connection"), else /offline.html.
@@ -10,7 +10,7 @@
  *
  * Bump VERSION when this file's caching rules change.
  */
-const VERSION = "v2";
+const VERSION = "v3";
 const STATIC = `seller-static-${VERSION}`;
 const RUNTIME = `seller-runtime-${VERSION}`;
 const SHELL_URL = "/index.html";

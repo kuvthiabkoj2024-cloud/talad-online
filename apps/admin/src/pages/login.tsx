@@ -137,7 +137,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
   const p = t.auth.panel
   return (
     <AuthLayout
-      logo={<img src="/logo-transparent.png" alt="" className="size-10" />}
+      logo={<img src="/brand-logo.png" alt="" className="size-10" />}
       homeHref={storefrontUrl.home(locale)}
       brand={t.app.brand}
       badge={t.app.name}

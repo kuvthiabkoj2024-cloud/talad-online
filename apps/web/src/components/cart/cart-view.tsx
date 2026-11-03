@@ -5,7 +5,7 @@ import { Package, ShoppingBag, Store, Trash2 } from "lucide-react";
 import { ProductImage } from "../product-image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import { removeCartItem, setCartQuantity } from "@/lib/cart-actions";
 import type { CartItem, CartShop } from "@/lib/cart";
@@ -16,7 +16,18 @@ import { QuantityStepper } from "./quantity-stepper";
 
 type Dict = Dictionary["cart"];
 
-export function CartView({ locale, dict, shops }: { locale: Locale; dict: Dict; shops: CartShop[] }) {
+export function CartView({
+  locale,
+  dict,
+  shops,
+  recentOrders,
+}: {
+  locale: Locale;
+  dict: Dict;
+  shops: CartShop[];
+  /** Shown under an empty cart: the customer's latest orders (rendered on the server). */
+  recentOrders?: ReactNode;
+}) {
   const router = useRouter();
   const { setCartCount } = useSession();
   const [, startTransition] = useTransition();
@@ -77,6 +88,7 @@ export function CartView({ locale, dict, shops }: { locale: Locale; dict: Dict; 
             {dict.continueShopping}
           </Link>
         </div>
+        {recentOrders}
       </>
     );
   }

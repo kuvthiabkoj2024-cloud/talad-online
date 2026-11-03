@@ -17,7 +17,7 @@ export interface OrderLine {
 export interface OrderSummary {
   number: string;
   status: OrderStatus;
-  /** Transfer slips sent, waiting for Vreview's check. */
+  /** Transfer slips sent, waiting for MC Mart's check. */
   awaitingConfirmation: boolean;
   /** Where the transfer stands while the order waits for payment. */
   paymentCheck: PaymentCheck;
@@ -42,7 +42,7 @@ export interface OrderList {
 
 export type PaymentStatus = "PENDING" | "PAID" | "FAILED" | "REFUNDED" | "EXPIRED";
 
-/** Vreview's check of the transfer: being checked, rejected (send new slips) or approved. */
+/** MC Mart's check of the transfer: being checked, rejected (send new slips) or approved. */
 export type PaymentCheck = "reviewing" | "rejected" | "approved" | null;
 
 export interface PaymentSlip {
@@ -94,10 +94,10 @@ export interface OrderDetail extends Omit<OrderSummary, "shop"> {
     status: PaymentStatus;
     amount: number;
     paidAt: string | null;
-    /** A paid order that was cancelled: when Vreview sent the money back. */
+    /** A paid order that was cancelled: when MC Mart sent the money back. */
     refundedAt: string | null;
   } | null;
-  /** Vreview's account to transfer to (while the order waits for payment). */
+  /** MC Mart's account to transfer to (while the order waits for payment). */
   transfer: TransferAccount | null;
   /** One transfer pays the whole checkout (all its shops). */
   orderTotal: number;

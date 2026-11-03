@@ -4,6 +4,7 @@ import { Prisma } from '../../../generated/prisma/client.js';
 import { PrismaService } from '../../../prisma/prisma.service.js';
 import { MediaService } from '../../media/media.service.js';
 import { flashPrice, FlashSalePricingService, type FlashDiscount } from '../../promotions/flash-sale-pricing.service.js';
+import { normalizeLao } from '../chat/chat-text.js';
 import { feedPostInclude, toFeedPost } from '../videos/feed-posts.service.js';
 import type { FeedQuery } from './feed.query.js';
 import { productOptions, variantLabel, type ProductOption } from './product-options.js';
@@ -146,9 +147,12 @@ const SEARCH_JOINS = Prisma.sql`
   JOIN "Shop" s ON s.id = p."shopId"
   JOIN "Category" c ON c.id = p."categoryId"
   LEFT JOIN "Category" pc ON pc.id = c."parentId"`;
-const SEARCHABLE = Prisma.sql`concat_ws(' ', p.name, p.description, p.sku, s.name, c.name->>'lo', c.name->>'en', pc.name->>'lo', pc.name->>'en')`;
+/** Everything a search looks in, with Lao's two spellings of ໝ/ໜ made one (see normalizeLao). */
+const SEARCHABLE = Prisma.sql`replace(replace(concat_ws(' ', p.name, p.description, p.sku, s.name, c.name->>'lo', c.name->>'en', pc.name->>'lo', pc.name->>'en'), 'ຫມ', 'ໝ'), 'ຫນ', 'ໜ')`;
+/** The product name, spelt the same way. */
+const NAME = Prisma.sql`replace(replace(p.name, 'ຫມ', 'ໝ'), 'ຫນ', 'ໜ')`;
 /** ILIKE pattern with wildcards escaped; always passed as a bound parameter. */
-const like = (term: string) => `%${term.replace(/[\\%_]/g, '\\$&')}%`;
+const like = (term: string) => `%${normalizeLao(term).replace(/[\\%_]/g, '\\$&')}%`;
 
 /** Only published products from approved shops are visible on the storefront. */
 const VISIBLE = {
@@ -326,7 +330,7 @@ export class ProductsService {
       this.prisma.$queryRaw<{ id: string }[]>`
         SELECT p.id FROM "Product" p ${SEARCH_JOINS}
         WHERE ${where}
-        ORDER BY (p.name ILIKE ${like(words.join(' '))}) DESC, p."isPinned" DESC, p."soldCount" DESC, p.id DESC
+        ORDER BY (${NAME} ILIKE ${like(words.join(' '))}) DESC, p."isPinned" DESC, p."soldCount" DESC, p.id DESC
         LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`,
       this.prisma.$queryRaw<{ total: number }[]>`SELECT COUNT(*)::int AS total FROM "Product" p ${SEARCH_JOINS} WHERE ${where}`,
     ]);
@@ -340,7 +344,7 @@ export class ProductsService {
   async keywordMatches(keywords: string[], category: string | null, limit: number, shopId?: string): Promise<{ productId: string; hits: number }[]> {
     if (!keywords.length && !category) return [];
     const scores = keywords.map(
-      (k) => Prisma.sql`(CASE WHEN p.name ILIKE ${like(k)} THEN 2 WHEN (${SEARCHABLE}) ILIKE ${like(k)} THEN 1 ELSE 0 END)`,
+      (k) => Prisma.sql`(CASE WHEN ${NAME} ILIKE ${like(k)} THEN 2 WHEN (${SEARCHABLE}) ILIKE ${like(k)} THEN 1 ELSE 0 END)`,
     );
     const inCategory = category ? Prisma.sql`(CASE WHEN c.slug = ${category} OR pc.slug = ${category} THEN 1 ELSE 0 END)` : Prisma.sql`0`;
     const score = Prisma.sql`(${scores.length ? Prisma.join(scores, ' + ') : Prisma.sql`0`} + ${inCategory})`;

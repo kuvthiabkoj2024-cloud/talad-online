@@ -2,6 +2,16 @@
 export type ChatLocale = 'lo' | 'en';
 
 /**
+ * One spelling for letters Lao writes two ways: ຫມ/ໝ and ຫນ/ໜ ("ຢາສະຫມູນໄພ" = "ຢາສະໝູນໄພ").
+ * Applied to what customers type and, in SQL, to product text, so either spelling finds the other.
+ */
+export const normalizeLao = (text: string) => text.replace(/ຫມ/g, 'ໝ').replace(/ຫນ/g, 'ໜ');
+
+/** Lao is written without spaces: the platform's dictionary splits it into words ("ຄີມທາຜິວແດ" → ຄີມ ທາ ຜິວ ແດ). */
+const LAO_WORDS = new Intl.Segmenter('lo', { granularity: 'word' });
+const laoWords = (chunk: string) => [...LAO_WORDS.segment(chunk)].filter((s) => s.isWordLike).map((s) => s.segment);
+
+/**
  * Filler words removed before searching. Lao is written without spaces, so Lao fillers are
  * peeled off the start and end of each chunk ("ຢາກໄດ້ກາເຟ" → "ກາເຟ") — never from the middle,
  * and never when that would leave a single letter ("ມີດ", knife, stays).
@@ -28,7 +38,7 @@ export const isThanks = (text: string) => THANKS.test(text.trim());
  * "ຢາກໄດ້ກາເຟ ລາຄາບໍ່ເກີນ 100,000 ກີບ" → ["ກາເຟ"], 100000.
  */
 export function extractQuery(text: string): { keywords: string[]; maxPrice: number | null } {
-  let rest = text.toLowerCase();
+  let rest = normalizeLao(text).toLowerCase();
   let maxPrice: number | null = null;
   const price = /(?:under|below|less than|max|up to|<|ບໍ່ເກີນ|ຕ່ຳກວ່າ|ບໍ່ເກີນກວ່າ)\s*₭?\s*([\d][\d,.]*)\s*(k|ພັນ|000)?/i.exec(rest);
   if (price) {
@@ -70,6 +80,8 @@ const GLOSSARY: [lo: string, en: string][] = [
   ['ຫູຟັງ', 'earbuds'], ['ຫູຟັງ', 'headphones'], ['ລຳໂພງ', 'speaker'], ['ໂທລະສັບ', 'phone'], ['ສາຍສາກ', 'charger'], ['ທີ່ສາກ', 'charger'],
   ['ແບັດສຳຮອງ', 'power bank'], ['ພາວເວີແບັງ', 'power bank'], ['ຄອມພິວເຕີ', 'computer'], ['ແມວ', 'cat'], ['ໝາ', 'dog'], ['ສັດລ້ຽງ', 'pet'],
   ['ເດັກນ້ອຍ', 'baby'], ['ທິດຊູ່ປຽກ', 'wipes'], ['ຜ້າອ້ອມ', 'diapers'], ['ໂຍຄະ', 'yoga'], ['ເສື່ອ', 'mat'], ['ອອກກຳລັງກາຍ', 'exercise'],
+  ['ຄີມ', 'cream'], ['ໂລຊັ່ນ', 'lotion'], ['ຜິວ', 'skin'], ['ຢາສະໝູນໄພ', 'herbal medicine'], ['ສະໝູນໄພ', 'herbal'],
+  ['ໝາກມ່ວງ', 'mango'], ['ໝາກໄມ້', 'fruit'],
   ['ເຄື່ອງສຳອາງ', 'cosmetics'], ['ສະບູ', 'soap'], ['ແຊມພູ', 'shampoo'], ['ຂອງຂວັນ', 'gift'], ['ຂອງຫຼິ້ນ', 'toy'], ['ເຄື່ອງຄົວ', 'kitchen'],
 ];
 
@@ -77,7 +89,14 @@ const GLOSSARY: [lo: string, en: string][] = [
 export interface Concept {
   alternatives: string[];
   known: boolean;
+  /** Lao words not in the glossary: the words inside, for finding related products when nothing matches exactly. */
+  parts?: string[];
 }
+
+const GLOSSARY_LO = new Set(GLOSSARY.map(([lo]) => lo));
+
+/** Search words for "related" results: every alternative, plus the words inside unknown Lao phrases. */
+export const relatedWords = (concepts: Concept[]) => [...new Set(concepts.flatMap((c) => [...c.alternatives, ...(c.parts ?? [])]))];
 
 const isLao = (s: string) => /[\u0E80-\u0EFF]/.test(s);
 const wholeWord = (text: string, word: string) => new RegExp(`(^|[^a-z])${word.replace(/[-]/g, '\\-')}($|[^a-z])`).test(text);
@@ -91,17 +110,27 @@ export function toConcepts(keywords: string[]): Concept[] {
   const out: Concept[] = [];
   for (const k of keywords) {
     if (isLao(k)) {
-      // Lao compounds: every glossary term inside the chunk, longest first, without overlaps.
-      let rest = k;
-      const terms: string[] = [];
-      for (const lo of [...new Set(GLOSSARY.map(([l]) => l))].sort((a, b) => b.length - a.length)) {
-        if (rest.includes(lo)) {
-          terms.push(lo);
-          rest = rest.split(lo).join(' ');
+      // Lao compounds: glossary terms made of whole words (longest run first), so "ໝາກມ່ວງ"
+      // (mango) never reads as "ໝາ" (dog). Words between them stay together as one unknown phrase.
+      const words = laoWords(normalizeLao(k)).filter((w) => !LO_STOP.includes(w));
+      let unknown: string[] = [];
+      const flush = () => {
+        if (unknown.length) out.push({ alternatives: [unknown.join('')], known: false, ...(unknown.length > 1 && { parts: unknown.filter((w) => w.length > 1) }) });
+        unknown = [];
+      };
+      for (let i = 0; i < words.length; ) {
+        let j = words.length;
+        while (j > i && !GLOSSARY_LO.has(words.slice(i, j).join(''))) j--;
+        if (j === i) {
+          unknown.push(words[i++]);
+          continue;
         }
+        flush();
+        const lo = words.slice(i, j).join('');
+        out.push({ alternatives: [lo, ...GLOSSARY.filter(([l]) => l === lo).map(([, en]) => en)], known: true });
+        i = j;
       }
-      if (!terms.length) out.push({ alternatives: [k], known: false });
-      for (const lo of terms) out.push({ alternatives: [lo, ...GLOSSARY.filter(([l]) => l === lo).map(([, en]) => en)], known: true });
+      flush();
     } else {
       const low = k.toLowerCase();
       const los = GLOSSARY.filter(([, en]) => wholeWord(low, en)).map(([lo]) => lo);

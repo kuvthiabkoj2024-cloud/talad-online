@@ -432,7 +432,7 @@ function Thread({ id }: { id: string }) {
             const last = !sameSide(m, next)
             const showOrder = m.order && lastOfOrder.get(m.order.id) === m.id
             if (m.system) {
-              // Vreview speaking to both sides: centred, not anyone's bubble.
+              // MC Mart speaking to both sides: centred, not anyone's bubble.
               return (
                 <li key={m.id} className="mt-4 flex flex-col">
                   {newDay && (
@@ -445,7 +445,7 @@ function Thread({ id }: { id: string }) {
                   <div className="mx-auto w-full max-w-md rounded-2xl border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-sm dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-100">
                     <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold">
                       <ShieldCheck className="size-4" />
-                      Vreview
+                      MC Mart
                     </p>
                     <p className="whitespace-pre-line leading-relaxed">{m.text}</p>
                   </div>

@@ -18,7 +18,7 @@ export interface SlipState {
 export const emptySlip: SlipState = { preview: null, uploading: false, attached: false, error: null };
 
 /**
- * Manual payment: Vreview's QR + account to transfer to, the exact amount, and the slips
+ * Manual payment: MC Mart's QR + account to transfer to, the exact amount, and the slips
  * (required; up to `max`, for a payment split over several transfers). An admin checks them.
  */
 export function PaymentPanel({
@@ -48,7 +48,7 @@ export function PaymentPanel({
   dict: Dictionary["checkout"];
   /** No card frame of its own, for use inside another card (the chat order card). */
   bare?: boolean;
-  /** Paying someone other than Vreview (a shop's deposit). */
+  /** Paying someone other than MC Mart (a shop's deposit). */
   scanTitle?: string;
   scanBody?: string;
 }) {

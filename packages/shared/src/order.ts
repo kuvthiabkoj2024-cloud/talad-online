@@ -63,12 +63,12 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
  */
 export const CHECKOUT_PAYMENT_METHODS = ['BANK_TRANSFER', 'COD'] as const satisfies readonly PaymentMethod[];
 
-/** Methods where the customer uploads transfer slips for Vreview to check. */
+/** Methods where the customer uploads transfer slips for MC Mart to check. */
 export const SLIP_PAYMENT_METHODS: readonly PaymentMethod[] = ['BANK_TRANSFER', 'BCEL_ONE', 'LAPNET', 'U_MONEY'];
 export type CheckoutPaymentMethod = (typeof CHECKOUT_PAYMENT_METHODS)[number];
 
 /**
- * Transfer payments go to Vreview's account; an admin checks the slips before the shop
+ * Transfer payments go to MC Mart's account; an admin checks the slips before the shop
  * sees the order. A customer sends at most this many slips at a time (one transfer can be
  * split over several).
  */
@@ -113,7 +113,7 @@ export const billCorrectable = (status: OrderStatus): boolean => status === 'SHI
 
 /**
  * Returns (Terms §13–16): the customer, or the shop for a COD order nobody took, sends the reason
- * and photos or a video clip directly to Vreview, who decides. Open from when the order is
+ * and photos or a video clip directly to MC Mart, who decides. Open from when the order is
  * sent until `windowDays` after it completes; payouts wait out the same days (see
  * `settleableOrders` in the API). `videoMaxBytes` stays under Cloudflare's 100 MB request limit.
  */
@@ -166,12 +166,12 @@ export function isShopOrderTab(value: unknown): value is ShopOrderTab {
 
 /**
  * What a shop can do to an order, from which statuses, and where it leads. `null` keeps
- * the status (rejecting a return escalates it to Vreview instead).
+ * the status (rejecting a return escalates it to MC Mart instead).
  *
- * Shops only get orders that are paid (a transfer Vreview checked) or cash on delivery,
+ * Shops only get orders that are paid (a transfer MC Mart checked) or cash on delivery,
  * as CONFIRMED. From there: `ship` (pack it and upload the courier's bill, in one step; the
  * customer then confirms receipt or it completes after AUTO_COMPLETE_DAYS) or `out-of-stock`
- * (cancels it, sets the stock to 0, tells both sides in their chat; Vreview refunds a
+ * (cancels it, sets the stock to 0, tells both sides in their chat; MC Mart refunds a
  * paid transfer). `pack` remains for older clients.
  */
 export const SHOP_ORDER_ACTIONS = {

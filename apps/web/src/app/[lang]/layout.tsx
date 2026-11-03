@@ -18,13 +18,13 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     // Share previews need absolute links (og:url, og:image).
     metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
-    title: { default: meta.title, template: `%s · Vreview` },
+    title: { default: meta.title, template: `%s · MC Mart` },
     description: meta.description,
     alternates: {
       languages: Object.fromEntries(LOCALES.map((l) => [l, `/${l}`])),
     },
     // Installed-app look on iOS (Android/desktop read app/manifest.ts).
-    appleWebApp: { capable: true, title: "Vreview", statusBarStyle: "default" },
+    appleWebApp: { capable: true, title: "MC Mart", statusBarStyle: "default" },
     icons: {
       icon: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
       apple: "/icons/apple-touch-icon.png",
@@ -34,6 +34,11 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export const viewport: Viewport = {
   themeColor: "#2e7d32",
+  width: "device-width",
+  initialScale: 1,
+  // iPhones zoom in when a text box under 16px is tapped (chat, search) and stay zoomed;
+  // this stops that (pinch zoom still works on iOS), as in the Seller Center.
+  maximumScale: 1,
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/[lang]">) {

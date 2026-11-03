@@ -36,7 +36,7 @@ async function bootstrap() {
     const document = SwaggerModule.createDocument(
       app,
       new DocumentBuilder()
-        .setTitle('Vreview API')
+        .setTitle('MC Mart API')
         .setVersion('1.0')
         .addBearerAuth()
         .build(),

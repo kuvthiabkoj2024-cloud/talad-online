@@ -17,8 +17,8 @@ describe('shop order actions', () => {
     expect(shopOrderActions('CONFIRMED')).toEqual(['pack', 'ship', 'out-of-stock', 'cancel']);
   });
 
-  it('leave unchecked transfers and sent orders to Vreview and the customer', () => {
-    // PENDING: Vreview checks the transfer; SHIPPED/DELIVERED: the customer confirms receipt.
+  it('leave unchecked transfers and sent orders to MC Mart and the customer', () => {
+    // PENDING: MC Mart checks the transfer; SHIPPED/DELIVERED: the customer confirms receipt.
     expect(shopOrderActions('PENDING')).toEqual([]);
     expect(shopOrderActions('SHIPPED')).toEqual([]);
   });

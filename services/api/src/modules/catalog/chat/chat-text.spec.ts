@@ -1,4 +1,4 @@
-import { extractQuery, hasColor, isGreeting, isThanks, takeColor, toConcepts } from './chat-text.js';
+import { extractQuery, hasColor, isGreeting, isThanks, normalizeLao, relatedWords, takeColor, toConcepts } from './chat-text.js';
 
 describe('Market Chat text', () => {
   it('pulls English search words and a price ceiling', () => {
@@ -44,5 +44,17 @@ describe('Market Chat text', () => {
     expect(hasColor(pink, ['Everyday cotton T-shirt, unisex', 'S', 'M', 'L'])).toBe(false);
     expect(hasColor(pink, ['Silk scarf', 'Pink', 'Blue'])).toBe(true);
     expect(hasColor(pink, ['ຜ້າພັນຄໍ', 'ບົວ'])).toBe(true);
+  });
+
+  it('reads unspaced Lao by whole words', () => {
+    // "ໝາກມ່ວງ" is mango, not "ໝາ" (dog) inside it.
+    expect(toConcepts(['ໝາກມ່ວງ'])).toEqual([{ alternatives: ['ໝາກມ່ວງ', 'mango'], known: true }]);
+    // Glossary words are found inside a phrase; what's left stays as one phrase, with its words for related results.
+    const cream = toConcepts(extractQuery('ຄີມທາຜິວແດ?').keywords);
+    expect(cream.filter((c) => c.known).map((c) => c.alternatives[1])).toEqual(['cream', 'skin']);
+    expect(relatedWords(toConcepts(extractQuery('ຢາສະມຸນໄພ').keywords))).toEqual(expect.arrayContaining(['ຢາ', 'ໄພ']));
+    // ຫມ and ໝ are the same letter.
+    expect(normalizeLao('ຢາສະຫມູນໄພ')).toBe('ຢາສະໝູນໄພ');
+    expect(toConcepts(['ຢາສະຫມູນໄພ'])[0]).toMatchObject({ alternatives: ['ຢາສະໝູນໄພ', 'herbal medicine'], known: true });
   });
 });

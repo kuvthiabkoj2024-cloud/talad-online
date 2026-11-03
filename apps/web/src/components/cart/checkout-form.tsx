@@ -100,7 +100,7 @@ export function CheckoutForm({
   // A method is usable when the platform allows it and every shop in the order takes it.
   const usable = (m: CheckoutPaymentMethod) => (m === "BANK_TRANSFER" ? quote.transferAvailable : m === "COD" ? quote.codAvailable : true);
   const [payment, setPayment] = useState<CheckoutPaymentMethod>(() => methods.find(usable) ?? methods[0] ?? "BANK_TRANSFER");
-  // One transfer to Vreview for the whole order: up to MAX_PAYMENT_SLIPS slips, each with
+  // One transfer to MC Mart for the whole order: up to MAX_PAYMENT_SLIPS slips, each with
   // its storage key once uploaded (sent with the order) and its UI state.
   const [slips, setSlips] = useState<(SlipState & { key: string | null })[]>([]);
   const [depositSlips, setDepositSlips] = useState<Record<string, SlipState & { key: string | null }>>({});
@@ -650,7 +650,7 @@ export function CheckoutForm({
             </Card>
           )}
 
-          {/* Manual QR payment: one transfer to Vreview for the whole order */}
+          {/* Manual QR payment: one transfer to MC Mart for the whole order */}
           {isTransfer && quote.transfer && !paidByPoints && (
             <div className="flex flex-col gap-2">
               <PaymentPanel

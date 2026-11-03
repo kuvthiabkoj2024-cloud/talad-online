@@ -86,7 +86,7 @@ export function ShareDialog({
           </div>
           <p className="text-xs text-muted-foreground">{t.share.scanQr}</p>
           {qr && (
-            <a href={qr} download={`vreview-qr.png`} className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
+            <a href={qr} download={`mcmart-qr.png`} className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
               <Download className="size-4" />
               {t.share.saveQr}
             </a>

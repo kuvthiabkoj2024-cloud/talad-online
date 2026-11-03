@@ -1,16 +1,18 @@
 import type { BusinessHours, ProvinceCode, Weekday } from '@talad/shared';
 import { WEEKDAYS } from '@talad/shared';
 import { detectIntent } from '../../catalog/chat/chat-intents.js';
-import { extractQuery, isGreeting, isThanks, takeColor, type ChatLocale, type Color } from '../../catalog/chat/chat-text.js';
+import { extractQuery, isGreeting, takeColor, type ChatLocale, type Color } from '../../catalog/chat/chat-text.js';
 
 /**
  * What a customer's message to a shop is about. The bot answers information questions with
- * text only and shows products only when the customer is asking about products.
+ * text only, shows products only when the customer is asking about products, and stays quiet
+ * when nothing is asked (thanks, "ok", "I've ordered", "I'll come by later"): the seller answers those.
  */
 export type BotTopic =
   | { kind: 'faq'; index: number }
   | { kind: 'greeting' }
-  | { kind: 'thanks' }
+  /** Not a question or a request: the bot says nothing and leaves it to the seller. */
+  | { kind: 'silent' }
   /** An existing order, a return, a refund… — only the seller can help. */
   | { kind: 'order' }
   | { kind: 'hours' }
@@ -30,7 +32,7 @@ export type BotTopic =
   | { kind: 'unknown' };
 
 /** Information topics: answered with text, never with product cards. */
-export const INFO_TOPICS = new Set<BotTopic['kind']>(['faq', 'greeting', 'thanks', 'order', 'hours', 'location', 'payment', 'delivery', 'discount', 'unknown']);
+export const INFO_TOPICS = new Set<BotTopic['kind']>(['faq', 'greeting', 'silent', 'order', 'hours', 'location', 'payment', 'delivery', 'discount', 'unknown']);
 
 const ORDER = /\b(my order|order status|order number|tracking|track|refund|return(ed|ing)?|cancel(led|ling)?|exchange|warranty|broken|damaged|wrong item|not (yet )?(arrived|received))\b|ຄຳສັ່ງຊື້|ອໍເດີ|ຕິດຕາມ|ສົ່ງຄືນ|ຄືນເງິນ|ຄືນສິນຄ້າ|ຍົກເລີກ|ຮັບປະກັນ|ເຄື່ອງເພ|ເປ່ເພ|ຍັງບໍ່ໄດ້ຮັບ|\bTL\d{6,}/i;
 const BUY =
@@ -62,6 +64,42 @@ export function stripBuyWords(text: string): string {
     .replace(new RegExp(`\\d{1,2}\\s*(?:${UNITS})`, 'gi'), ' ')
     .replace(new RegExp(`(${Object.keys(LAO_NUMBERS).join('|')})\\s*(?:${UNITS})`, 'g'), ' ')
     .replace(/[x×]\s*\d{1,2}\b/gi, ' ');
+}
+
+/**
+ * Asking or requesting something: a question mark, Lao question and request words (ບໍ — not the
+ * "not" in ບໍ່ —, ແດ່, ໃດ, ຫຍັງ, ຈັກ, ຫວ່າ — not ຫວ່າງ "free" —, ຂໍ…, or ບໍ່ ending the message), or an English question opener.
+ */
+const QUESTION =
+  /[?？]|ບໍ(?!່)|ບໍ່[\s!.…~]*$|ແດ່|ໃດ|ຫຍັງ|ແນວໃດ|ໃສ|ຈັກ|ຫວາ(?![ນງ])|ຫວ່າ(?!ງ)|ແມ່ນບໍ່|^\s*ຂໍ|ຢາກໄດ້|ຢາກຮູ້|ຢາກຖາມ|ຊ່ວຍ|ຊອກຫາ|ຕ້ອງການ|^\s*(what|where|when|which|who|why|how|do|does|did|is|are|can|could|will|would|may|should|have|has|any)\b|\b(please|pls|tell me|show me|send me|i want|i need|i'?d like|looking for)\b/i;
+/** Saying something is done: "ສັ່ງແລ້ວ", "ໂອນເງິນແລ້ວ", "I've paid", "already ordered". */
+const DONE =
+  /(ສັ່ງ|ໂອນ|ຈ່າຍ|ຊື້|ໄດ້ຮັບ|ຮັບ)(ຊື້|ເງິນ|ເຄື່ອງ|ສິນຄ້າ)?\s*ແລ້ວ|\b(already (ordered|paid|bought|transferred|received)|i('ve| have) (just )?(ordered|paid|transferred|bought|received)|(ordered|paid|transferred) (it )?already)\b/i;
+const THANKS = /ຂອບໃຈ|\b(thanks?|thank you|thx|ty)\b/i;
+/** A whole message that only acknowledges: "ok", "ເຈົ້າ", "ໄດ້ເລີຍ", "👍". */
+const ACK =
+  /^(ok(ay)?|k|sure|noted|got it|alright|fine|good|great|nice|cool|no problem|ໂອເຄ|ໂອ ເຄ|ເຈົ້າ|ຄັບ|ໄດ້|ໄດ້ເລີຍ|ໄດ້ຄັບ|ໄດ້ເຈົ້າ|ຕົກລົງ|ຮັບຊາບ|ເຂົ້າໃຈແລ້ວ|ບໍ່ເປັນຫຍັງ|ດີ|ດີເລີຍ|ແມ່ນແລ້ວ|ຈ້າ|ໆ)+$/i;
+/** A polite statement ending ("… ເດີ", "… ເນາະ") on a message that asks nothing. */
+const STATEMENT_END = /(ເດີ້|ເດີ|ເດ|ເນີ|ນໍ|ເນາະ)$/;
+
+/** The message with punctuation, emoji and spaces dropped, to compare its words. */
+const bare = (text: string) => text.replace(/[^\p{L}\p{M}\p{N}' ]/gu, ' ').replace(/\s+/g, ' ').trim();
+
+/** Whether the customer asks or requests something (a question, "send me…", "I want…"). */
+export const asksSomething = (text: string) => QUESTION.test(text.replace(/ບໍ່ເປັນຫຍັງ/g, ' ')); // "no problem", not "what"
+
+/**
+ * Nothing to answer: only emoji, thanks, an acknowledgement, or news that something is done
+ * ("ສັ່ງແລ້ວເດີ") — unless it also asks for something or orders ("ຂອບໃຈ ເອົາ 1 ອັນ").
+ */
+export function isStatement(text: string): boolean {
+  if (asksSomething(text)) return false;
+  const words = bare(text);
+  if (!words) return true;
+  if (DONE.test(words)) return true;
+  // "ຂອບໃຈ ເອົາ 1 ອັນ" still orders.
+  if (BUY.test(words)) return false;
+  return THANKS.test(words) || ACK.test(words.replace(/\s+/g, '')) || ACK.test(words.toLowerCase());
 }
 
 const HOURS = /\b(open(ing)?|clos(e|ed|ing)|business hours|opening hours|what time)\b|ເປີດ|ປິດ|ຈັກໂມງ|ເວລາ/i;
@@ -123,9 +161,12 @@ export function analyse(message: string, faqQuestions: string[] = []): BotTopic 
   const faq = matchFaq(text, faqQuestions);
   if (faq !== null) return { kind: 'faq', index: faq };
   if (isGreeting(text)) return { kind: 'greeting' };
-  if (isThanks(text)) return { kind: 'thanks' };
-  if (ORDER.test(text)) return { kind: 'order' };
+  if (isStatement(text)) return { kind: 'silent' };
+  // Asking about something already ordered or paid ("ສັ່ງແລ້ວ ຈະໄດ້ມື້ໃດ?") is for the seller, not a new order.
+  if (ORDER.test(text) || DONE.test(text)) return { kind: 'order' };
   if (BUY.test(text)) return { kind: 'buy', quantity: Math.max(1, Math.min(99, orderQuantity(text))) };
+  // "ດຽວໄປເບິ່ງກ່ອນເດີ": a polite statement that asks nothing (checked after buying, so "ເອົາ 2 ອັນເດີ" still orders).
+  if (!asksSomething(text) && STATEMENT_END.test(bare(text))) return { kind: 'silent' };
   if (HOURS.test(text)) return { kind: 'hours' };
   if (LOCATION.test(text)) return { kind: 'location' };
   const { color, rest } = takeColor(text);

@@ -32,7 +32,7 @@ function AuthLayout({
   headline: string
   tagline: string
   highlights: AuthHighlight[]
-  /** Small print under the panel, e.g. "© 2026 Vreview". */
+  /** Small print under the panel, e.g. "© 2026 MC Mart". */
   footnote?: React.ReactNode
   /** Extra controls in the form column's top-right corner (e.g. a language switch). */
   aside?: React.ReactNode

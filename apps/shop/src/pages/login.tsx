@@ -45,7 +45,7 @@ type Step =
   | { kind: 'twoFactor'; challenge: Challenge }
 
 /**
- * Seller Center sign-in or sign-up (§3.1): one Vreview account shops and sells. Sign in
+ * Seller Center sign-in or sign-up (§3.1): one MC Mart account shops and sells. Sign in
  * with an SMS code or a password; accounts with two-step verification enter a second code.
  */
 export function LoginPage() {
@@ -387,7 +387,7 @@ export function LoginPage() {
   const p = t.auth.panel
   return (
     <AuthLayout
-      logo={<img src="/icons/logo-transparent.png" alt="" className="size-10" />}
+      logo={<img src="/icons/brand-logo.png" alt="" className="size-10" />}
       homeHref={storefrontUrl.home(locale)}
       brand={t.app.brand}
       badge={t.app.name}

@@ -29,7 +29,7 @@ export async function clearStock(tx: Prisma.TransactionClient, shopOrderId: stri
 }
 
 /**
- * A Vreview message in the shop–customer chat (both sides see it, both get an unread),
+ * A MC Mart message in the shop–customer chat (both sides see it, both get an unread),
  * creating the conversation if they never chatted.
  */
 export async function postSystemMessage(tx: Prisma.TransactionClient, shopId: string, customerId: string, text: string): Promise<void> {

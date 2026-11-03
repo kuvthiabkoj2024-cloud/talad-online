@@ -18,14 +18,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { lang, shop: slug } = await params;
   const shop = await getShop(slug);
   const path = `/${lang}/s/${slug}`;
-  const description = shop.description?.slice(0, 160) || `${shop.name} · Vreview`;
+  const description = shop.description?.slice(0, 160) || `${shop.name} · MC Mart`;
   return {
     title: shop.name,
     description,
     alternates: { canonical: path },
     openGraph: {
       type: "website",
-      siteName: "Vreview",
+      siteName: "MC Mart",
       url: path,
       title: shop.name,
       description,

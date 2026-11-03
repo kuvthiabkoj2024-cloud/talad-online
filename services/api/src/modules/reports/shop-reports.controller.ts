@@ -51,7 +51,7 @@ export class ShopReportsController {
     return this.reports.finance(shop.id, from, to);
   }
 
-  /** Vreview's transfer slip for a payout to this shop. */
+  /** MC Mart's transfer slip for a payout to this shop. */
   @Get('finance/payouts/:id/slip')
   async payoutSlip(@CurrentShop() shop: Shop, @Param('id', new ParseUUIDPipe({ version: '7' })) id: string) {
     const file = await this.reports.payoutSlip(shop.id, id);

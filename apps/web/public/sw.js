@@ -1,5 +1,5 @@
 /*
- * Vreview storefront service worker (installable PWA + offline fallback).
+ * MC Mart storefront service worker (installable PWA + offline fallback).
  *
  * - Pages always come from the network (prices, stock and carts must be fresh); when the
  *   network is down the visitor gets /offline.html instead of the browser's error page.
@@ -13,7 +13,7 @@
  *
  * Bump VERSION when this file's caching rules change.
  */
-const VERSION = "v3";
+const VERSION = "v4";
 const STATIC = `talad-static-${VERSION}`;
 const IMAGES = `talad-images-${VERSION}`;
 const OFFLINE_URL = "/offline.html";

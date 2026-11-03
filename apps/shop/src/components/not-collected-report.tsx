@@ -24,7 +24,7 @@ interface Picked {
 const isVideo = (file: File) => file.type.startsWith('video/')
 
 /**
- * A COD order the customer never took: the shop sends proof to Vreview. Once an admin
+ * A COD order the customer never took: the shop sends proof to MC Mart. Once an admin
  * approves, the order is cancelled and counts for no commission.
  */
 export function NotCollectedReport({ number }: { number: string }) {

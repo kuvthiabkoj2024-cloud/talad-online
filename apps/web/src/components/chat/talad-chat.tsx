@@ -420,7 +420,7 @@ export function TaladChat({
   );
 }
 
-/** The Vreview logo, as in the site header (full-bleed version, so the circle crops only background). */
+/** The MC Mart logo, as in the site header (full-bleed version, so the circle crops only background). */
 function AssistantAvatar() {
   return <Image src="/icons/icon-maskable-512.png" alt="" width={80} height={80} className="size-10 shrink-0 rounded-full shadow-sm" />;
 }

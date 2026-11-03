@@ -60,7 +60,7 @@ export function FinancePage() {
       if (!res.ok) throw new Error(String(res.status))
       const a = document.createElement('a')
       a.href = URL.createObjectURL(await res.blob())
-      a.download = `vreview-statement-${qs.get('from')!.slice(0, 10)}-${qs.get('to')!.slice(0, 10)}.csv`
+      a.download = `mcmart-statement-${qs.get('from')!.slice(0, 10)}-${qs.get('to')!.slice(0, 10)}.csv`
       a.click()
       URL.revokeObjectURL(a.href)
     } catch {
@@ -183,7 +183,7 @@ export function FinancePage() {
   )
 }
 
-/** What Vreview still owes: batches not paid yet, then completed orders not in a batch. */
+/** What MC Mart still owes: batches not paid yet, then completed orders not in a batch. */
 function PendingPayouts({ pending }: { pending: ShopFinance['pending'] }) {
   const { t, locale } = useI18n()
   const hidden = pending.ordersTotal - pending.orders.length
@@ -320,7 +320,7 @@ function Kpi({ label, value, hint, className }: { label: string; value: string; 
   )
 }
 
-/** Vreview's transfer slip at the front of a payout's row: a thumbnail, full size in a pop-up. It's private, so it's fetched with the session. */
+/** MC Mart's transfer slip at the front of a payout's row: a thumbnail, full size in a pop-up. It's private, so it's fetched with the session. */
 function PayoutSlip({ id, hasSlip }: { id: string; hasSlip: boolean }) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)

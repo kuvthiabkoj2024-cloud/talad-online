@@ -33,7 +33,7 @@ const DAY = 86_400_000;
 const billPrefix = (shopId: string) => filePrefix(storageFolder.shopOrders(shopId), 'bill');
 /** Actions that need the seller to say why (shown to the customer). */
 const NEEDS_REASON: ShopOrderAction[] = ['cancel', 'reject-return'];
-/** Shops never see a transfer that Vreview hasn't approved yet (it stays PENDING until then). */
+/** Shops never see a transfer that MC Mart hasn't approved yet (it stays PENDING until then). */
 const SHOP_VISIBLE: Prisma.ShopOrderWhereInput = { status: { not: 'PENDING' } };
 
 const lineSelect = {
@@ -91,7 +91,7 @@ export interface ShopOrderSummary {
   customer: { id: string; name: string };
   shop: { id: string; name: string; slug: string };
   payment: { method: PaymentMethod; status: PaymentStatus; hasSlip: boolean } | null;
-  /** A transfer whose slips wait for Vreview's check (admin console only; shops never see these). */
+  /** A transfer whose slips wait for MC Mart's check (admin console only; shops never see these). */
   awaitingConfirmation: boolean;
   /** While unpaid: slips being checked, rejected (waiting for new ones), or none sent yet. */
   paymentCheck: PaymentCheck;
@@ -112,7 +112,7 @@ export interface ShopOrderDetail extends ShopOrderSummary {
   orderNumber: string;
   subtotal: number;
   discountTotal: number;
-  /** Part of the discount Vreview funds (platform coupon), paid back to the shop. */
+  /** Part of the discount MC Mart funds (platform coupon), paid back to the shop. */
   platformDiscount: number;
   shippingFee: number;
   commissionAmount: number;
@@ -132,7 +132,7 @@ export interface ShopOrderDetail extends ShopOrderSummary {
   cancelReason: string | null;
   payment: (ShopOrderSummary['payment'] & { amount: number; paidAt: Date | null; slipUploadedAt: Date | null }) | null;
   history: { status: OrderStatus; note: string | null; actor: 'SHOP' | 'CUSTOMER' | 'ADMIN' | null; at: Date }[];
-  /** Open escalation to Vreview (a rejected return). */
+  /** Open escalation to MC Mart (a rejected return). */
   dispute: { status: string; reason: string; createdAt: Date } | null;
   /** A cash-on-delivery order the shop can report as never collected. */
   returnable: boolean;
@@ -170,7 +170,7 @@ export class ShopOrdersService {
 
   /**
    * `shopId` null = every shop (admin console); `customerId` narrows to one buyer; `method`
-   * splits transfers (checked by Vreview) from cash on delivery.
+   * splits transfers (checked by MC Mart) from cash on delivery.
    */
   async list(shopId: string | null, query: ListShopOrdersQuery, customerId?: string, method?: 'transfer' | 'cod'): Promise<ShopOrderList> {
     const term = query.q?.trim();
@@ -279,7 +279,7 @@ export class ShopOrdersService {
       pointsEarned: row.pointsEarned,
       deposit: row.depositStatus && { amount: row.depositAmount.toNumber(), status: row.depositStatus, rejectReason: row.depositRejectReason, dueAt: row.depositDueAt },
       collectOnDelivery: Math.max(0, row.total.toNumber() - row.depositAmount.toNumber()),
-      // A rejected return waits for Vreview; nothing more for the shop to do. An unsettled
+      // A rejected return waits for MC Mart; nothing more for the shop to do. An unsettled
       // deposit holds the order back, though the shop can still call it off.
       actions: dispute ? [] : shopOrderActions(row.status).filter((a) => !depositBlocksShipping(row.depositStatus) || a === 'cancel' || a === 'out-of-stock'),
     };
@@ -370,10 +370,10 @@ export class ShopOrdersService {
     if ((dto.action === 'ship' || dto.action === 'pack') && depositBlocksShipping(row.depositStatus)) {
       throw new ConflictException({ code: 'DEPOSIT_UNCONFIRMED', message: 'Confirm the deposit before sending this order' });
     }
-    // A return with a dispute open is Vreview's to decide, or a shop could drop the commission
+    // A return with a dispute open is MC Mart's to decide, or a shop could drop the commission
     // on a sale by reporting it and approving its own report.
     if ((dto.action === 'approve-return' || dto.action === 'reject-return') && (await this.prisma.dispute.count({ where: { shopOrderId: row.id, status: { in: ['OPEN', 'IN_REVIEW'] } } }))) {
-      throw new ConflictException({ code: 'INVALID_TRANSITION', message: 'Vreview is reviewing this return' });
+      throw new ConflictException({ code: 'INVALID_TRANSITION', message: 'MC Mart is reviewing this return' });
     }
     const reason = dto.reason?.trim() || null;
     if (NEEDS_REASON.includes(dto.action) && !reason) {
@@ -399,7 +399,7 @@ export class ShopOrdersService {
         payment ? tx.payment.update({ where: { id: payment.id }, data: { status, ...extra } }) : null;
       let moved = true;
 
-      // A paid transfer that won't be delivered is refunded by Vreview (Admin → Refunds).
+      // A paid transfer that won't be delivered is refunded by MC Mart (Admin → Refunds).
       const paidTransfer = payment !== null && payment.method !== 'COD' && payment.status === 'PAID';
       const refundDue = async (why: string) => {
         if (!paidTransfer) {
@@ -444,7 +444,7 @@ export class ShopOrdersService {
           await returnPoints(tx, row.id);
           await settleDeposit(tx, this.notifications, row.id, 'RETURN_DUE');
           await refundDue(OUT_OF_STOCK_REASON);
-          // Vreview tells both sides in their chat what happened and what comes next.
+          // MC Mart tells both sides in their chat what happened and what comes next.
           await postSystemMessage(
             tx,
             shop.id,
@@ -552,11 +552,11 @@ function outOfStockMessage({ number, items, refund }: { number: string; items: s
   const list = items.join(', ');
   return [
     `⚠️ ຄຳສັ່ງຊື້ ${number} ຖືກຍົກເລີກ ເພາະສິນຄ້າໝົດ: ${list}.`,
-    `• ລູກຄ້າ: ຂໍອະໄພໃນຄວາມບໍ່ສະດວກ. ${refund ? `Vreview ຈະຄືນເງິນ ${refund} ໃຫ້ທ່ານໂດຍກົງ.` : 'ທ່ານບໍ່ໄດ້ຖືກເກັບເງິນ.'} ທ່ານສາມາດຖາມຮ້ານເລື່ອງສິນຄ້າທົດແທນໃນແຊັດນີ້ໄດ້.`,
+    `• ລູກຄ້າ: ຂໍອະໄພໃນຄວາມບໍ່ສະດວກ. ${refund ? `MC Mart ຈະຄືນເງິນ ${refund} ໃຫ້ທ່ານໂດຍກົງ.` : 'ທ່ານບໍ່ໄດ້ຖືກເກັບເງິນ.'} ທ່ານສາມາດຖາມຮ້ານເລື່ອງສິນຄ້າທົດແທນໃນແຊັດນີ້ໄດ້.`,
     `• ຮ້ານ: ສະຕັອກຂອງສິນຄ້ານີ້ຖືກຕັ້ງເປັນ 0 ແລ້ວ, ອັບເດດສະຕັອກເມື່ອມີເຄື່ອງ.`,
     '',
     `⚠️ Order ${number} was cancelled because it is out of stock: ${list}.`,
-    `• Customer: sorry for the trouble. ${refund ? `Vreview will refund ${refund} to you directly.` : 'You were not charged.'} You can ask the shop about an alternative here.`,
+    `• Customer: sorry for the trouble. ${refund ? `MC Mart will refund ${refund} to you directly.` : 'You were not charged.'} You can ask the shop about an alternative here.`,
     `• Shop: the stock of these items is now 0; update it when they are back.`,
   ].join('\n');
 }

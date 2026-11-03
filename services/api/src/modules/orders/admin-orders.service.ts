@@ -143,7 +143,7 @@ export class AdminOrdersService {
             if (points) await this.tellPointsRemoved(tx, so.order.customerId, so.number, points);
           }
         }
-        // A paid transfer joins Refunds (Vreview sends the money and marks it done there).
+        // A paid transfer joins Refunds (MC Mart sends the money and marks it done there).
         const payment = paymentOf(so);
         if (payment && !(payment.method !== 'COD' && payment.status === 'PAID')) {
           await tx.payment.update({ where: { id: payment.id }, data: { status: neverPaid || payment.status === 'PENDING' ? 'FAILED' : 'REFUNDED' } });
@@ -164,8 +164,8 @@ export class AdminOrdersService {
       if (decision !== 'review' && so.shop.ownerId) {
         const refunded = decision === 'refund';
         await this.notifications.send(tx, so.shop.ownerId, 'SYSTEM', {
-          lo: { title: refunded ? 'Vreview ອະນຸມັດການຄືນເງິນ' : 'Vreview ປະຕິເສດການຄືນສິນຄ້າ', body: `${so.number}: ${resolution}` },
-          en: { title: refunded ? 'Vreview approved a refund' : 'Vreview rejected a return', body: `${so.number}: ${resolution}` },
+          lo: { title: refunded ? 'MC Mart ອະນຸມັດການຄືນເງິນ' : 'MC Mart ປະຕິເສດການຄືນສິນຄ້າ', body: `${so.number}: ${resolution}` },
+          en: { title: refunded ? 'MC Mart approved a refund' : 'MC Mart rejected a return', body: `${so.number}: ${resolution}` },
         }, { link: `/orders/${so.number}` });
       }
       await this.audit.log({ adminId: admin.id, action: `dispute.${decision}`, entityType: 'Dispute', entityId: id, changes: { order: so.number, resolution }, ip }, tx);
@@ -289,7 +289,7 @@ export class AdminOrdersService {
     let created = 0;
     let updated = 0;
     for (const [shopId, list] of byShop) {
-      // What customers paid plus platform coupons Vreview pays back (shopNet = gross − commission).
+      // What customers paid plus platform coupons MC Mart pays back (shopNet = gross − commission).
       const gross = list.reduce((s, o) => s + num(o.total) + num(o.platformDiscount), 0);
       const commission = list.reduce((s, o) => s + num(o.commissionAmount), 0);
       const merged = await this.prisma.$transaction(async (tx) => {
@@ -381,7 +381,7 @@ export class AdminOrdersService {
   }
 
   /**
-   * Vreview's transfer slip for a payout still open (multipart `file`); a new one replaces
+   * MC Mart's transfer slip for a payout still open (multipart `file`); a new one replaces
    * the last. Uploaded before marking it paid.
    */
   async uploadPayoutSlip(admin: AdminUser, id: string, file: Express.Multer.File | undefined) {
@@ -435,8 +435,8 @@ export class AdminOrdersService {
       if (action === 'paid' && payout.shop.ownerId) {
         const amount = `₭${num(payout.netAmount).toLocaleString('en-US')}`;
         await this.notifications.send(tx, payout.shop.ownerId, 'SYSTEM', {
-          lo: { title: 'ໂອນເງິນໃຫ້ຮ້ານແລ້ວ', body: `Vreview ໂອນ ${amount} ເຂົ້າບັນຊີຂອງທ່ານແລ້ວ${reference ? ` (ອ້າງອີງ ${reference})` : ''}.${payout.slipKey ? ' ເບິ່ງສະລິບໄດ້ໃນໜ້າການເງິນ.' : ''}` },
-          en: { title: 'Payout sent', body: `Vreview paid ${amount} to your account${reference ? ` (ref. ${reference})` : ''}.${payout.slipKey ? ' See the slip in Finance.' : ''}` },
+          lo: { title: 'ໂອນເງິນໃຫ້ຮ້ານແລ້ວ', body: `MC Mart ໂອນ ${amount} ເຂົ້າບັນຊີຂອງທ່ານແລ້ວ${reference ? ` (ອ້າງອີງ ${reference})` : ''}.${payout.slipKey ? ' ເບິ່ງສະລິບໄດ້ໃນໜ້າການເງິນ.' : ''}` },
+          en: { title: 'Payout sent', body: `MC Mart paid ${amount} to your account${reference ? ` (ref. ${reference})` : ''}.${payout.slipKey ? ' See the slip in Finance.' : ''}` },
         }, { link: '/finance' });
       }
       await this.audit.log({ adminId: admin.id, action: `payout.${action}`, entityType: 'Payout', entityId: id, changes: { from: payout.status, to: status, reference }, ip }, tx);

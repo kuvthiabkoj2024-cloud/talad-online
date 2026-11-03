@@ -362,7 +362,7 @@ Every app reads its own env file. The `.env.example` files list every value with
 
 | Variable                                                                                        | Notes                                                                             |
 | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `API_URL`                                                                                       | API base URL used by the Next.js server, e.g. `https://api.vreview.app/api/v1` |
+| `API_URL`                                                                                       | API base URL used by the Next.js server, e.g. `https://api.mcmart.app/api/v1` |
 | `NEXT_PUBLIC_SHOP_URL`                                                                          | Seller Center URL ("Sell on Vreview" links)                                   |
 | `NEXT_PUBLIC_MEDIA_HOST`                                                                        | Bunny pull-zone hostname (no `https://`), for optimised images                    |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `NEXT_PUBLIC_APPLE_CLIENT_ID`, `NEXT_PUBLIC_APPLE_REDIRECT_URI` | Optional social sign-in                                                           |
@@ -426,9 +426,9 @@ app after changing them.
 ```text
                     ┌──────────────── Bunny CDN (images, videos) ────────────────┐
                     │                                                             │
- Shoppers ─► www.vreview.app ─────► Next.js storefront (node) ──┐                 │
- Sellers ──► shop.vreview.app ────► static files (Seller Center) │                │
- Staff ────► admin.vreview.app ───► static files (admin)         ├─► api.vreview.app ─► NestJS API (node)
+ Shoppers ─► www.mcmart.app ─────► Next.js storefront (node) ──┐                 │
+ Sellers ──► shop.mcmart.app ────► static files (Seller Center) │                │
+ Staff ────► admin.mcmart.app ───► static files (admin)         ├─► api.mcmart.app ─► NestJS API (node)
  Mobile app ─────────────────────────────────────────────────────┘                    │
                                                                           PostgreSQL · Redis · Bunny Storage
 ```
@@ -468,10 +468,10 @@ Production settings live in a **`.env.production`** file in each app. Git ignore
 
 | File                           | Domain                                                           |
 | ------------------------------ | ---------------------------------------------------------------- |
-| `services/api/.env.production` | api.vreview.app (read when `NODE_ENV=production`, before `.env`) |
-| `apps/web/.env.production`     | vreview.app and www.vreview.app                                  |
-| `apps/shop/.env.production`    | shop.vreview.app                                                 |
-| `apps/admin/.env.production`   | admin.vreview.app                                                |
+| `services/api/.env.production` | api.mcmart.app (read when `NODE_ENV=production`, before `.env`) |
+| `apps/web/.env.production`     | mcmart.app and www.mcmart.app                                  |
+| `apps/shop/.env.production`    | shop.mcmart.app                                                 |
+| `apps/admin/.env.production`   | admin.mcmart.app                                                |
 | `apps/mobile/.env.production`  | the mobile app's API address                                     |
 
 Fill in every `CHANGE_ME` value: database, Redis, and Bunny. The JWT secrets and the first
@@ -506,8 +506,8 @@ NODE_ENV=production pnpm db:seed     # FIRST DEPLOY ONLY: roles, the first Super
 The seed also adds a demo shop and products. On a real launch, remove or hide them afterwards:
 in the admin console, suspend the demo shop.
 
-`CORS_ORIGINS` already lists vreview.app, www.vreview.app, shop.vreview.app and
-admin.vreview.app, and `ADMIN_APP_URL` points at the admin console.
+`CORS_ORIGINS` already lists mcmart.app, www.mcmart.app, shop.mcmart.app and
+admin.mcmart.app, and `ADMIN_APP_URL` points at the admin console.
 
 ### 4. Run the API and storefront
 
@@ -546,10 +546,10 @@ server's own nginx handles TLS and sends each domain to its port:
 
 | Domain                       | Container           | Local port                     |
 | ---------------------------- | ------------------- | ------------------------------ |
-| api.vreview.app              | `api`               | 127.0.0.1:4000                 |
-| vreview.app, www.vreview.app | `web`               | 127.0.0.1:3010                 |
-| shop.vreview.app             | `shop`              | 127.0.0.1:8110                 |
-| admin.vreview.app            | `admin`             | 127.0.0.1:8120                 |
+| api.mcmart.app              | `api`               | 127.0.0.1:4000                 |
+| mcmart.app, www.mcmart.app | `web`               | 127.0.0.1:3010                 |
+| shop.mcmart.app             | `shop`              | 127.0.0.1:8110                 |
+| admin.mcmart.app            | `admin`             | 127.0.0.1:8120                 |
 | (backups, admin tools)       | `postgres`, `redis` | 127.0.0.1:5433, 127.0.0.1:6380 |
 
 Change a port in `docker-compose.prod.yml` (and in nginx) if it's taken; `ss -tlnp` lists what's
@@ -618,7 +618,7 @@ buffer the event streams. An nginx example:
 ```nginx
 # API
 server {
-  server_name api.vreview.app;
+  server_name api.mcmart.app;
   client_max_body_size 250m;            # product videos
   location / {
     proxy_pass http://127.0.0.1:4000;
@@ -639,7 +639,7 @@ server {
 
 # Storefront
 server {
-  server_name vreview.app www.vreview.app;
+  server_name mcmart.app www.mcmart.app;
   client_max_body_size 20m;             # payment slips, photo search
   location / { proxy_pass http://127.0.0.1:3010; proxy_set_header Host $host; }
   location /api/events {                # storefront live updates (SSE proxy)
@@ -653,18 +653,18 @@ server {
 
 # Seller Center and admin (Docker containers serve the built files)
 server {
-  server_name shop.vreview.app;
+  server_name shop.mcmart.app;
   location / { proxy_pass http://127.0.0.1:8110; proxy_set_header Host $host; }
 }
 server {
-  server_name admin.vreview.app;
+  server_name admin.mcmart.app;
   location / { proxy_pass http://127.0.0.1:8120; proxy_set_header Host $host; }
 }
 ```
 
 Without Docker, the Seller Center and admin can be served straight from `apps/shop/dist` and
 `apps/admin/dist` by nginx (`try_files $uri /index.html;`) or any static host. Add TLS with
-`certbot --nginx -d vreview.app -d www.vreview.app -d api.vreview.app -d shop.vreview.app -d admin.vreview.app`.
+`certbot --nginx -d mcmart.app -d www.mcmart.app -d api.mcmart.app -d shop.mcmart.app -d admin.mcmart.app`.
 
 ### 6. Mobile app
 

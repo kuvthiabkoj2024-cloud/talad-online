@@ -37,7 +37,7 @@ import { queryKeys, useShopProfile } from '@/hooks/queries'
 import type { Dict } from '@/i18n/en'
 import { useI18n } from '@/i18n/context'
 import { ApiError, getToken, send, upload } from '@/lib/api'
-import { fill, formatDate, storefrontUrl } from '@/lib/format'
+import { fill, formatDate, storefrontHost, storefrontUrl } from '@/lib/format'
 import type { ShopProfile } from '@/lib/types'
 
 type ErrorKey = keyof Dict['profile']['errors']
@@ -190,7 +190,7 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
               <Input id="name" value={name} minLength={SHOP_RULES.nameMin} maxLength={SHOP_RULES.nameMax} required onChange={(e) => setName(e.target.value)} />
             </Field>
             <Field id="web" label={t.profile.web}>
-              <Input id="web" value={`vreview.app/s/${p.slug}`} readOnly className="bg-muted text-muted-foreground" />
+              <Input id="web" value={`${storefrontHost}/s/${p.slug}`} readOnly className="bg-muted text-muted-foreground" />
             </Field>
             <Field id="about" label={t.profile.about} hint={t.common.optional}>
               <Textarea id="about" rows={4} maxLength={SHOP_RULES.descriptionMax} value={description} onChange={(e) => setDescription(e.target.value)} />

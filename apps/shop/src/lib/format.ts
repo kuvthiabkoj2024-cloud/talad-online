@@ -40,6 +40,9 @@ export function fill(template: string, values: Record<string, string | number>):
 
 const STOREFRONT = (import.meta.env.VITE_STOREFRONT_URL ?? 'http://localhost:3000').replace(/\/$/, '')
 
+/** The storefront's address without https://, as shown in shop links (e.g. mcmart.app/s/my-shop). */
+export const storefrontHost = STOREFRONT.replace(/^https?:\/\//, '')
+
 export const storefrontUrl = {
   home: (locale: Locale) => `${STOREFRONT}/${locale}`,
   shop: (locale: Locale, slug: string) => `${STOREFRONT}/${locale}/s/${slug}`,

@@ -137,9 +137,9 @@ class EnvironmentVariables {
   @IsString()
   VAPID_PRIVATE_KEY?: string;
 
-  /** Contact for push services, e.g. mailto:support@vreview.app. */
+  /** Contact for push services, e.g. mailto:support@mcmart.app. */
   @IsString()
-  VAPID_SUBJECT: string = 'mailto:support@vreview.app';
+  VAPID_SUBJECT: string = 'mailto:support@mcmart.app';
 
   /**
    * Outgoing email over SMTP (e.g. Gmail with an app password: smtp.gmail.com, 465). Unset
@@ -162,7 +162,7 @@ class EnvironmentVariables {
   @IsString()
   SMTP_PASS?: string;
 
-  /** Sender shown on emails, e.g. "MC Mart <no-reply@vreview.app>"; defaults to SMTP_USER. */
+  /** Sender shown on emails, e.g. "MC Mart <no-reply@mcmart.app>"; defaults to SMTP_USER. */
   @IsOptional()
   @IsString()
   SMTP_FROM?: string;

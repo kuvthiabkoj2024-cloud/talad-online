@@ -34,7 +34,7 @@ import { ErrorState, LoadingState } from '@/components/states'
 import type { Dict } from '@/i18n/en'
 import { useI18n } from '@/i18n/context'
 import { ApiError, api, getToken, send, upload } from '@/lib/api'
-import { fill, storefrontUrl } from '@/lib/format'
+import { fill, storefrontHost, storefrontUrl } from '@/lib/format'
 import type { Account, ShopStatus } from '@/lib/types'
 
 type ErrorKey = keyof Dict['register']['errors']
@@ -268,7 +268,7 @@ function ApplicationForm({ account, application }: { account: Account; applicati
                   errors.slug && 'border-destructive',
                 )}
               >
-                <span className="border-r bg-muted px-3 py-2 text-sm whitespace-nowrap text-muted-foreground">vreview.app/s/</span>
+                <span className="border-r bg-muted px-3 py-2 text-sm whitespace-nowrap text-muted-foreground">{storefrontHost}/s/</span>
                 <input
                   id="slug"
                   value={effectiveSlug}
@@ -496,7 +496,7 @@ function ShopPreview({ name, slug, description }: { name: string; slug: string; 
             <span className="truncate">{name.trim() || t.register.previewName}</span>
             <span className="shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300">{t.register.newShop}</span>
           </p>
-          <p className="truncate font-mono text-xs text-muted-foreground">vreview.app/s/{slug || '…'}</p>
+          <p className="truncate font-mono text-xs text-muted-foreground">{storefrontHost}/s/{slug || '…'}</p>
         </div>
         <p className="line-clamp-2 text-sm text-muted-foreground">{description.trim() || t.register.previewAbout}</p>
         <p className="border-t pt-2 text-[11px] tracking-wide text-muted-foreground uppercase">

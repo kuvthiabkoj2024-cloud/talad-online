@@ -191,7 +191,7 @@ export class ImageIndexService implements OnApplicationBootstrap, OnApplicationS
     try {
       const res = await fetch(this.media.publicUrl(img.key), {
         // Wikimedia (demo photos) asks clients to identify themselves.
-        headers: { 'User-Agent': 'VreviewImageIndexer/1.0 (+https://vreview.app)' },
+        headers: { 'User-Agent': 'MCMartImageIndexer/1.0 (+https://mcmart.app)' },
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

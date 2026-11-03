@@ -8,7 +8,7 @@ import type { ShopCoupon } from './types'
 export interface CouponShop {
   name: string
   logoUrl: string | null
-  /** Where to shop, e.g. vreview.app/lo/s/my-shop. */
+  /** Where to shop, e.g. mcmart.app/lo/s/my-shop. */
   url: string
 }
 

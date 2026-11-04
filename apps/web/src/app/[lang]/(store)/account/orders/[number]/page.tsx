@@ -1,5 +1,5 @@
 import { billCorrectable, BILL_REPLACED_NOTE, formatMoney, formatPhone, provinceName, SLIP_PAYMENT_METHODS } from "@talad/shared";
-import { ArrowLeft, Banknote, Check, CircleAlert, CircleX, Clock, CreditCard, LoaderCircle, MapPin, MessageCircleMore, MessageSquareText, RotateCcw, ShieldCheck, Store, TriangleAlert, Truck, Zap } from "lucide-react";
+import { ArrowLeft, Banknote, Check, CircleAlert, CircleX, Clock, CreditCard, LoaderCircle, MapPin, MessageCircleMore, MessageSquareText, RotateCcw, ShieldCheck, Store, TriangleAlert, Truck, Video, Zap } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -393,6 +393,13 @@ export default async function OrderDetailPage({ params }: Props) {
                   <ShippingBill src={billSrc} label={dict.shippingBill} closeLabel={auth.close} />
                 )}
                 {order.billReportable && <ReportBillButton orderNumber={order.number} labels={{ ...dict.billReport, cancel: dict.cancel }} />}
+                {/* Unboxing on video is the proof a return needs (damaged, not as described). */}
+                {order.hasShippingBill && (
+                  <p className="flex items-start gap-1.5 rounded-xl bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-900 ring-1 ring-inset ring-amber-200">
+                    <Video className="mt-0.5 size-3.5 shrink-0" />
+                    {dict.unboxingVideo}
+                  </p>
+                )}
                 {order.billIssueAt && billCorrectable(order.status) && (
                   <p className="flex items-start gap-1.5 rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-200">
                     <Clock className="mt-0.5 size-3.5 shrink-0" />

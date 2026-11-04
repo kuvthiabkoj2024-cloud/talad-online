@@ -232,6 +232,7 @@
       "reported": "The shop has been told. It will upload a new bill here.",
       "error": "Couldn't tell the shop. Please try again."
     },
+    "unboxingVideo": "Always record a video while unboxing your parcel as proof. If an item is damaged or not as described, you can then request a return. Without proof, MC Mart and the shop can't take responsibility.",
     "shippingBill": "View the courier's bill",
     "urgentDelivery": "Urgent delivery by the shop",
     "pickup": "Pick up at the shop",

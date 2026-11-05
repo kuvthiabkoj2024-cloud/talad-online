@@ -1,26 +1,43 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * MC Mart colours, matching the storefront (apps/web globals.css): brand green, soft greys,
+ * white cards, red for sales. Light and dark, like the website.
  */
 
 import '@/global.css';
 
 import { Platform } from 'react-native';
 
+/** The header and brand surfaces stay this green in both themes (white text on it). */
+export const BrandGreen = '#2e7d32';
+
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
+    text: '#1f2937',
+    textSecondary: '#6b7280',
+    background: '#f3f4f6',
+    card: '#ffffff',
+    border: '#e5e7eb',
+    backgroundElement: '#eef0f2',
+    backgroundSelected: '#e0e2e6',
+    primary: '#2e7d32',
+    primarySoft: '#e8f5e9',
+    onPrimary: '#ffffff',
+    sale: '#dc2626',
+    star: '#f59e0b',
   },
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    text: '#e5e7eb',
+    textSecondary: '#9ca3af',
+    background: '#0f1411',
+    card: '#18201b',
+    border: '#2a332d',
+    backgroundElement: '#202a23',
+    backgroundSelected: '#2a352d',
+    primary: '#4caf50',
+    primarySoft: '#1d3321',
+    onPrimary: '#ffffff',
+    sale: '#f87171',
+    star: '#fbbf24',
   },
 } as const;
 
@@ -51,6 +68,28 @@ export const Fonts = Platform.select({
   },
 });
 
+/**
+ * The website's font, Noto Sans Lao Looped (Lao and Latin), one file per weight: Android
+ * can't make a custom font bold itself, so each weight names its own file.
+ */
+export const FontFamily = {
+  regular: 'NotoSansLaoLooped_400Regular',
+  medium: 'NotoSansLaoLooped_500Medium',
+  semibold: 'NotoSansLaoLooped_600SemiBold',
+  bold: 'NotoSansLaoLooped_700Bold',
+  extrabold: 'NotoSansLaoLooped_800ExtraBold',
+} as const;
+
+/** The font file for a weight ("700" → the Bold file). */
+export function fontFamilyFor(weight: string | number | undefined): string {
+  const w = Number(weight === 'bold' ? 700 : weight === 'normal' || weight === undefined ? 400 : weight);
+  if (w >= 800) return FontFamily.extrabold;
+  if (w >= 700) return FontFamily.bold;
+  if (w >= 600) return FontFamily.semibold;
+  if (w >= 500) return FontFamily.medium;
+  return FontFamily.regular;
+}
+
 export const Spacing = {
   half: 2,
   one: 4,
@@ -61,5 +100,6 @@ export const Spacing = {
   six: 64,
 } as const;
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
+export const Radius = { sm: 8, md: 12, lg: 16, full: 999 } as const;
+
 export const MaxContentWidth = 800;

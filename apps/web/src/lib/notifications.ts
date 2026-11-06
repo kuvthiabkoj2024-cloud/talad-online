@@ -1,4 +1,5 @@
-import type { Locale, NotificationData, NotificationTab } from "@talad/shared";
+import { sellerPath, type Locale, type NotificationData, type NotificationTab } from "@talad/shared";
+import { SELLER_CENTER_URL } from "./customer";
 
 /** Mirrors `CustomerNotification` from services/api notifications. */
 export interface CustomerNotification {
@@ -28,7 +29,17 @@ export function notificationText(n: CustomerNotification, locale: Locale): { tit
 
 /** Storefront URL a notification opens, or null. Only same-site paths are followed. */
 export function notificationHref(n: CustomerNotification, locale: Locale): string | null {
-  const link = n.data.link;
-  if (!link || !link.startsWith("/") || link.startsWith("//")) return null;
+  return linkHref(n.data.link, locale);
+}
+
+/**
+ * A notification link as a URL: storefront paths get the language; `seller:` links (seller news
+ * for a shop owner) open in the Seller Center. Anything else is ignored.
+ */
+export function linkHref(link: string | undefined, locale: Locale): string | null {
+  if (!link) return null;
+  const seller = sellerPath(link);
+  if (seller) return `${SELLER_CENTER_URL.replace(/\/$/, "")}${seller}`;
+  if (!link.startsWith("/") || link.startsWith("//")) return null;
   return link === "/" ? `/${locale}` : `/${locale}${link}`;
 }

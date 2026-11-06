@@ -1,6 +1,6 @@
 import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { LOCALES, type Locale, type RealtimeEvent } from '@talad/shared';
+import { LOCALES, sellerPath, type Locale, type RealtimeEvent } from '@talad/shared';
 import webpush from 'web-push';
 import type { Env } from '../../config/env.validation.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
@@ -17,10 +17,12 @@ export interface PushSubscriptionInput {
 interface PushPayload {
   title: string;
   body: string;
-  /** Path on the app's own origin to open when it's tapped. */
+  /** Path on the app's own origin to open when it's tapped (or a full URL on another site). */
   url: string;
   /** Same tag = replaces the earlier one (e.g. one entry per chat). */
   tag: string;
+  /** Unread notifications + chat messages, for the number on the installed app's icon. */
+  badge: number;
 }
 
 const CHAT_TITLE: Record<Locale, (name: string) => string> = {
@@ -42,6 +44,7 @@ const isLocale = (v: unknown): v is Locale => (LOCALES as readonly unknown[]).in
 export class PushService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PushService.name);
   private readonly publicKey: string | null;
+  private readonly sellerUrl: string;
   private unhook: (() => void) | null = null;
 
   constructor(
@@ -52,6 +55,7 @@ export class PushService implements OnModuleInit, OnModuleDestroy {
     const pub = config.get('VAPID_PUBLIC_KEY', { infer: true });
     const priv = config.get('VAPID_PRIVATE_KEY', { infer: true });
     this.publicKey = pub && priv ? pub : null;
+    this.sellerUrl = config.get('SHOP_APP_URL', { infer: true }).replace(/\/$/, '');
     if (pub && priv) webpush.setVapidDetails(config.get('VAPID_SUBJECT', { infer: true }), pub, priv);
   }
 
@@ -95,8 +99,22 @@ export class PushService implements OnModuleInit, OnModuleDestroy {
         take: MAX_DEVICES,
         select: { id: true, endpoint: true, p256dh: true, auth: true, locale: true },
       });
-      await Promise.all(subs.map((s) => this.send(s, payloadFor(event, kind, isLocale(s.locale) ? s.locale : 'lo'))));
+      if (!subs.length) continue;
+      const badge = await this.unread(kind, id);
+      await Promise.all(subs.map((s) => this.send(s, { ...payloadFor(event, kind, isLocale(s.locale) ? s.locale : 'lo', this.sellerUrl), badge })));
     }
+  }
+
+  /** What the app icon's number shows: unread notifications plus unread chat messages. */
+  private async unread(kind: 'customer' | 'shop', id: string): Promise<number> {
+    const [notifications, chats] = await Promise.all([
+      this.prisma.notification.count({ where: kind === 'customer' ? { customerId: id, readAt: null } : { shopId: id, readAt: null } }),
+      this.prisma.shopConversation.aggregate({
+        where: kind === 'customer' ? { customerId: id } : { shopId: id },
+        _sum: { customerUnread: true, shopUnread: true },
+      }),
+    ]);
+    return notifications + ((kind === 'customer' ? chats._sum.customerUnread : chats._sum.shopUnread) ?? 0);
   }
 
   private async send(sub: { id: string; endpoint: string; p256dh: string; auth: string }, payload: PushPayload): Promise<void> {
@@ -116,9 +134,21 @@ export class PushService implements OnModuleInit, OnModuleDestroy {
   }
 }
 
-/** Storefront paths carry the language (`/lo/...`); Seller Center paths don't. */
-function payloadFor(event: Extract<RealtimeEvent, { kind: 'notification' | 'message' }>, app: 'customer' | 'shop', locale: Locale): PushPayload {
-  const at = (path: string) => (app === 'customer' ? `/${locale}${path}` : path);
+/**
+ * Storefront paths carry the language (`/lo/...`); Seller Center paths don't. A customer's
+ * `seller:` link (seller news for a shop owner) opens on the Seller Center's site.
+ */
+export function payloadFor(
+  event: Extract<RealtimeEvent, { kind: 'notification' | 'message' }>,
+  app: 'customer' | 'shop',
+  locale: Locale,
+  sellerUrl: string,
+): Omit<PushPayload, 'badge'> {
+  const at = (path: string) => {
+    const seller = sellerPath(path);
+    if (seller) return app === 'customer' ? `${sellerUrl}${seller}` : seller;
+    return app === 'customer' ? (path === '/' ? `/${locale}` : `/${locale}${path}`) : path;
+  };
   if (event.kind === 'message') {
     return { title: CHAT_TITLE[locale](event.from), body: event.preview, url: at(`/messages/${event.conversationId}`), tag: `chat-${event.conversationId}` };
   }

@@ -10,7 +10,7 @@
  *
  * Bump VERSION when this file's caching rules change.
  */
-const VERSION = "v3";
+const VERSION = "v4";
 const STATIC = `seller-static-${VERSION}`;
 const RUNTIME = `seller-runtime-${VERSION}`;
 const SHELL_URL = "/index.html";
@@ -89,7 +89,7 @@ async function staleWhileRevalidate(request, event) {
 
 /*
  * Web Push (services/api notifications/push.service.ts): orders, activity and chat messages
- * as system notifications, also when no tab is open. Payload: { title, body, url, tag }.
+ * as system notifications, also when no tab is open. Payload: { title, body, url, tag, badge }.
  */
 self.addEventListener("push", (event) => {
   let data;
@@ -100,34 +100,84 @@ self.addEventListener("push", (event) => {
   }
   if (!data || !data.title) return;
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((tabs) => {
-      // The app is open in front: it already shows its own pop-up and chime. Safari, though,
-      // ends a subscription whose pushes show nothing, so there it always shows one.
-      const safari = /Safari/.test(navigator.userAgent) && !/Chrome|Chromium|Edg|Firefox/.test(navigator.userAgent);
-      if (!safari && tabs.some((t) => t.focused)) return;
-      return self.registration.showNotification(data.title, {
-        body: data.body,
-        tag: data.tag,
-        renotify: Boolean(data.tag),
-        icon: "/icons/icon-192.png",
-        badge: "/icons/icon-192.png",
-        data: { url: data.url || "/" },
-      });
-    }),
+    Promise.all([
+      setBadge(data.badge),
+      self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((tabs) => {
+        // The app is open in front: it already shows its own pop-up and chime. Safari, though,
+        // ends a subscription whose pushes show nothing, so there it always shows one.
+        const safari = /Safari/.test(navigator.userAgent) && !/Chrome|Chromium|Edg|Firefox/.test(navigator.userAgent);
+        if (!safari && tabs.some((t) => t.focused)) return;
+        return self.registration.showNotification(data.title, {
+          body: data.body,
+          tag: data.tag,
+          renotify: Boolean(data.tag),
+          icon: "/icons/icon-192.png",
+          badge: "/icons/icon-192.png",
+          data: { url: data.url || "/" },
+        });
+      }),
+    ]),
   );
 });
 
+/** The number on the installed app's icon: unread notifications + chat messages (0 clears it). */
+function setBadge(count) {
+  if (typeof count !== "number" || !self.navigator.setAppBadge) return Promise.resolve();
+  return (count > 0 ? self.navigator.setAppBadge(count) : self.navigator.clearAppBadge()).catch(() => {});
+}
+
+/*
+ * A tapped notification opens what it is about. An open app is asked to go there itself
+ * (lib/pwa.ts listenForPushOpens answers), else its tab is navigated, else a window opens.
+ * The address is also left in a cache for a page to pick up on start, because an iPhone
+ * opens a closed app at its home page whatever address it is given.
+ */
+const PENDING_CACHE = "push-open";
+const PENDING_KEY = "/__push-open";
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = new URL(event.notification.data?.url || "/", self.location.origin).href;
-  event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (tabs) => {
-      const tab = tabs.find((t) => new URL(t.url).origin === self.location.origin);
-      if (tab) {
-        await tab.focus();
-        return tab.navigate(url).catch(() => self.clients.openWindow(url));
-      }
-      return self.clients.openWindow(url);
-    }),
-  );
+  const url = new URL(event.notification.data?.url || "/", self.location.origin);
+  event.waitUntil(openFromPush(url));
 });
+
+async function openFromPush(url) {
+  // Another site (a shop owner's Seller Center news on the storefront): just open it.
+  if (url.origin !== self.location.origin) return self.clients.openWindow(url.href);
+  const tabs = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  const tab = tabs.find((t) => t.focused) ?? tabs.find((t) => t.visibilityState === "visible") ?? tabs[0];
+  if (tab) {
+    await tab.focus().catch(() => {});
+    if (await askToOpen(tab, url.href)) return;
+    if (typeof tab.navigate === "function" && (await tab.navigate(url.href).catch(() => null))) return;
+  }
+  await remember(url.href);
+  return self.clients.openWindow(url.href);
+}
+
+/** Posts the address to an open page; true once it answers. */
+function askToOpen(tab, url) {
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    const timer = setTimeout(() => resolve(false), 1500);
+    channel.port1.onmessage = () => {
+      clearTimeout(timer);
+      resolve(true);
+    };
+    try {
+      tab.postMessage({ type: "push-open", url }, [channel.port2]);
+    } catch {
+      clearTimeout(timer);
+      resolve(false);
+    }
+  });
+}
+
+async function remember(url) {
+  try {
+    const cache = await caches.open(PENDING_CACHE);
+    await cache.put(PENDING_KEY, new Response(JSON.stringify({ url, at: Date.now() }), { headers: { "content-type": "application/json" } }));
+  } catch {
+    // The window still opens at the address on most phones.
+  }
+}

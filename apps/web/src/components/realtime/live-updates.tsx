@@ -10,6 +10,7 @@ import { savePushSubscription } from "@/lib/push-actions";
 import { interpolate } from "@/lib/format";
 import { playNotificationSound, unlockNotificationSound } from "@/lib/notify-sound";
 import { LIVE_MESSAGE_EVENT, LIVE_NOTIFICATION_EVENT } from "@/lib/live-events";
+import { linkHref } from "@/lib/notifications";
 import { syncPush } from "@/lib/web-push";
 
 interface Toast {
@@ -28,7 +29,7 @@ const SHOW_MS = 6000;
  * Pages that show this data (notifications, an order, a chat) refresh themselves.
  */
 export function LiveUpdates({ locale, dict }: { locale: Locale; dict: { view: string; close: string; newMessage: string } }) {
-  const { customer, setNotificationCount } = useSession();
+  const { customer, setNotificationCount, setMessageCount } = useSession();
   const router = useRouter();
   const pathname = usePathname();
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -57,17 +58,18 @@ export function LiveUpdates({ locale, dict }: { locale: Locale; dict: { view: st
           setNotificationCount((n) => n + 1);
           window.dispatchEvent(new CustomEvent(LIVE_NOTIFICATION_EVENT, { detail: event }));
           const text = event.i18n?.[locale] ?? { title: event.title, body: event.body };
-          push({ icon: event.type === "ORDER" ? "order" : "other", title: text.title, body: text.body, href: event.link ? `/${locale}${event.link}` : null });
+          push({ icon: event.type === "ORDER" ? "order" : "other", title: text.title, body: text.body, href: linkHref(event.link, locale) });
         } else if (event.kind === "message") {
           window.dispatchEvent(new CustomEvent(LIVE_MESSAGE_EVENT, { detail: event.conversationId }));
           const href = `/${locale}/messages/${event.conversationId}`;
           // Reading that chat already: the reply just appears.
           if (pathname === href) return;
+          setMessageCount((n) => n + 1);
           push({ icon: "message", title: interpolate(dict.newMessage, { name: event.from }), body: event.preview, href });
         }
       },
     });
-  }, [signedIn, setNotificationCount]);
+  }, [signedIn, setNotificationCount, setMessageCount]);
 
   if (!toasts.length) return null;
   return (
@@ -83,7 +85,8 @@ export function LiveUpdates({ locale, dict }: { locale: Locale; dict: { view: st
               type="button"
               onClick={() => {
                 setToasts((list) => list.filter((x) => x.id !== t.id));
-                if (t.href) router.push(t.href);
+                if (t.href?.startsWith("/")) router.push(t.href);
+                else if (t.href) window.location.assign(t.href);
               }}
               className="flex min-w-0 flex-1 items-start gap-3 text-left"
             >

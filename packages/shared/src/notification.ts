@@ -49,9 +49,30 @@ export function isNotificationTab(value: unknown): value is NotificationTab {
   return typeof value === 'string' && Object.hasOwn(NOTIFICATION_TABS, value);
 }
 
+/**
+ * A customer notification that is really seller news (a payout, a product decision…) links into
+ * the Seller Center: `seller:/finance`. The storefront and its push notifications open that
+ * path on the Seller Center's own site.
+ */
+export const SELLER_LINK_PREFIX = 'seller:';
+
+export function sellerLink(path: string): string {
+  return `${SELLER_LINK_PREFIX}${path}`;
+}
+
+/** The Seller Center path of a `seller:` link, or null for a storefront path. */
+export function sellerPath(link: string): string | null {
+  if (!link.startsWith(SELLER_LINK_PREFIX)) return null;
+  const path = link.slice(SELLER_LINK_PREFIX.length);
+  return path.startsWith('/') && !path.startsWith('//') ? path : null;
+}
+
 /** `Notification.data`: everything optional, so older rows keep rendering. */
 export interface NotificationData {
-  /** Where tapping it goes: a storefront path without the locale, e.g. `/account/orders/TL-1001`. */
+  /**
+   * Where tapping it goes, in the recipient's app: a storefront path without the locale
+   * (`/account/orders/TL-1001`) or a `seller:` link for customers; a Seller Center or admin path otherwise.
+   */
   link?: string;
   /** Product or banner thumbnail (URL or storage key); a type icon is shown otherwise. */
   imageUrl?: string;

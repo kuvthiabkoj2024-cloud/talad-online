@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { setAppBadge } from '@talad/ui/lib/pwa'
 import { disablePush } from '@talad/ui/lib/web-push'
 import { api, getToken, send, setToken, setUnauthorizedHandler } from '@/lib/api'
 import { removePushSubscription } from '@/lib/push'
@@ -43,6 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // This browser stops getting the shop's notifications (while the session still works).
     await disablePush(removePushSubscription)
     await send('POST', '/auth/customer/logout').catch(() => {})
+    setAppBadge(0)
     clear()
   }, [clear])
 

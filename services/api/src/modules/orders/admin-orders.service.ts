@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { NOT_COLLECTED_REASON, RETURN_RULES, SHOP_PROFILE_RULES } from '@talad/shared';
+import { NOT_COLLECTED_REASON, RETURN_RULES, SHOP_PROFILE_RULES, sellerLink } from '@talad/shared';
 import { randomUUID } from 'node:crypto';
 import type { AdminUser, DisputeStatus, PayoutStatus, Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
@@ -166,7 +166,7 @@ export class AdminOrdersService {
         await this.notifications.send(tx, so.shop.ownerId, 'SYSTEM', {
           lo: { title: refunded ? 'MC Mart ອະນຸມັດການຄືນເງິນ' : 'MC Mart ປະຕິເສດການຄືນສິນຄ້າ', body: `${so.number}: ${resolution}` },
           en: { title: refunded ? 'MC Mart approved a refund' : 'MC Mart rejected a return', body: `${so.number}: ${resolution}` },
-        }, { link: `/orders/${so.number}` });
+        }, { link: sellerLink(`/orders/${so.number}`) });
       }
       await this.audit.log({ adminId: admin.id, action: `dispute.${decision}`, entityType: 'Dispute', entityId: id, changes: { order: so.number, resolution }, ip }, tx);
     });
@@ -479,7 +479,7 @@ export class AdminOrdersService {
         await this.notifications.send(tx, payout.shop.ownerId, 'SYSTEM', {
           lo: { title: 'ໂອນເງິນໃຫ້ຮ້ານແລ້ວ', body: `MC Mart ໂອນ ${amount} ເຂົ້າບັນຊີຂອງທ່ານແລ້ວ${reference ? ` (ອ້າງອີງ ${reference})` : ''}.${payout.slipKey ? ' ເບິ່ງສະລິບໄດ້ໃນໜ້າການເງິນ.' : ''}` },
           en: { title: 'Payout sent', body: `MC Mart paid ${amount} to your account${reference ? ` (ref. ${reference})` : ''}.${payout.slipKey ? ' See the slip in Finance.' : ''}` },
-        }, { link: '/finance' });
+        }, { link: sellerLink('/finance') });
       }
       await this.audit.log({ adminId: admin.id, action: `payout.${action}`, entityType: 'Payout', entityId: id, changes: { from: payout.status, to: status, reference }, ip }, tx);
     });

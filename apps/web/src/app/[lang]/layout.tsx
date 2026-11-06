@@ -3,6 +3,7 @@ import { Noto_Sans_Lao_Looped } from "next/font/google";
 import { LOCALES } from "@talad/shared";
 import { SessionProvider } from "@/components/auth/session-provider";
 import { LiveUpdates } from "@/components/realtime/live-updates";
+import { PwaBridge } from "@/components/realtime/pwa-bridge";
 import { getDictionary, getLocale } from "./dictionaries";
 import "../globals.css";
 
@@ -57,6 +58,8 @@ export default async function RootLayout({ children }: LayoutProps<"/[lang]">) {
           {children}
           {/* Signed-in customers: order updates and shop replies arrive live, with a chime. */}
           <LiveUpdates locale={locale} dict={live} />
+          {/* The installed app: icon badge, and opening what a tapped push is about. */}
+          <PwaBridge />
         </SessionProvider>
       </body>
     </html>

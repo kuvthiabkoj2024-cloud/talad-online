@@ -85,6 +85,10 @@ class EnvironmentVariables {
   @IsString()
   ADMIN_APP_URL: string = 'http://localhost:5173';
 
+  /** Seller Center origin, for `seller:` links in customers' push notifications. */
+  @IsString()
+  SHOP_APP_URL: string = 'http://localhost:5174';
+
   @IsOptional()
   @IsString()
   MEILI_URL?: string;

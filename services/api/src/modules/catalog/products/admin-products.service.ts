@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import type { ProductStatus } from '@talad/shared';
+import { sellerLink, type ProductStatus } from '@talad/shared';
 import type { AdminUser, Prisma } from '../../../generated/prisma/client.js';
 import { PrismaService } from '../../../prisma/prisma.service.js';
 import { AuditService } from '../../audit/audit.service.js';
@@ -159,6 +159,7 @@ export class AdminProductsService {
                 lo: { title: decision === 'unpublish' ? 'ສິນຄ້າຖືກຢຸດຂາຍ' : 'ສິນຄ້າບໍ່ໄດ້ຮັບການອະນຸມັດ', body: `“${p.name}”: ${reason}` },
                 en: { title: decision === 'unpublish' ? 'Product taken off sale' : 'Product not approved', body: `“${p.name}”: ${reason}` },
               },
+          { link: sellerLink(`/products/${p.id}`) },
         );
       }
       await this.audit.log(

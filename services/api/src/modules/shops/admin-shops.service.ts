@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { AdminUser, Prisma, ShopStatus } from '../../generated/prisma/client.js';
-import { commissionOf, type Commission } from '@talad/shared';
+import { commissionOf, sellerLink, type Commission } from '@talad/shared';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { commissionData } from '../catalog/commission/commission.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -206,7 +206,7 @@ export class AdminShopsService {
         const values = { shop: shop.name, reason: reason ?? '' };
         const text = OWNER_TEXT[decision];
         const message = { lo: fill(text.lo, values), en: fill(text.en, values) };
-        await this.notifications.send(tx, shop.ownerId, 'SYSTEM', message);
+        await this.notifications.send(tx, shop.ownerId, 'SYSTEM', message, { link: sellerLink('/') });
         // The Seller Center too, live: it reloads the shop (e.g. unlocks once approved).
         await this.notifications.toShop(tx, id, 'SHOP_STATUS', message, { link: '/' });
         await this.realtime.emit(tx, `shop:${id}`, { kind: 'shop.status', status: rule.to });

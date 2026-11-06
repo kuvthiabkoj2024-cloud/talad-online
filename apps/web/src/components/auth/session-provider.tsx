@@ -10,9 +10,12 @@ interface SessionState {
   cartCount: number;
   /** Unread notifications, for the bell badge. */
   notificationCount: number;
+  /** Unread chat messages from shops (with notifications, the installed app's icon number). */
+  messageCount: number;
   setCustomer: (customer: CustomerProfile | null) => void;
   setCartCount: (count: number) => void;
   setNotificationCount: (count: number | ((prev: number) => number)) => void;
+  setMessageCount: (count: number | ((prev: number) => number)) => void;
   refresh: () => Promise<void>;
 }
 
@@ -27,6 +30,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [customer, setCustomerState] = useState<CustomerProfile | null>(null);
   const [cartCount, setCartCount] = useState(0);
   const [notificationCount, setNotificationCount] = useState(0);
+  const [messageCount, setMessageCount] = useState(0);
   const [status, setStatus] = useState<"loading" | "ready">("loading");
 
   const refresh = useCallback(async () => {
@@ -36,14 +40,17 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         customer: CustomerProfile | null;
         cartCount: number;
         notificationCount: number;
+        messageCount?: number;
       };
       setCustomerState(json.customer);
       setCartCount(json.cartCount);
       setNotificationCount(json.notificationCount);
+      setMessageCount(json.messageCount ?? 0);
     } catch {
       setCustomerState(null);
       setCartCount(0);
       setNotificationCount(0);
+      setMessageCount(0);
     } finally {
       setStatus("ready");
     }
@@ -57,6 +64,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       else {
         setCartCount(0);
         setNotificationCount(0);
+        setMessageCount(0);
       }
     },
     [refresh],
@@ -74,9 +82,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         status,
         cartCount,
         notificationCount,
+        messageCount,
         setCustomer,
         setCartCount,
         setNotificationCount,
+        setMessageCount,
         refresh,
       }}
     >

@@ -30,6 +30,7 @@ minimumReleaseAgeExclude:
   - expo-modules-jsi@57.1.1
   - expo-router@57.0.23
   - expo@57.0.25
+  - expo-image-manipulator@57.0.22
 
 # Next's own type declarations import React's types, which it doesn't declare. Without this, pnpm
 # resolves them to whichever @types/react it happens to hoist (the mobile app's older one) and

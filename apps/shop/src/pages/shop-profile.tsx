@@ -37,11 +37,15 @@ import { queryKeys, useShopProfile } from '@/hooks/queries'
 import type { Dict } from '@/i18n/en'
 import { useI18n } from '@/i18n/context'
 import { ApiError, getToken, send, upload } from '@/lib/api'
+import { compressImage } from '@/lib/compress-image'
 import { fill, formatDate, storefrontHost, storefrontUrl } from '@/lib/format'
 import type { ShopProfile } from '@/lib/types'
 
 type ErrorKey = keyof Dict['profile']['errors']
 type Kind = 'logo' | 'cover' | 'payment-qr'
+/** Profile pictures go up under 2 MB (bigger ones are made smaller first), at most this many pixels across. */
+const PROFILE_IMAGE_BYTES = 1.9 * 1024 * 1024
+const PROFILE_IMAGE_SIDE: Record<Kind, number> = { logo: 1024, cover: 2400, 'payment-qr': 1600 }
 
 const errorText = (e: unknown, t: Dict) =>
   e instanceof ApiError && e.code && e.code in t.profile.errors ? t.profile.errors[e.code as ErrorKey] : t.common.saveError
@@ -384,10 +388,12 @@ function ImageSlot({
   const [preview, setPreview] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  async function pick(file: File | undefined) {
-    if (!file) return
+  // Photos over 2 MB are made smaller here first, so a big phone photo just works.
+  async function pick(original: File | undefined) {
+    if (!original) return
     setBusy(true)
     try {
+      const file = await compressImage(original, { maxSide: PROFILE_IMAGE_SIDE[kind], maxBytes: PROFILE_IMAGE_BYTES })
       const saved = await upload<ShopProfile>(`/me/shop/profile/${kind}`, file)
       setPreview(URL.createObjectURL(file))
       onSaved(saved)

@@ -1,13 +1,13 @@
 "use client";
 
 import type { Locale } from "@talad/shared";
-import { LoaderCircle, Mic } from "lucide-react";
+import { LoaderCircle, Mic, X } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import { transcribeVoice, voiceSearchAvailable } from "@/lib/search-actions";
 import { recordVoice, type VoiceRecording } from "@/lib/voice-recorder";
 
-type Dict = Pick<Dictionary["header"], "voice" | "listening" | "voiceUnsupported" | "voiceDenied" | "voiceNoSpeech" | "voiceEnglishOnly" | "voiceLanguage" | "voiceAuto" | "voiceWorking" | "voiceFailed">;
+type Dict = Pick<Dictionary["header"], "voice" | "listening" | "voiceUnsupported" | "voiceDenied" | "voiceNoSpeech" | "voiceEnglishOnly" | "voiceLanguage" | "voiceAuto" | "voiceWorking" | "voiceFailed" | "voiceClose">;
 
 // The Web Speech API isn't in TypeScript's DOM types: just the parts used here.
 interface Recognition {
@@ -53,6 +53,18 @@ function transcriptOf(results: ArrayLike<ArrayLike<{ transcript: string }>>): st
   return text.trim();
 }
 
+/**
+ * Whether this browser can listen in Lao. Every browser on an iPhone/iPad (Chrome too) and
+ * Safari on a Mac use Apple's speech engine, which has no Lao.
+ */
+function laoVoice(): boolean {
+  if (typeof navigator === "undefined") return true;
+  const ua = navigator.userAgent;
+  const apple = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  const safari = /Safari/.test(ua) && !/Chrome|Chromium|Edg|OPR|Android/.test(ua);
+  return !apple && !safari;
+}
+
 const canRecord = () => typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof AudioContext !== "undefined";
 /** Asked once per page load: does the API understand Lao and English itself? */
 let serverVoice: Promise<boolean> | null = null;
@@ -76,19 +88,17 @@ function savedLang(): VoiceLang | null {
  * The microphone in the header search box: speak, and when the speaker stops the words are
  * searched (the form is submitted).
  *
- * - With the API's speech service set up (`GOOGLE_SPEECH_API_KEY`), it understands Lao and
- *   English by itself: the recording goes to the API, which hears either language. Works in
- *   every browser with a microphone.
- * - Otherwise the browser listens itself, in one language at a time: a ລາວ | English switch
- *   picks which (remembered). Where the browser can't listen in Lao (Safari) it uses English.
+ * - Chrome/Android (and other browsers that can listen in Lao) listen themselves, for free, in
+ *   one language at a time: a ລາວ | English switch picks which (remembered).
+ * - iPhones and Safari can't listen in Lao, and Firefox can't listen at all: there, with the
+ *   API's speech service set up (`GOOGLE_SPEECH_API_KEY`), the recording goes to the API, which
+ *   hears Lao or English without choosing. Without it they listen in English only.
  */
 export function VoiceSearchButton({ locale, dict }: { locale: Locale; dict: Dict }) {
   const supported = useSyncExternalStore(noSubscribe, () => recognitionClass() !== null || canRecord(), () => false);
   const button = useRef<HTMLButtonElement>(null);
-  const active = useRef<Recognition | null>(null);
+  const session = useRef<{ r: Recognition; lang: VoiceLang; end: (how: "search" | "close" | "switch", note?: string) => void } | null>(null);
   const recorder = useRef<VoiceRecording | null>(null);
-  /** A language switch waiting for the previous session to let go of the microphone. */
-  const nextLang = useRef<VoiceLang | null>(null);
   // "auto": recording for the API (either language); "lo" / "en": the browser listening in one.
   const [listening, setListening] = useState<VoiceLang | "auto" | null>(null);
   const [working, setWorking] = useState(false);
@@ -113,15 +123,21 @@ export function VoiceSearchButton({ locale, dict }: { locale: Locale; dict: Dict
   }, [note]);
   useEffect(
     () => () => {
-      active.current?.abort();
+      session.current?.end("switch");
       recorder.current?.cancel();
     },
     [],
   );
 
   if (!supported) return null;
+  const canLao = laoVoice();
 
-  function listen(lang: VoiceLang) {
+  /**
+   * The browser listens in one language. Every way of ending (a pause, the time limit, an
+   * error, the mic tapped, ✕, a language switch) goes through `end`, which closes everything
+   * here and now: phones don't always report that listening ended, so nothing waits for that.
+   */
+  function listen(lang: VoiceLang, retry = true) {
     const Class = recognitionClass();
     const form = button.current?.form;
     const input = form?.elements.namedItem("q");
@@ -139,78 +155,70 @@ export function VoiceSearchButton({ locale, dict }: { locale: Locale; dict: Dict
     r.interimResults = true;
     r.continuous = false;
     r.maxAlternatives = 1;
+    // Errors in the first moments mean the microphone was still busy (a retry is worth it).
+    let justStarted = true;
+    setTimeout(() => (justStarted = false), 1500);
     let heard = "";
-    let submitted = false;
-    let retryInEnglish = false;
-    let failed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    // Events from a session being replaced (language switched) are ignored.
-    const current = () => active.current === r && nextLang.current === null;
-    /** Stop listening after `ms` unless more words arrive (phones may never stop on their own). */
-    const stopAfter = (ms: number) => {
+
+    /** search: search what was heard · close: just close · switch: another session takes over. */
+    const end = (how: "search" | "close" | "switch", note?: string) => {
+      if (session.current?.r !== r) return;
+      session.current = null;
       clearTimeout(timer);
-      timer = setTimeout(() => {
-        if (active.current === r) r.stop();
-      }, ms);
+      r.onresult = r.onerror = r.onend = null;
+      try {
+        r.abort();
+      } catch {
+        // Already stopped.
+      }
+      if (how === "switch") return;
+      input.placeholder = placeholder;
+      setListening(null);
+      if (how === "search" && heard) {
+        input.value = heard;
+        form.requestSubmit();
+      } else if (note) setNote(note);
     };
-    const submit = () => {
-      if (submitted || !heard) return;
-      submitted = true;
-      input.value = heard;
-      form.requestSubmit();
+    /** End (searching what was heard) after `ms` without new words. */
+    const endAfter = (ms: number) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => end("search", heard ? undefined : dict.voiceNoSpeech), ms);
     };
 
     r.onresult = (e) => {
-      if (!current()) return;
       heard = transcriptOf(e.results);
       input.value = heard;
       const last = e.results[e.results.length - 1];
-      if (last?.isFinal && heard) {
-        clearTimeout(timer);
-        r.stop();
-        submit();
-      } else if (heard) stopAfter(PAUSE_MS);
+      if (last?.isFinal && heard) end("search");
+      else if (heard) endAfter(PAUSE_MS);
     };
     r.onerror = (e) => {
-      if (!current()) return;
-      failed = e.error !== "no-speech";
-      if (e.error === "language-not-supported" && lang !== "en") {
-        retryInEnglish = true;
-        setNote(dict.voiceEnglishOnly);
-      } else if (e.error === "not-allowed" || e.error === "service-not-allowed") setNote(dict.voiceDenied);
-      else if (e.error === "no-speech") setNote(dict.voiceNoSpeech);
-      else if (e.error !== "aborted") setNote(dict.voiceUnsupported);
-    };
-    r.onend = () => {
-      clearTimeout(timer);
-      if (active.current !== r) return;
-      active.current = null;
-      // A language switch: the microphone is free now, start again in the other language.
-      const next = nextLang.current;
-      if (next) {
-        nextLang.current = null;
-        return listen(next);
+      // The microphone still busy right after a language switch: try once more shortly.
+      if (retry && (e.error === "audio-capture" || e.error === "aborted") && justStarted) {
+        end("close");
+        setTimeout(() => listen(lang, false), 400);
+        return;
       }
-      input.placeholder = placeholder;
-      // Phones often end without a final result: search what was heard.
-      submit();
-      if (!heard && !failed && !retryInEnglish) setNote(dict.voiceNoSpeech);
-      if (retryInEnglish) listen("en");
-      else setListening(null);
+      if (e.error === "language-not-supported") return end("close", lang === "lo" ? dict.voiceEnglishOnly : dict.voiceUnsupported);
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") return end("close", dict.voiceDenied);
+      if (e.error === "no-speech") return end("search", heard ? undefined : dict.voiceNoSpeech);
+      end("search", heard ? undefined : e.error === "aborted" ? undefined : dict.voiceUnsupported);
     };
+    r.onend = () => end("search", heard ? undefined : dict.voiceNoSpeech);
 
-    active.current = r;
+    session.current = { r, lang, end };
     input.value = "";
     input.placeholder = dict.listening;
     setListening(lang);
     try {
       r.start();
-      stopAfter(WAIT_MS);
+      endAfter(WAIT_MS);
     } catch {
-      active.current = null;
-      input.placeholder = placeholder;
-      setListening(null);
-      setNote(dict.voiceUnsupported);
+      if (retry) {
+        end("close");
+        setTimeout(() => listen(lang, false), 400);
+      } else end("close", dict.voiceUnsupported);
     }
   }
 
@@ -268,30 +276,29 @@ export function VoiceSearchButton({ locale, dict }: { locale: Locale; dict: Dict
   function toggle() {
     if (working) return;
     if (recorder.current) return recorder.current.stop();
-    if (active.current) return active.current.stop();
+    // Tapping the mic again: search what was heard so far (or just close).
+    if (session.current) return session.current.end("search");
     setNote(null);
-    if (auto) recordForServer();
-    else if (recognitionClass()) listen(savedLang() ?? locale);
+    // Google (the API) only where the browser can't hear Lao (iPhones, Safari) or can't listen
+    // at all (Firefox); everywhere else the browser's own listening is free.
+    if (auto && (!laoVoice() || !recognitionClass())) recordForServer();
+    else if (recognitionClass()) listen(laoVoice() ? (savedLang() ?? locale) : "en");
     else setNote(dict.voiceUnsupported);
   }
 
-  /** Start over in the other language (the current session is dropped). */
+  /** ✕ in the bubble: stop without searching. */
+  function close() {
+    if (recorder.current) return recorder.current.cancel();
+    session.current?.end("close");
+  }
+
+  /** Start over in the other language, within this same tap (iPhones only allow it then). */
   function switchTo(lang: VoiceLang) {
-    if (lang === listening || nextLang.current) return;
+    if (lang === listening) return;
+    if (lang === "lo" && !laoVoice()) return;
+    session.current?.end("switch");
     setNote(null);
-    setListening(lang);
-    const old = active.current;
-    if (!old) return listen(lang);
-    // Phones keep the microphone until the old session has ended: start again from its `end`.
-    nextLang.current = lang;
-    old.abort();
-    // In case a browser never reports the old session ending.
-    setTimeout(() => {
-      if (nextLang.current !== lang || active.current !== old) return;
-      nextLang.current = null;
-      active.current = null;
-      listen(lang);
-    }, 1_200);
+    listen(lang);
   }
 
   return (
@@ -326,16 +333,25 @@ export function VoiceSearchButton({ locale, dict }: { locale: Locale; dict: Dict
               />
             ))}
           </span>
+          <button
+            type="button"
+            onClick={close}
+            aria-label={dict.voiceClose}
+            className="-mr-1 shrink-0 rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
         </div>
       )}
       {(listening === "lo" || listening === "en") && (
         <div className="absolute left-3 right-3 top-full z-50 mt-2 flex items-center justify-between gap-3 rounded-2xl bg-card px-3 py-2 text-foreground shadow-lg ring-1 ring-border">
           <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
             <span className="size-2 shrink-0 animate-pulse rounded-full bg-red-500" aria-hidden />
-            <span className="truncate">{dict.voiceLanguage}</span>
+            {/* iPhones can't listen in Lao: say so instead of offering it. */}
+            <span className={canLao ? "truncate" : "leading-snug"}>{canLao ? dict.voiceLanguage : dict.voiceEnglishOnly}</span>
           </span>
           <div role="radiogroup" aria-label={dict.voiceLanguage} className="flex shrink-0 rounded-full bg-muted p-0.5">
-            {(["lo", "en"] as const).map((l) => (
+            {(canLao ? (["lo", "en"] as const) : (["en"] as const)).map((l) => (
               <button
                 key={l}
                 type="button"
@@ -350,6 +366,14 @@ export function VoiceSearchButton({ locale, dict }: { locale: Locale; dict: Dict
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            onClick={close}
+            aria-label={dict.voiceClose}
+            className="-mr-1 shrink-0 rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
         </div>
       )}
       {note && !listening && (

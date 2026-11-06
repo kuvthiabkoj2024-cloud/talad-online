@@ -5,21 +5,11 @@ import { CircleAlert, Clapperboard, LoaderCircle, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
+import { fitVideo } from "@/lib/compress-video";
 import { interpolate } from "@/lib/format";
 
 type Dict = Dictionary["feedPost"];
 type ErrorKey = keyof Dict["errors"];
-
-/** How long a picked video is (null if the browser can't tell). */
-function videoSeconds(url: string): Promise<number | null> {
-  return new Promise((resolve) => {
-    const v = document.createElement("video");
-    v.preload = "metadata";
-    v.onloadedmetadata = () => resolve(Number.isFinite(v.duration) ? v.duration : null);
-    v.onerror = () => resolve(null);
-    v.src = url;
-  });
-}
 
 /**
  * Pick (or film) a short video, add a caption, post it. Uploads with a progress bar through
@@ -33,22 +23,32 @@ export function NewPostForm({ locale, dict }: { locale: Locale; dict: Dict }) {
   const [caption, setCaption] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<ErrorKey | null>(null);
+  /** Re-encoding a big (or long) video before it can be posted: 0–100. */
+  const [shrinking, setShrinking] = useState<number | null>(null);
+  const [note, setNote] = useState<string | null>(null);
 
   useEffect(() => () => void (preview && URL.revokeObjectURL(preview)), [preview]);
 
+  // Big or long videos are made to fit here (smaller, cut to the limit), so nobody has to edit
+  // the video and pick it again.
   async function pick(f: File | undefined) {
     if (!f) return;
     setError(null);
+    setNote(null);
     if (!f.type.startsWith("video/")) return setError("INVALID_VIDEO");
-    if (f.size > MEDIA_LIMITS.maxVideoBytes) return setError("FILE_TOO_LARGE");
-    const url = URL.createObjectURL(f);
-    const seconds = await videoSeconds(url);
-    if (seconds !== null && seconds > MEDIA_LIMITS.maxVideoSeconds + 1) {
-      URL.revokeObjectURL(url);
-      return setError("TOO_LONG");
-    }
-    setFile(f);
-    setPreview(url);
+    setShrinking(0);
+    const fit = await fitVideo(f, {
+      maxBytes: MEDIA_LIMITS.maxVideoBytes,
+      targetBytes: MEDIA_LIMITS.videoTargetBytes,
+      maxSeconds: MEDIA_LIMITS.maxVideoSeconds,
+      onProgress: (p) => setShrinking(Math.round(p * 100)),
+    });
+    setShrinking(null);
+    if (!fit.ok) return setError(fit.error);
+    if (fit.trimmed) setNote(interpolate(dict.trimmed, { seconds: MEDIA_LIMITS.maxVideoSeconds }));
+    else if (fit.compressed) setNote(interpolate(dict.compressed, { mb: (fit.file.size / 1024 / 1024).toFixed(1) }));
+    setFile(fit.file);
+    setPreview(URL.createObjectURL(fit.file));
   }
 
   function post() {
@@ -86,7 +86,7 @@ export function NewPostForm({ locale, dict }: { locale: Locale; dict: Dict }) {
     xhr.send(form);
   }
 
-  const busy = progress !== null;
+  const busy = progress !== null || shrinking !== null;
   return (
     <div className="flex flex-col gap-5">
       <div>
@@ -115,6 +115,18 @@ export function NewPostForm({ locale, dict }: { locale: Locale; dict: Dict }) {
           </>
         )}
       </button>
+      {shrinking !== null && (
+        <div className="-mt-2 flex flex-col gap-1.5">
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${shrinking}%` }} />
+          </div>
+          <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
+            <LoaderCircle className="size-3.5 animate-spin" />
+            {interpolate(dict.compressing, { n: shrinking })}
+          </p>
+        </div>
+      )}
+      {note && !busy && <p className="-mt-2 rounded-xl bg-primary-soft px-4 py-2.5 text-center text-xs leading-relaxed text-primary">{note}</p>}
       {preview && !busy && (
         <button type="button" onClick={() => input.current?.click()} className="-mt-3 self-center text-sm font-semibold text-primary hover:underline">
           {dict.changeVideo}
@@ -158,7 +170,7 @@ export function NewPostForm({ locale, dict }: { locale: Locale; dict: Dict }) {
         </p>
       )}
 
-      {busy && (
+      {progress !== null && (
         <div className="flex flex-col gap-1.5">
           <div className="h-2 overflow-hidden rounded-full bg-muted">
             <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${progress}%` }} />

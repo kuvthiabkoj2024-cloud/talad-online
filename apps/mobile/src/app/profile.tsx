@@ -15,6 +15,7 @@ import { api, ApiError, avatarSrc, upload, type CustomerProfile } from '@/lib/ap
 import { useAuth } from '@/lib/auth';
 import { date } from '@/lib/format';
 import { fill, useI18n } from '@/lib/i18n';
+import { shrinkPhoto } from '@/lib/shrink-photo';
 
 /** Edit profile, as on the website: photo, name and email. The sign-in phone number can't change here. */
 export default function ProfileScreen() {
@@ -53,7 +54,7 @@ export default function ProfileScreen() {
     if (picked.canceled || !picked.assets[0]) return;
     setBusy('photo');
     try {
-      updateCustomer(await upload<CustomerProfile>('/me/avatar', 'file', picked.assets[0]));
+      updateCustomer(await upload<CustomerProfile>('/me/avatar', 'file', await shrinkPhoto(picked.assets[0])));
     } catch (e) {
       fail(e);
     } finally {

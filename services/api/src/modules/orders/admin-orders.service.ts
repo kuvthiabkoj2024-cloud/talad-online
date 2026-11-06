@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { NOT_COLLECTED_REASON, SHOP_PROFILE_RULES } from '@talad/shared';
+import { NOT_COLLECTED_REASON, RETURN_RULES, SHOP_PROFILE_RULES } from '@talad/shared';
 import { randomUUID } from 'node:crypto';
 import type { AdminUser, DisputeStatus, PayoutStatus, Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
@@ -222,7 +222,8 @@ export class AdminOrdersService {
       ...(filter.shopId && { shopId: filter.shopId }),
       ...(q && { shop: { name: { contains: q, mode: 'insensitive' } } }),
     };
-    const [rows, total, byStatus, unsettled] = await Promise.all([
+    const now = new Date();
+    const [rows, total, byStatus, unsettled, waiting] = await Promise.all([
       this.prisma.payout.findMany({
         where,
         orderBy: [{ createdAt: 'desc' }],
@@ -235,12 +236,13 @@ export class AdminOrdersService {
       }),
       this.prisma.payout.count({ where }),
       this.prisma.payout.groupBy({ by: ['status'], _count: { _all: true }, _sum: { netAmount: true } }),
-      // The same orders a payout run would settle (COD money is the shop's already).
+      // The same orders a payout run would settle now (COD money is the shop's already).
       this.prisma.shopOrder.aggregate({
-        where: { status: 'COMPLETED', payoutId: null, payments: { none: { method: 'COD' } } },
+        where: settleableOrders(now),
         _count: { _all: true },
         _sum: { total: true, commissionAmount: true, platformDiscount: true },
       }),
+      this.waitingForReturnWindow(now),
     ]);
     return {
       items: rows.map((p) => ({
@@ -268,7 +270,47 @@ export class AdminOrdersService {
         orders: unsettled._count._all,
         net: shopNet({ total: num(unsettled._sum.total), platformDiscount: num(unsettled._sum.platformDiscount), commission: num(unsettled._sum.commissionAmount) }),
       },
+      /** Completed orders still in the return window, per shop: they join a payout from `payableFrom`. */
+      waiting,
     };
+  }
+
+  /**
+   * Completed (non-COD) orders not paid out yet that are still inside the return window, grouped
+   * by shop, soonest first: what the next payout runs will settle, and from when.
+   */
+  private async waitingForReturnWindow(now: Date) {
+    const windowMs = RETURN_RULES.windowDays * 86_400_000;
+    const cutoff = new Date(now.getTime() - windowMs);
+    const orders = await this.prisma.shopOrder.findMany({
+      where: {
+        status: 'COMPLETED',
+        payoutId: null,
+        payments: { none: { method: 'COD' } },
+        history: { none: { toStatus: 'COMPLETED', createdAt: { lte: cutoff } } },
+      },
+      select: {
+        total: true,
+        platformDiscount: true,
+        commissionAmount: true,
+        shop: { select: { id: true, name: true } },
+        history: { where: { toStatus: 'COMPLETED' }, orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } },
+      },
+      take: 500,
+    });
+    const byShop = new Map<string, { shop: { id: string; name: string }; orders: number; net: number; payableFrom: Date }>();
+    for (const o of orders) {
+      const completedAt = o.history[0]?.createdAt ?? now;
+      const payableFrom = new Date(completedAt.getTime() + windowMs);
+      const net = shopNet({ total: num(o.total), platformDiscount: num(o.platformDiscount), commission: num(o.commissionAmount) });
+      const row = byShop.get(o.shop.id);
+      if (row) {
+        row.orders += 1;
+        row.net += net;
+        if (payableFrom < row.payableFrom) row.payableFrom = payableFrom;
+      } else byShop.set(o.shop.id, { shop: o.shop, orders: 1, net, payableFrom });
+    }
+    return [...byShop.values()].sort((a, b) => a.payableFrom.getTime() - b.payableFrom.getTime());
   }
 
   /**

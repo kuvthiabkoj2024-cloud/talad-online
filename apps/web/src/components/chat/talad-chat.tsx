@@ -153,7 +153,7 @@ export function TaladChat({
   async function attach(file: File | undefined) {
     if (!file) return;
     const small = await compressImage(file, { maxSide: 1024, maxBytes: 400 * 1024 });
-    const thumb = await toDataUrl(await compressImage(small, { maxSide: 320, maxBytes: 1 }));
+    const thumb = await toDataUrl(await compressImage(small, { maxSide: 320, maxBytes: 1, once: true }));
     setPhoto({ file: small, preview: thumb });
     textInput.current?.focus();
   }

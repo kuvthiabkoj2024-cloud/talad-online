@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import { removeAvatar, updateProfile, uploadAvatar } from "@/lib/account-actions";
+import { compressImage } from "@/lib/compress-image";
 import type { CustomerProfile } from "@/lib/customer";
 import { interpolate } from "@/lib/format";
 import type { ProfileErrorCode } from "@/lib/profile";
@@ -45,14 +46,16 @@ export function ProfileEditor({
     router.refresh();
   }
 
-  function pickPhoto(file: File | undefined) {
-    if (!file) return;
-    if (!(CUSTOMER_LIMITS.qrMimeTypes as readonly string[]).includes(file.type)) return setPhotoError(errorText("INVALID_QR"));
-    if (file.size > CUSTOMER_LIMITS.qrMaxBytes) return setPhotoError(errorText("FILE_TOO_LARGE"));
+  // Photos over the limit are made smaller here (not refused), so there's no picking again.
+  function pickPhoto(original: File | undefined) {
+    if (!original) return;
+    if (!(CUSTOMER_LIMITS.qrMimeTypes as readonly string[]).includes(original.type)) return setPhotoError(errorText("INVALID_QR"));
     setPhotoError(null);
-    const form = new FormData();
-    form.set("photo", file);
     startPhoto(async () => {
+      const file = await compressImage(original, { maxSide: 1600, maxBytes: CUSTOMER_LIMITS.qrMaxBytes * 0.95 });
+      if (file.size > CUSTOMER_LIMITS.qrMaxBytes) return setPhotoError(errorText("FILE_TOO_LARGE"));
+      const form = new FormData();
+      form.set("photo", file);
       const res = await uploadAvatar(form);
       if (res.ok) applied(res.customer);
       else setPhotoError(errorText(res.error));

@@ -22,7 +22,8 @@
     "voiceLanguage": "Speaking in:",
     "voiceAuto": "Listening… speak in Lao or English",
     "voiceWorking": "Understanding…",
-    "voiceFailed": "Couldn't understand that. Please try again."
+    "voiceFailed": "Couldn't understand that. Please try again.",
+    "voiceClose": "Stop listening"
   },
   "nav": {
     "label": "Main menu",
@@ -284,6 +285,7 @@
       "remove": "Remove",
       "send": "Send to MC Mart",
       "uploading": "Sending… {percent}%",
+      "compressing": "Making the video smaller… {n}%",
       "errors": {
         "generic": "Couldn't send it. Please try again.",
         "REASON_REQUIRED": "Choose a reason.",
@@ -831,13 +833,16 @@
   },
   "feedPost": {
     "title": "Post a video",
-    "hint": "A short clip up to {seconds} seconds and {mb} MB — no product needed. It appears in the video feed for everyone.",
+    "hint": "A short clip up to {seconds} seconds — no product needed. Big videos are made smaller for you, and longer ones are cut to {seconds} seconds. It appears in the video feed for everyone.",
     "chooseVideo": "Choose or record a video",
     "changeVideo": "Choose another video",
     "caption": "Caption",
     "captionPlaceholder": "Say something about your video…",
     "rules": "Only post your own videos, nothing offensive, dangerous or misleading. MC Mart may remove videos that break the rules.",
     "uploading": "Uploading… {n}%",
+    "compressing": "Making your video smaller… {n}%",
+    "compressed": "Video made smaller ({mb} MB) so it uploads quickly.",
+    "trimmed": "The video was longer than {seconds} seconds, so only the first {seconds} seconds will be posted.",
     "post": "Post",
     "errors": {
       "generic": "Couldn’t post the video. Check your connection and try again.",

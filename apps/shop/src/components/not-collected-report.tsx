@@ -1,4 +1,4 @@
-import { RETURN_FILE_TYPES, RETURN_RULES } from '@talad/shared'
+import { MEDIA_LIMITS, RETURN_FILE_TYPES, RETURN_RULES } from '@talad/shared'
 import { Button } from '@talad/ui/components/button'
 import { Card, CardContent } from '@talad/ui/components/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@talad/ui/components/dialog'
@@ -11,6 +11,8 @@ import { toast } from 'sonner'
 import { queryKeys } from '@/hooks/queries'
 import { useI18n } from '@/i18n/context'
 import { ApiError, send, upload } from '@/lib/api'
+import { compressImage } from '@/lib/compress-image'
+import { fitVideo } from '@/lib/compress-video'
 import { fill } from '@/lib/format'
 
 interface Picked {
@@ -37,16 +39,34 @@ export function NotCollectedReport({ number }: { number: string }) {
   const [files, setFiles] = useState<Picked[]>([])
   const [progress, setProgress] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const busy = progress !== null
+  /** Making a big photo or video smaller before it's added: 0–100. */
+  const [shrinking, setShrinking] = useState<number | null>(null)
+  const busy = progress !== null || shrinking !== null
   const message = (code: string | undefined) => (code && code in c.errors ? c.errors[code as keyof typeof c.errors] : t.common.saveError)
 
-  function pick(list: FileList | null) {
+  // Big photos and videos are made smaller here rather than refused (evidence is never cut short).
+  async function pick(list: FileList | null) {
     setError(null)
     const next = [...files]
-    for (const file of Array.from(list ?? [])) {
-      const tooMany = next.length >= RETURN_RULES.maxFiles || (isVideo(file) && next.some((f) => isVideo(f.file)))
-      if (tooMany) return setFiles(next), setError(message('TOO_MANY_FILES'))
-      if (file.size > (isVideo(file) ? RETURN_RULES.videoMaxBytes : RETURN_RULES.imageMaxBytes)) return setFiles(next), setError(message('FILE_TOO_LARGE'))
+    const stop = (code: string) => (setFiles(next), setError(message(code)))
+    for (const picked of Array.from(list ?? [])) {
+      const tooMany = next.length >= RETURN_RULES.maxFiles || (isVideo(picked) && next.some((f) => isVideo(f.file)))
+      if (tooMany) return stop('TOO_MANY_FILES')
+      let file = picked
+      if (isVideo(file)) {
+        setShrinking(0)
+        const fit = await fitVideo(file, {
+          maxBytes: RETURN_RULES.videoMaxBytes,
+          targetBytes: MEDIA_LIMITS.videoTargetBytes,
+          onProgress: (p) => setShrinking(Math.round(p * 100)),
+        })
+        setShrinking(null)
+        if (!fit.ok) return stop('FILE_TOO_LARGE')
+        file = fit.file
+      } else if (file.size > RETURN_RULES.imageMaxBytes) {
+        file = await compressImage(file, { maxSide: 2560, maxBytes: RETURN_RULES.imageMaxBytes * 0.9 })
+        if (file.size > RETURN_RULES.imageMaxBytes) return stop('FILE_TOO_LARGE')
+      }
       next.push({ id: crypto.randomUUID(), file, preview: URL.createObjectURL(file) })
     }
     setFiles(next)
@@ -135,6 +155,12 @@ export function NotCollectedReport({ number }: { number: string }) {
                   </li>
                 )}
               </ul>
+              {shrinking !== null && (
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <LoaderCircle className="size-3.5 animate-spin" />
+                  {fill(t.editor.compressing, { pct: shrinking })}
+                </p>
+              )}
               <input
                 ref={input}
                 type="file"
@@ -142,7 +168,7 @@ export function NotCollectedReport({ number }: { number: string }) {
                 accept={RETURN_FILE_TYPES}
                 className="sr-only"
                 onChange={(e) => {
-                  pick(e.target.files)
+                  void pick(e.target.files)
                   e.target.value = ''
                 }}
               />

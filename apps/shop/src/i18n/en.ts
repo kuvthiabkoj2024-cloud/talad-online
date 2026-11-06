@@ -956,7 +956,10 @@ export const en = {
     moveRight: 'Move right',
     remove: 'Remove',
     video: 'Video',
-    videoHint: 'One short clip up to {seconds} seconds and {mb} MB (MP4, MOV or WebM). It also appears in the storefront Feed.',
+    videoHint:
+      'One short clip up to {seconds} seconds (MP4, MOV or WebM). Big videos are made smaller for you and longer ones are cut to {seconds} seconds. It also appears in the storefront Feed.',
+    videoTrimmed: 'The video was longer than {seconds} seconds, so only the first {seconds} seconds were kept.',
+    compressing: 'Making the video smaller… {pct}%',
     addVideo: 'Add video',
     replaceVideo: 'Replace',
     uploading: 'Uploading… {pct}%',

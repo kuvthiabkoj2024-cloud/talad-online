@@ -1,8 +1,9 @@
+import { RETURN_RULES } from '@talad/shared'
 import { Button } from '@talad/ui/components/button'
 import { Card, CardContent } from '@talad/ui/components/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@talad/ui/components/table'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Eye, Gavel, LoaderCircle, Wallet } from 'lucide-react'
+import { Clock, Eye, Gavel, LoaderCircle, Wallet } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { toast } from 'sonner'
@@ -202,6 +203,7 @@ export function PayoutsPage() {
           },
         })
   const u = list.data?.unsettled
+  const waiting = list.data?.waiting ?? []
 
   return (
     <>
@@ -225,6 +227,28 @@ export function PayoutsPage() {
                 {t.payouts.generate}
               </Button>
             </CardContent>
+            {/* Completed orders still in the return window: why they aren't in "Ready" yet, and when they will be. */}
+            {waiting.length > 0 && (
+              <CardContent className="border-t px-4 pt-4">
+                <p className="flex items-center gap-1.5 text-sm font-medium">
+                  <Clock className="size-4 text-amber-600" />
+                  {t.payouts.waiting}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{fill(t.payouts.waitingBody, { days: RETURN_RULES.windowDays })}</p>
+                <ul className="mt-3 divide-y rounded-lg border">
+                  {waiting.map((w) => (
+                    <li key={w.shop.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 text-sm">
+                      <span className="min-w-0 flex-1 font-medium">
+                        {w.shop.name}
+                        <span className="ml-2 font-normal text-muted-foreground">{fill(t.payouts.waitingOrders, { n: formatNumber(w.orders, locale) })}</span>
+                      </span>
+                      <span className="font-medium tabular-nums">{formatMoney(w.net, locale)}</span>
+                      <span className="text-xs text-amber-700 dark:text-amber-400">{fill(t.payouts.payableFrom, { date: formatDate(w.payableFrom, locale, true) })}</span>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            )}
           </Card>
         )}
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">

@@ -355,6 +355,8 @@ export interface PayoutDetail {
 export interface PayoutList extends Paged<PayoutRow> {
   totals: Partial<Record<PayoutStatus, { count: number; net: number }>>
   unsettled: { orders: number; net: number }
+  /** Completed orders still in the return window, per shop, soonest first. */
+  waiting: { shop: { id: string; name: string }; orders: number; net: number; payableFrom: string }[]
 }
 
 export interface Category {

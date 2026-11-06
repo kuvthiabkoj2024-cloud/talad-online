@@ -1,10 +1,12 @@
 "use client";
 
-import { RETURN_FILE_TYPES, RETURN_REASONS, RETURN_RULES, type ReturnReason } from "@talad/shared";
+import { MEDIA_LIMITS, RETURN_FILE_TYPES, RETURN_REASONS, RETURN_RULES, type ReturnReason } from "@talad/shared";
 import { ImagePlus, LoaderCircle, RotateCcw, Video, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { requestReturn } from "@/lib/cart-actions";
+import { compressImage } from "@/lib/compress-image";
+import { fitVideo } from "@/lib/compress-video";
 import { interpolate } from "@/lib/format";
 
 export interface ReturnLabels {
@@ -21,6 +23,7 @@ export interface ReturnLabels {
   remove: string;
   send: string;
   uploading: string;
+  compressing: string;
   cancel: string;
   errors: Record<string, string>;
 }
@@ -69,16 +72,34 @@ export function ReturnRequest({ orderNumber, deadline, pointsNote, labels }: { o
   const [files, setFiles] = useState<Picked[]>([]);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const busy = progress !== null;
+  /** Making a big photo or video smaller before it's added: 0–100. */
+  const [shrinking, setShrinking] = useState<number | null>(null);
+  const busy = progress !== null || shrinking !== null;
   const message = (code: string) => labels.errors[code] ?? labels.errors.generic;
 
-  function pick(list: FileList | null) {
+  // Big photos and videos are made smaller here rather than refused (evidence is never cut short).
+  async function pick(list: FileList | null) {
     setError(null);
     const next = [...files];
-    for (const file of Array.from(list ?? [])) {
-      if (next.length >= RETURN_RULES.maxFiles) return setFiles(next), setError(message("TOO_MANY_FILES"));
-      if (isVideo(file) && next.some((f) => isVideo(f.file))) return setFiles(next), setError(message("TOO_MANY_FILES"));
-      if (file.size > (isVideo(file) ? RETURN_RULES.videoMaxBytes : RETURN_RULES.imageMaxBytes)) return setFiles(next), setError(message("FILE_TOO_LARGE"));
+    const stop = (code: string) => (setFiles(next), setError(message(code)));
+    for (const picked of Array.from(list ?? [])) {
+      if (next.length >= RETURN_RULES.maxFiles) return stop("TOO_MANY_FILES");
+      let file = picked;
+      if (isVideo(file)) {
+        if (next.some((f) => isVideo(f.file))) return stop("TOO_MANY_FILES");
+        setShrinking(0);
+        const fit = await fitVideo(file, {
+          maxBytes: RETURN_RULES.videoMaxBytes,
+          targetBytes: MEDIA_LIMITS.videoTargetBytes,
+          onProgress: (p) => setShrinking(Math.round(p * 100)),
+        });
+        setShrinking(null);
+        if (!fit.ok) return stop("FILE_TOO_LARGE");
+        file = fit.file;
+      } else if (file.size > RETURN_RULES.imageMaxBytes) {
+        file = await compressImage(file, { maxSide: 2560, maxBytes: RETURN_RULES.imageMaxBytes * 0.9 });
+        if (file.size > RETURN_RULES.imageMaxBytes) return stop("FILE_TOO_LARGE");
+      }
       next.push({ id: crypto.randomUUID(), file, preview: URL.createObjectURL(file) });
     }
     setFiles(next);
@@ -192,6 +213,12 @@ export function ReturnRequest({ orderNumber, deadline, pointsNote, labels }: { o
             </li>
           )}
         </ul>
+        {shrinking !== null && (
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <LoaderCircle className="size-3.5 animate-spin" />
+            {interpolate(labels.compressing, { n: shrinking })}
+          </p>
+        )}
         <input
           ref={input}
           type="file"
@@ -199,7 +226,7 @@ export function ReturnRequest({ orderNumber, deadline, pointsNote, labels }: { o
           accept={RETURN_FILE_TYPES}
           className="sr-only"
           onChange={(e) => {
-            pick(e.target.files);
+            void pick(e.target.files);
             e.target.value = "";
           }}
         />

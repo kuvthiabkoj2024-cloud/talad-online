@@ -23,6 +23,11 @@ export const MEDIA_LIMITS = {
   /** A minute of 1080p phone video is typically 60–150 MB. */
   maxVideoBytes: 200 * 1024 * 1024,
   maxVideoSeconds: 60,
+  /**
+   * Clients re-encode bigger videos (and cut longer ones to `maxVideoSeconds`) to about this
+   * size before uploading, well under Cloudflare's 100 MB request limit and quick on phones.
+   */
+  videoTargetBytes: 50 * 1024 * 1024,
   imageMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
   videoMimeTypes: ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-m4v'],
 } as const;

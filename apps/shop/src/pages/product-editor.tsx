@@ -24,6 +24,8 @@ import { queryKeys, useCategories, useShopProfile, useUnits } from '@/hooks/quer
 import type { Dict } from '@/i18n/en'
 import { useI18n } from '@/i18n/context'
 import { ApiError, api, send, upload } from '@/lib/api'
+import { compressImage } from '@/lib/compress-image'
+import { fitVideo } from '@/lib/compress-video'
 import { fill, localized } from '@/lib/format'
 import { autoSku, blankCell, combinations, comboKey, randomSku, type OptionGroup, type VariantCell } from '@/lib/product-options'
 import type { MediaFile, ShopProductDetail } from '@/lib/types'
@@ -36,6 +38,8 @@ interface Media {
   key?: string
   url: string
   progress?: number
+  /** Being made smaller before upload (0–1). */
+  shrinking?: number
 }
 
 interface FormState {
@@ -173,11 +177,13 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
     if (!files?.length) return
     const room = MEDIA_LIMITS.maxImagesPerProduct - images.length
     if (files.length > room) toast.error(fill(t.editor.errors.tooManyImages, { max: MEDIA_LIMITS.maxImagesPerProduct }))
-    for (const file of [...files].slice(0, Math.max(0, room))) {
-      if (!(MEDIA_LIMITS.imageMimeTypes as readonly string[]).includes(file.type)) {
-        toast.error(fill(t.editor.errors.fileType, { name: file.name }))
+    for (const picked of [...files].slice(0, Math.max(0, room))) {
+      if (!(MEDIA_LIMITS.imageMimeTypes as readonly string[]).includes(picked.type)) {
+        toast.error(fill(t.editor.errors.fileType, { name: picked.name }))
         continue
       }
+      // Big photos are made smaller here rather than refused.
+      const file = await compressImage(picked, { maxSide: 2560, maxBytes: MEDIA_LIMITS.maxImageBytes * 0.95 })
       if (file.size > MEDIA_LIMITS.maxImageBytes) {
         toast.error(fill(t.editor.errors.fileSize, { name: file.name }))
         continue
@@ -196,22 +202,34 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
     }
   }
 
-  async function addVideo(file: File | undefined) {
-    if (!file) return
+  async function addVideo(picked: File | undefined) {
+    if (!picked) return
     // Some browsers leave `type` empty (e.g. for .mov on Windows); the server checks the bytes anyway.
-    const typeOk = file.type
-      ? (MEDIA_LIMITS.videoMimeTypes as readonly string[]).includes(file.type)
-      : /\.(mp4|m4v|mov|webm)$/i.test(file.name)
-    if (!typeOk) return toast.error(fill(t.editor.errors.fileType, { name: file.name }))
-    if (file.size > MEDIA_LIMITS.maxVideoBytes) return toast.error(fill(t.editor.errors.fileSize, { name: file.name }))
-    const url = URL.createObjectURL(file)
-    const seconds = await videoDuration(url)
-    if (seconds > MEDIA_LIMITS.maxVideoSeconds + 0.5) {
-      URL.revokeObjectURL(url)
-      return toast.error(t.editor.errors.videoLength)
-    }
-    const item: Media = { uid: uid(), url, progress: 0 }
+    const typeOk = picked.type
+      ? (MEDIA_LIMITS.videoMimeTypes as readonly string[]).includes(picked.type)
+      : /\.(mp4|m4v|mov|webm)$/i.test(picked.name)
+    if (!typeOk) return toast.error(fill(t.editor.errors.fileType, { name: picked.name }))
+    // Big or long videos are made to fit here (smaller, cut to the limit) instead of being refused.
+    const item: Media = { uid: uid(), url: URL.createObjectURL(picked), progress: 0, shrinking: 0 }
     setVideo(item)
+    const fit = await fitVideo(picked, {
+      maxBytes: MEDIA_LIMITS.maxVideoBytes,
+      targetBytes: MEDIA_LIMITS.videoTargetBytes,
+      maxSeconds: MEDIA_LIMITS.maxVideoSeconds,
+      onProgress: (p) => setVideo((v) => (v?.uid === item.uid ? { ...v, shrinking: p } : v)),
+    })
+    if (!fit.ok) {
+      setVideo((v) => (v?.uid === item.uid ? null : v))
+      return toast.error(fit.error === 'TOO_LONG' ? t.editor.errors.videoLength : fill(t.editor.errors.fileSize, { name: picked.name }))
+    }
+    const file = fit.file
+    if (fit.trimmed) toast.info(fill(t.editor.videoTrimmed, { seconds: MEDIA_LIMITS.maxVideoSeconds }))
+    let url = item.url
+    if (file !== picked) {
+      URL.revokeObjectURL(url)
+      url = URL.createObjectURL(file)
+    }
+    setVideo((v) => (v?.uid === item.uid ? { uid: item.uid, url, progress: 0 } : v))
     upload<MediaFile>('/me/shop/products/video', file, (p) => setVideo((v) => (v?.uid === item.uid ? { ...v, progress: p } : v)))
       .then((res) => setVideo((v) => (v?.uid === item.uid ? { uid: item.uid, key: res.key, url: res.url } : v)))
       .catch((e) => {
@@ -453,7 +471,10 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
                         <video src={video.url} controls playsInline muted preload="metadata" className="size-full object-cover" />
                         {video.progress !== undefined && (
                           // At 100% the browser is done; the API is still copying it to storage.
-                          <Progress value={video.progress} label={video.progress >= 1 ? t.editor.processing : t.editor.uploading} />
+                          <Progress
+                            value={video.shrinking ?? video.progress}
+                            label={video.shrinking !== undefined ? t.editor.compressing : video.progress >= 1 ? t.editor.processing : t.editor.uploading}
+                          />
                         )}
                       </div>
                       <div className="flex gap-2">
@@ -826,18 +847,6 @@ function swap<T>(list: T[], a: number, b: number): T[] {
   const next = [...list]
   ;[next[a], next[b]] = [next[b], next[a]]
   return next
-}
-
-function videoDuration(url: string): Promise<number> {
-  return new Promise((resolve) => {
-    const v = document.createElement('video')
-    v.preload = 'metadata'
-    // Some files (e.g. WebM recorded in a browser) report Infinity until played: let the upload decide.
-    v.onloadedmetadata = () => resolve(Number.isFinite(v.duration) ? v.duration : 0)
-    // Unreadable here (e.g. some MOV codecs): let the upload decide.
-    v.onerror = () => resolve(0)
-    v.src = url
-  })
 }
 
 function errorText(e: unknown, t: Dict): string {

@@ -10,6 +10,11 @@ export type MessageError =
   | "FILE_TOO_LARGE"
   | "MESSAGE_TOO_LONG"
   | "EMPTY_MESSAGE"
+  | "INVALID_AUDIO"
+  | "AUDIO_TOO_LONG"
+  /** The browser can't record, or the microphone was refused. */
+  | "MIC_DENIED"
+  | "AUDIO_UNSUPPORTED"
   /** The browser couldn't give a position (permission refused, no GPS, timeout). */
   | "LOCATION_DENIED"
   | "LOCATION_UNAVAILABLE"
@@ -24,7 +29,7 @@ async function call<T>(method: string, path: string, body?: FormData): Promise<{
     if (res.ok) return { ok: true, data: json as T };
     if (res.status === 401) return { ok: false, error: "UNAUTHENTICATED" };
     const code = json?.code as MessageError | undefined;
-    return { ok: false, error: code && ["INVALID_IMAGE", "FILE_TOO_LARGE", "MESSAGE_TOO_LONG", "EMPTY_MESSAGE"].includes(code) ? code : "generic" };
+    return { ok: false, error: code && ["INVALID_IMAGE", "FILE_TOO_LARGE", "MESSAGE_TOO_LONG", "EMPTY_MESSAGE", "INVALID_AUDIO", "AUDIO_TOO_LONG"].includes(code) ? code : "generic" };
   } catch {
     return { ok: false, error: "generic" };
   }
@@ -40,7 +45,7 @@ export async function fetchOlderMessages(conversationId: string, before: string)
   return call<ShopThread>("GET", `/me/conversations/${conversationId}?before=${before}`);
 }
 
-/** Send `text`, an optional `photo` and/or `productId`. */
+/** Send `text`, an optional `photo`, `audio` (+ `audioMs`) and/or `productId`. */
 export async function sendShopMessage(conversationId: string, form: FormData) {
   const body = new FormData();
   const text = String(form.get("text") ?? "").slice(0, 2000);
@@ -49,6 +54,13 @@ export async function sendShopMessage(conversationId: string, form: FormData) {
   if (typeof productId === "string" && productId) body.set("productId", productId);
   const photo = form.get("photo");
   if (photo instanceof File && photo.size > 0) body.set("photo", photo, photo.name || "photo.jpg");
+  // A voice message (up to a minute) and its length.
+  const audio = form.get("audio");
+  if (audio instanceof File && audio.size > 0) {
+    body.set("audio", audio, audio.name || "voice.webm");
+    const ms = Number(form.get("audioMs"));
+    if (Number.isFinite(ms) && ms > 0) body.set("audioMs", String(Math.round(ms)));
+  }
   const lat = Number(form.get("latitude"));
   const lng = Number(form.get("longitude"));
   if (form.has("latitude") && Number.isFinite(lat) && Number.isFinite(lng)) {

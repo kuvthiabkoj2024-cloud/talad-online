@@ -14,6 +14,7 @@
  *   p-<zero uuid>/media/      image-<uuid>.<ext> (platform banners, category icons; public)
  *   p-<zero uuid>/payments/   payment-qr-<uuid>.<ext> (MC Mart's receiving QR; private)
  *   m-<conversationId>/photos/ photo-<uuid>.<ext> (customer ↔ shop chat photos; private)
+ *   m-<conversationId>/audio/  voice-<uuid>.<ext> (voice messages in that chat, up to a minute; private)
  */
 export const storageFolder = {
   customerProfile: (customerId: string) => `c-${customerId}/profile/`,
@@ -36,6 +37,8 @@ export const storageFolder = {
   platformPayments: () => 'p-00000000-0000-0000-0000-000000000000/payments/',
   /** Photos in one customer ↔ shop conversation (served only to its two sides). */
   conversation: (conversationId: string) => `m-${conversationId}/photos/`,
+  /** Voice messages in one conversation (served only to its two sides). */
+  conversationAudio: (conversationId: string) => `m-${conversationId}/audio/`,
 };
 
 /**

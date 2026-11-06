@@ -6,7 +6,7 @@ describe('Shop chat bot: what is the customer asking?', () => {
   it('answers information questions without products', () => {
     for (const [text, expected] of [
       ['ສະບາຍດີ', 'greeting'],
-      ['Thanks!', 'silent'],
+      ['Thanks!', 'thanks'],
       ['ຮ້ານເປີດຈັກໂມງ?', 'hours'],
       ['What time do you open?', 'hours'],
       ['ຮ້ານຢູ່ໃສ?', 'location'],
@@ -54,20 +54,26 @@ describe('Shop chat bot: what is the customer asking?', () => {
 });
 
 describe('Shop chat bot: stays quiet when nothing is asked', () => {
-  it('lets the seller answer thanks, "ok", news and plans', () => {
+  it('lets the seller answer "ok", news and plans', () => {
     for (const text of [
-      'ຂອບໃຈ ຫວ່າງຈະເຂົ້າໄປເບິ່ງເຄື່ອງເດີ', // thanks, I'll come and look when I'm free (not "rice")
       'ສັ່ງແລ້ວເດີ', // I've ordered
-      'ເຈົ້າ, ຂອບໃຈເດີ',
       'ດຽວໄປເບິ່ງ ແລະ ລອງເຄື່ອງກ່ອນເດີ', // I'll go and try it first
       'ໂອນເງິນແລ້ວ',
       'ໂອເຄ',
       'ok 👍',
       '🙏😊',
       'ບໍ່ເປັນຫຍັງ',
-      'Thank you so much!',
       "I've paid already",
     ]) expect([text, kind(text)]).toEqual([text, 'silent']);
+  });
+
+  it('answers thanks with a warm reply', () => {
+    for (const text of [
+      'ຂອບໃຈເຈົ້າ',
+      'ເຈົ້າ, ຂອບໃຈເດີ',
+      'ຂອບໃຈ ຫວ່າງຈະເຂົ້າໄປເບິ່ງເຄື່ອງເດີ', // thanks, I'll come and look when I'm free (not "rice")
+      'Thank you so much!',
+    ]) expect([text, kind(text)]).toEqual([text, 'thanks']);
   });
 
   it('still answers questions and requests, even with thanks or news in them', () => {

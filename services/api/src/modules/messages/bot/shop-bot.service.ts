@@ -97,6 +97,11 @@ export class ShopBotService {
       if (answer.silent) return;
       // Greet once: not again while the seller or the bot is already talking with this customer.
       if (answer.topic === 'greeting' && recent.some((m) => m.sender !== 'CUSTOMER' && Date.now() - m.createdAt.getTime() < GREET_AGAIN_MS)) return;
+      // Thanked again right after the bot said "you're welcome": once is enough.
+      if (answer.topic === 'thanks' && earlier.some((m) => m.sender === 'BOT' && THANKS_TEXTS.has(m.text))) {
+        const lastReply = recent.find((m) => m.sender !== 'CUSTOMER');
+        if (lastReply?.sender === 'BOT' && THANKS_TEXTS.has(lastReply.text)) return;
+      }
 
       if (answer.handoff) {
         // Don't repeat "the shop will reply" while the seller is chatting or after saying it once.
@@ -151,11 +156,14 @@ export class ShopBotService {
       // A photo with a caption that asks nothing ("ສັ່ງແລ້ວເດີ" under an order screenshot) isn't a
       // product search; one about an order goes to the seller.
       if (text && topic.kind === 'silent') return silent('basic');
+      if (text && topic.kind === 'thanks') return this.thanks(shop, lang);
       if (text && topic.kind === 'order') return { text: B[lang].order(shop.name), productIds: [], topic: 'order', handoff: true, engine: 'basic' };
       return this.photoAnswer(shop, input.photo, lang);
     }
-    // Statements are decided by these rules before any AI call, so they never get a reply.
+    // Statements and thanks are decided by these rules before any AI call: statements get no
+    // reply, thanks always the same warm one.
     if (topic.kind === 'silent') return silent('basic');
+    if (topic.kind === 'thanks') return this.thanks(shop, lang);
     // Ordering is never left to the AI: the card is built from the catalog by these rules.
     if (topic.kind === 'buy') return this.buyAnswer(shop, text, topic.quantity, input.draftProductId ?? input.focusId, input.lastShown ?? [], lang);
     if (this.claude.enabled) {
@@ -209,6 +217,8 @@ export class ShopBotService {
         return say(shop.faqs[topic.index].answer);
       case 'greeting':
         return say(t.greeting(shop.name));
+      case 'thanks':
+        return this.thanks(shop, lang);
       case 'silent':
         return silent('basic');
       case 'order':
@@ -274,28 +284,42 @@ export class ShopBotService {
     return { ...base, text: reply, productIds: [], order: { productId: product.id, variantId: variant?.id ?? null, quantity, quantitySaid: saidQuantity(text) !== null } };
   }
 
+  /** "You're welcome", and an invitation to keep shopping, so the customer feels looked after. */
+  private thanks(shop: ShopFacts, lang: ChatLocale): BotAnswer {
+    return { text: B[lang].thanks(shop.name), productIds: [], topic: 'thanks', handoff: false, engine: 'basic' };
+  }
+
   /** "Do you have coffee?": this shop's matching products, or a plain "sorry, we don't". */
   private async search(shop: ShopFacts, topic: Extract<BotTopic, { kind: 'search' }>, text: string, lang: ChatLocale, say: (r: string, ids?: string[], h?: boolean) => BotAnswer) {
     const concepts = toConcepts(topic.keywords);
     const words = labelOf(concepts, lang) || topic.keywords.join(' ');
-    let ids = await this.find(shop.id, topic.keywords);
+    const found = await this.findMatches(shop.id, topic.keywords);
+    let ids = found.ids;
     if (topic.maxPrice) ids = (await this.products.cardsByIds(ids)).filter((c) => c.price <= topic.maxPrice!).map((c) => c.id);
+    const known = concepts.some((c) => c.known);
+    // Only loosely related (one shared word, none of it a product word we know — "ມີວິດີໂອສອນໃຊ້ບໍ?"):
+    // not sure what's asked, so the owner answers instead of the bot guessing.
+    if (ids.length && !found.strong && !known) return say(B[lang].handoff(shop.name), [], true);
     if (ids.length) return say(B[lang].found(words, ids.length), ids);
     // "Do you have …?" / a product word we know: a plain "sorry, we don't". Anything else
     // ("hello? anyone?") may not be about a product at all, so the seller answers it.
-    const known = concepts.some((c) => c.known);
     if (known || asksForProduct(text)) return say(B[lang].notFound(words, shop.name), [], !known);
     return say(B[lang].handoff(shop.name), [], true);
   }
 
   /** Products of this shop for search words: all concepts, then only the known ones, then any word. */
   private async find(shopId: string, keywords: string[]): Promise<string[]> {
+    return (await this.findMatches(shopId, keywords)).ids;
+  }
+
+  /** As `find`, and whether the products really match (`strong`) or only share some word with the question. */
+  private async findMatches(shopId: string, keywords: string[]): Promise<{ ids: string[]; strong: boolean }> {
     const concepts = toConcepts(keywords);
     const known = concepts.filter((c) => c.known);
     let ids = await this.products.matchAll(concepts.map((c) => c.alternatives), MAX_PRODUCTS * 2, shopId);
     if (!ids.length && known.length) ids = await this.products.matchAll(known.map((c) => c.alternatives), MAX_PRODUCTS * 2, shopId);
-    if (!ids.length) ids = (await this.products.keywordMatches(relatedWords(concepts), null, MAX_PRODUCTS * 2, shopId)).map((r) => r.productId);
-    return ids;
+    if (ids.length) return { ids, strong: true };
+    return { ids: (await this.products.keywordMatches(relatedWords(concepts), null, MAX_PRODUCTS * 2, shopId)).map((r) => r.productId), strong: false };
   }
 
   /**
@@ -485,11 +509,11 @@ export class ShopBotService {
       `You are the auto-reply assistant of "${shop.name}", a shop on MC Mart (an online marketplace in Laos), answering a customer in the shop's private chat.`,
       `Reply in the customer's language (Lao or English; default ${lang === 'lo' ? 'Lao' : 'English'}). Be short and friendly like a shop owner on a messaging app: 1–3 sentences.`,
       'Read the whole message, and the chat before it, as one sentence in context before deciding. Lao is written without spaces: never pull one word out of a sentence and treat it as a product (in "ຫວ່າງຈະເຂົ້າໄປເບິ່ງເຄື່ອງ", ເຂົ້າໄປ means "go in", not rice).',
-      'If the customer is not asking or requesting anything — thanks, "ok", an emoji, telling you they have ordered or paid, saying they will visit or decide later, small talk — reply with only the line "SILENT". The shop owner answers those themselves. Never show products then.',
+      'If the customer is not asking or requesting anything — "ok", an emoji, telling you they have ordered or paid, saying they will visit or decide later, small talk — reply with only the line "SILENT". The shop owner answers those themselves. Never show products then.',
       'First decide what the customer wants:',
       '- INFORMATION (opening hours, address, payment, delivery, promotions, policies, anything in the FAQ): answer only from the shop facts below. Do NOT search or show products.',
       '- PRODUCTS (looking for, or asking about the size/colour/price/stock of a product): call search_shop_products (words in English and Lao), then answer from the results only. Never invent products or prices.',
-      '- Anything you cannot answer from these facts (an existing order, a return, a refund, a special request): say the shop will reply soon, and end with a line "HANDOFF".',
+      '- Anything you cannot answer from these facts, or are not sure about (an existing order, a return, a refund, a special request, a question the facts do not cover): reply only "The shop owner will reply to you soon 🙏" (in Lao: "ເຈົ້າຂອງຮ້ານຈະຕອບກັບທ່ານໄວໆນີ້ເດີ້ 🙏"), and end with a line "HANDOFF". Never guess.',
       'When products should be shown under your reply, end with a line "SHOW: 1, 3" (result numbers, most relevant first, at most 8). Omit it for information answers, and when you are telling the customer the shop doesn\'t have what they asked (nothing cheaper, not in that colour…) — never show products that don\'t fit the request.',
       'For broad requests (a gift, something for mom), search for 2–3 concrete kinds of product that fit, in one search.',
       '',
@@ -569,7 +593,8 @@ const PAYMENT_NAMES: Record<string, Record<ChatLocale, string>> = {
 const B = {
   en: {
     greeting: (shop: string) => `Hi! 👋 Welcome to ${shop}. Ask me about our products, prices, delivery or payment — or send a photo of what you're looking for.`,
-    handoff: (shop: string) => `Thanks for your message! 🙏 ${shop} will reply to you here soon.`,
+    handoff: (_shop: string) => 'The shop owner will reply to you soon 🙏',
+    thanks: (shop: string) => `You're welcome! 😊 Thank you for shopping with ${shop}. If you need anything else or want to see more products, just ask here — happy shopping! 🛍️`,
     order: (shop: string) => `Thanks — I've passed this to ${shop}. They'll check and reply to you here soon. 🙏`,
     hours: (h: string) => `Our opening hours: ${h}.`,
     location: (a: string) => `Our shop is at: ${a}`,
@@ -595,14 +620,15 @@ const B = {
     cheaperNo: (name: string) => `Sorry, we don't have anything cheaper than ${name}.`,
     photoYes: 'Yes, we have this! 👇',
     photoRelated: "We don't have exactly this, but these are similar:",
-    photoNone: (shop: string) => `Sorry, I couldn't find this in our shop. ${shop} will check and reply soon.`,
+    photoNone: (_shop: string) => "Sorry, I couldn't find this in our shop. The shop owner will check and reply to you soon 🙏",
     orderCard: (name: string, n: number) => `Here's your order: ${n} × ${name} 👇 Check the options, address and payment, then tap “Place order”.`,
     orderCardChoose: (name: string) => `Here's your order for ${name} 👇 Tap the size you want and how many. Delivery, address and payment are filled in — tap any of them to change, then “Place order”.`,
     buyWhich: 'Which one would you like? Tap “Buy” under the product. 👇',
   },
   lo: {
     greeting: (shop: string) => `ສະບາຍດີ! 👋 ຍິນດີຕ້ອນຮັບສູ່ ${shop}. ຖາມກ່ຽວກັບສິນຄ້າ, ລາຄາ, ການຈັດສົ່ງ ຫຼື ການຈ່າຍເງິນໄດ້ເລີຍ — ຫຼື ສົ່ງຮູບສິນຄ້າທີ່ຊອກຫາມາ.`,
-    handoff: (shop: string) => `ຂອບໃຈສຳລັບຂໍ້ຄວາມ! 🙏 ${shop} ຈະຕອບກັບຢູ່ນີ້ໄວໆນີ້.`,
+    handoff: (_shop: string) => 'ເຈົ້າຂອງຮ້ານຈະຕອບກັບທ່ານໄວໆນີ້ເດີ້ 🙏',
+    thanks: (shop: string) => `ຍິນດີເດີ້! 😊 ຂອບໃຈທີ່ອຸດໜູນ ${shop}. ຖ້າຕ້ອງການຫຍັງເພີ່ມ ຫຼື ຢາກເບິ່ງສິນຄ້າອື່ນ ຖາມໄດ້ເລີຍເດີ້ — ຂໍໃຫ້ມີຄວາມສຸກກັບການຊື້ເຄື່ອງ! 🛍️`,
     order: (shop: string) => `ຂອບໃຈເດີ້ — ໄດ້ແຈ້ງໃຫ້ ${shop} ແລ້ວ. ຮ້ານຈະກວດເບິ່ງ ແລະ ຕອບກັບຢູ່ນີ້ໄວໆນີ້. 🙏`,
     hours: (h: string) => `ເວລາເປີດຮ້ານ: ${h}.`,
     location: (a: string) => `ຮ້ານຢູ່: ${a}`,
@@ -628,7 +654,7 @@ const B = {
     cheaperNo: (name: string) => `ຂໍອະໄພ, ບໍ່ມີສິນຄ້າທີ່ຖືກກວ່າ ${name}.`,
     photoYes: 'ມີເດີ້! 👇',
     photoRelated: 'ບໍ່ມີແບບນີ້ແທ້ໆ, ແຕ່ມີແບບທີ່ຄ້າຍກັນ:',
-    photoNone: (shop: string) => `ຂໍອະໄພ, ບໍ່ພົບສິນຄ້ານີ້ໃນຮ້ານ. ${shop} ຈະກວດເບິ່ງ ແລະ ຕອບກັບໄວໆນີ້.`,
+    photoNone: (_shop: string) => 'ຂໍອະໄພ, ບໍ່ພົບສິນຄ້ານີ້ໃນຮ້ານ. ເຈົ້າຂອງຮ້ານຈະກວດເບິ່ງ ແລະ ຕອບກັບທ່ານໄວໆນີ້ເດີ້ 🙏',
     orderCard: (name: string, n: number) => `ນີ້ແມ່ນຄຳສັ່ງຊື້ຂອງທ່ານ: ${name} × ${n} 👇 ກວດເບິ່ງຕົວເລືອກ, ທີ່ຢູ່ ແລະ ການຈ່າຍເງິນ ແລ້ວກົດ “ສັ່ງຊື້”.`,
     orderCardChoose: (name: string) => `ນີ້ແມ່ນຄຳສັ່ງຊື້ ${name} ຂອງທ່ານ 👇 ແຕະເລືອກຂະໜາດ ແລະ ຈຳນວນທີ່ຕ້ອງການ. ການຈັດສົ່ງ, ທີ່ຢູ່ ແລະ ການຈ່າຍເງິນ ເລືອກໃຫ້ແລ້ວ — ແຕະເພື່ອປ່ຽນໄດ້ ແລ້ວກົດ “ສັ່ງຊື້”.`,
     buyWhich: 'ຢາກໄດ້ອັນໃດ? ກົດ “ຊື້” ໃຕ້ສິນຄ້າໄດ້ເລີຍ 👇',
@@ -638,4 +664,9 @@ const B = {
 /** "The shop will reply" texts, so the bot doesn't say it twice in a row. */
 const HANDOFF_TEXTS = {
   has: (text: string) => /will reply|ຈະຕອບກັບ/.test(text),
+};
+
+/** "You're welcome" texts, so a second thank-you in a row isn't answered again. */
+const THANKS_TEXTS = {
+  has: (text: string) => /^You're welcome|^ຍິນດີເດີ້/.test(text),
 };

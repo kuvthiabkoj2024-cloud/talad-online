@@ -65,6 +65,14 @@ class EnvironmentVariables {
   ANTHROPIC_MODEL: string = 'claude-sonnet-5-5';
 
   /**
+   * Optional: Google Cloud Speech-to-Text key for voice search, which then understands Lao and
+   * English without the shopper choosing. Unset = browsers listen in one chosen language.
+   */
+  @IsOptional()
+  @IsString()
+  GOOGLE_SPEECH_API_KEY?: string;
+
+  /**
    * Behind a reverse proxy (nginx, Docker): how many proxy hops to trust for the client's IP
    * (X-Forwarded-For), e.g. "1", or an Express value like "loopback". Unset = no proxy. Without
    * it every visitor appears to come from the proxy, sharing one rate limit.

@@ -5,7 +5,7 @@ export interface ConversationSummary {
   id: string;
   shop: { name: string; slug: string; logoUrl: string | null };
   customer: { name: string };
-  lastMessage: { text: string; photo: boolean; product: boolean; order: boolean; location?: boolean; mine: boolean; bot: boolean; system?: boolean; createdAt: string } | null;
+  lastMessage: { text: string; photo: boolean; audio?: boolean; product: boolean; order: boolean; location?: boolean; mine: boolean; bot: boolean; system?: boolean; createdAt: string } | null;
   lastMessageAt: string;
   unread: number;
 }
@@ -30,6 +30,8 @@ export interface ShopChatMessage {
   location?: { lat: number; lng: number } | null;
   text: string;
   hasPhoto: boolean;
+  /** A voice message and how long it is (play it from `messageAudioUrl`). */
+  audio: { ms: number } | null;
   product: ChatProductRef | null;
   /** Products the bot shows under its reply. */
   products: ChatProductRef[];
@@ -50,3 +52,6 @@ export interface ShopThread {
 
 /** Photo URL through the storefront (adds the session; the API only serves the chat's two sides). */
 export const messagePhotoUrl = (conversationId: string, messageId: string) => `/api/messages/${conversationId}/${messageId}`;
+
+/** Voice message URL through the storefront (adds the session; supports seeking). */
+export const messageAudioUrl = (conversationId: string, messageId: string) => `/api/messages/${conversationId}/${messageId}/audio`;

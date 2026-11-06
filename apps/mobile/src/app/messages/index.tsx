@@ -22,7 +22,7 @@ export default function MessagesScreen() {
   const preview = (c: ConversationSummary) => {
     const m = c.lastMessage;
     if (!m) return '';
-    const what = m.text || (m.photo ? t.msg.photo : m.product ? t.msg.product : m.order ? t.msg.order : m.location ? t.msg.location : '');
+    const what = m.text || (m.photo ? t.msg.photo : m.audio ? t.msg.voice : m.product ? t.msg.product : m.order ? t.msg.order : m.location ? t.msg.location : '');
     return m.mine ? `${t.msg.you}: ${what}` : what;
   };
 

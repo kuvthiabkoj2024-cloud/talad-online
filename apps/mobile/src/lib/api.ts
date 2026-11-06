@@ -226,7 +226,7 @@ export interface PointsView {
 export interface ConversationSummary {
   id: string;
   shop: { name: string; slug: string; logoUrl: string | null };
-  lastMessage: { text: string; photo: boolean; product: boolean; order: boolean; location?: boolean; mine: boolean; bot: boolean } | null;
+  lastMessage: { text: string; photo: boolean; audio?: boolean; product: boolean; order: boolean; location?: boolean; mine: boolean; bot: boolean } | null;
   lastMessageAt: string;
   unread: number;
 }
@@ -248,6 +248,8 @@ export interface ShopChatMessage {
   location?: { lat: number; lng: number } | null;
   text: string;
   hasPhoto: boolean;
+  /** A voice message (played on the website for now). */
+  audio?: { ms: number } | null;
   product: ChatProductRef | null;
   products: ChatProductRef[];
   order: unknown | null;

@@ -9,6 +9,7 @@ import { HeaderHeightVar, HideOnFocusRoutes } from "./focus-routes";
 import { LanguageSwitcher } from "./language-switcher";
 import { NotificationBell } from "./notification-bell";
 import { ScrollAwayRow } from "./scroll-away-row";
+import { VoiceSearchButton } from "./search/voice-search-button";
 
 const iconButton =
   "relative rounded-full p-2 text-primary-foreground transition-colors hover:bg-white/15";
@@ -26,7 +27,7 @@ export function SiteHeader({
     <form
       action={`/${locale}/search`}
       role="search"
-      className={`flex h-11 items-center rounded-full bg-card pl-5 pr-1.5 text-foreground ${className}`}
+      className={`relative flex h-11 items-center rounded-full bg-card pl-5 pr-1.5 text-foreground ${className}`}
     >
       <input
         type="search"
@@ -35,6 +36,7 @@ export function SiteHeader({
         aria-label={dict.search}
         className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
       />
+      <VoiceSearchButton locale={locale} dict={dict} />
       <Link
         href={`/${locale}/scan`}
         aria-label={dict.scan}

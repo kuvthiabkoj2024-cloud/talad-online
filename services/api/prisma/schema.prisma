@@ -1151,6 +1151,9 @@ model ShopMessage {
   text           String   @default("")
   /// Private photo (storage key); served only to the conversation's two sides.
   imageKey       String?
+  /// A voice message (private storage key) and how long it is, in milliseconds (at most a minute).
+  audioKey       String?
+  audioMs        Int?
   /// A product the message is about (shared from the product page).
   productId      String?
   /// Products the bot shows under its reply.

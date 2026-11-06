@@ -146,6 +146,13 @@ function Bubble({ m, conversationId, shopName, locale }: { m: ShopChatMessage; c
         />
       )}
       {m.product && <ProductRef p={m.product} />}
+      {m.audio && (
+        <View style={[styles.bubble, m.mine ? { backgroundColor: BrandGreen } : { backgroundColor: theme.card, borderColor: theme.border, borderWidth: StyleSheet.hairlineWidth }]}>
+          <ThemedText type="small" style={m.mine ? styles.white : undefined}>
+            {t.msg.voice} · {Math.max(1, Math.round(m.audio.ms / 1000))}s
+          </ThemedText>
+        </View>
+      )}
       {!!m.text && (
         <View style={[styles.bubble, m.mine ? { backgroundColor: BrandGreen, borderBottomRightRadius: 4 } : { backgroundColor: theme.card, borderColor: theme.border, borderWidth: StyleSheet.hairlineWidth, borderBottomLeftRadius: 4 }]}>
           <ThemedText type="small" style={m.mine ? styles.white : undefined}>

@@ -2,7 +2,7 @@ import { Button } from '@talad/ui/components/button'
 import { Input } from '@talad/ui/components/input'
 import { cn } from '@talad/ui/lib/utils'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bot, Camera, CheckCheck, CircleAlert, ImageIcon, LoaderCircle, Lock, MapPin, MessagesSquare, Package, Plus, Search, SendHorizontal, ShieldCheck, ShoppingBag, X } from 'lucide-react'
+import { Bot, Camera, CheckCheck, CircleAlert, ImageIcon, LoaderCircle, Lock, MapPin, MessagesSquare, Mic, Package, Pause, Play, Plus, Search, SendHorizontal, ShieldCheck, ShoppingBag, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Link, useParams } from 'react-router'
@@ -185,6 +185,10 @@ function ConversationList({ activeId, className }: { activeId?: string; classNam
                           {c.lastMessage?.photo ? (
                             <>
                               <ImageIcon className="size-4 shrink-0" /> {t.messages.photo}
+                            </>
+                          ) : c.lastMessage?.audio ? (
+                            <>
+                              <Mic className="size-4 shrink-0" /> {t.messages.voice}
                             </>
                           ) : c.lastMessage?.location ? (
                             <>
@@ -490,6 +494,7 @@ function Thread({ id }: { id: string }) {
                       </a>
                     )}
                     {m.hasPhoto && <MessagePhoto path={`${BASE}/${id}/messages/${m.id}/photo`} alt={t.messages.photo} onLoad={keepAtBottom} />}
+                    {m.audio && <MessageVoice path={`${BASE}/${id}/messages/${m.id}/audio`} ms={m.audio.ms} mine={m.mine} />}
                     {m.text && (
                       <p
                         className={cn(
@@ -674,6 +679,67 @@ function MessagePhoto({ path, alt, onLoad }: { path: string; alt: string; onLoad
     <a href={photo.data} target="_blank" rel="noreferrer">
       <img src={photo.data} alt={alt} onLoad={(e) => onLoad(e.currentTarget)} className="max-h-64 w-auto max-w-[min(16rem,100%)] rounded-2xl bg-muted object-cover shadow-sm" />
     </a>
+  )
+}
+
+/** A customer's voice message: fetched with the seller's session (private), then played here. */
+function MessageVoice({ path, ms, mine }: { path: string; ms: number; mine: boolean }) {
+  const { t } = useI18n()
+  const file = useQuery({
+    queryKey: ['message-audio', path],
+    queryFn: async () => {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}${path}`, { headers: { Authorization: `Bearer ${getToken() ?? ''}` } })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return URL.createObjectURL(await res.blob())
+    },
+    staleTime: Infinity,
+    gcTime: Infinity,
+  })
+  const audio = useRef<HTMLAudioElement>(null)
+  const [playing, setPlaying] = useState(false)
+  const [at, setAt] = useState(0)
+  const [loaded, setLoaded] = useState(0)
+  const length = ms || loaded
+  const clock = (n: number) => `${Math.floor(n / 60_000)}:${String(Math.floor((n % 60_000) / 1000)).padStart(2, '0')}`
+  const toggle = () => {
+    const el = audio.current
+    if (!el) return
+    if (el.paused) void el.play()
+    else el.pause()
+  }
+  return (
+    <div className={cn('flex w-56 max-w-full items-center gap-2.5 rounded-2xl px-2.5 py-2 shadow-sm', mine ? 'bg-primary text-primary-foreground' : 'bg-card ring-1 ring-border')}>
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={!file.data}
+        aria-label={playing ? t.messages.pause : t.messages.play}
+        className={cn('flex size-9 shrink-0 items-center justify-center rounded-full disabled:opacity-60', mine ? 'bg-white/20' : 'bg-primary text-primary-foreground')}
+      >
+        {!file.data && !file.isError ? <LoaderCircle className="size-4 animate-spin" /> : playing ? <Pause className="size-4 fill-current" /> : <Play className="ml-0.5 size-4 fill-current" />}
+      </button>
+      <span className="flex min-w-0 flex-1 flex-col gap-1" aria-label={t.messages.voice}>
+        <span className={cn('h-1.5 overflow-hidden rounded-full', mine ? 'bg-white/30' : 'bg-border')}>
+          <span className={cn('block h-full rounded-full', mine ? 'bg-white' : 'bg-primary')} style={{ width: `${length ? Math.min(100, (at / length) * 100) : 0}%` }} />
+        </span>
+        <span className={cn('text-[11px] tabular-nums', mine ? 'text-primary-foreground/80' : 'text-muted-foreground')}>{clock(playing || at ? at : length)}</span>
+      </span>
+      {file.data && (
+        <audio
+          ref={audio}
+          src={file.data}
+          preload="metadata"
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
+          onEnded={() => {
+            setPlaying(false)
+            setAt(0)
+          }}
+          onTimeUpdate={(e) => setAt(e.currentTarget.currentTime * 1000)}
+          onLoadedMetadata={(e) => Number.isFinite(e.currentTarget.duration) && setLoaded(e.currentTarget.duration * 1000)}
+        />
+      )}
+    </div>
   )
 }
 

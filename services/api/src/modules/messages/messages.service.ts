@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { detectAudio } from '../media/audio-type.js';
 import { detectImage } from '../media/image-type.js';
 import { MediaService } from '../media/media.service.js';
 import { filePrefix, storageFolder } from '../media/storage-keys.js';
@@ -14,7 +15,15 @@ import { ShopBotService } from './bot/shop-bot.service.js';
 /** Who is looking: the customer side or the shop side of a conversation. */
 export type Side = { kind: 'customer'; customerId: string } | { kind: 'shop'; shopId: string };
 
-export const MESSAGE_LIMITS = { textMax: 2000, photoMaxBytes: 5 * 1024 * 1024, page: 50 } as const;
+export const MESSAGE_LIMITS = {
+  textMax: 2000,
+  photoMaxBytes: 5 * 1024 * 1024,
+  /** A minute of speech is ~0.5 MB in WebM/Opus and ~1 MB in AAC; this leaves room. */
+  audioMaxBytes: 3 * 1024 * 1024,
+  /** Voice messages are at most a minute (a little slack for the recorder stopping late). */
+  audioMaxMs: 62_000,
+  page: 50,
+} as const;
 
 const productCard = {
   select: { id: true, name: true, slug: true, price: true, images: { orderBy: { sortOrder: 'asc' }, take: 1, select: { key: true } }, shop: { select: { slug: true } } },
@@ -23,8 +32,8 @@ const productCard = {
 /**
  * Private customer ↔ shop chat (§3 "chat to shop"). One conversation per customer and shop;
  * only those two sides can read it — every lookup is scoped to the viewer's side, so another
- * account (or shop) gets "not found". Photos live in private storage and are streamed through
- * the API to the two sides only. The shop's bot answers each customer message (bot/).
+ * account (or shop) gets "not found". Photos and voice messages live in private storage and are
+ * streamed through the API to the two sides only. The shop's bot answers each customer message (bot/).
  */
 @Injectable()
 export class MessagesService {
@@ -75,7 +84,7 @@ export class MessagesService {
       include: {
         shop: { select: { name: true, slug: true, logoUrl: true } },
         customer: { select: { name: true } },
-        messages: { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 1, select: { sender: true, text: true, imageKey: true, productId: true, chatOrderId: true, latitude: true, createdAt: true } },
+        messages: { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 1, select: { sender: true, text: true, imageKey: true, audioKey: true, productId: true, chatOrderId: true, latitude: true, createdAt: true } },
       },
     });
     return rows.map((c) => ({
@@ -130,6 +139,8 @@ export class MessagesService {
         system: m.sender === 'SYSTEM',
         text: m.text,
         hasPhoto: !!m.imageKey,
+        /** A voice message: how long it is (play it from …/messages/:id/audio). */
+        audio: m.audioKey ? { ms: m.audioMs ?? 0 } : null,
         product: m.productId ? (products.get(m.productId) ?? null) : null,
         products: m.productIds.flatMap((pid) => (products.has(pid) ? [products.get(pid)!] : [])),
         /** An order card (buy by chat): the customer completes and places it. */
@@ -141,12 +152,16 @@ export class MessagesService {
     };
   }
 
-  /** A message from one side: text, a photo, a product and/or a location. The other side's unread count goes up. */
-  async send(side: Side, id: string, input: { text?: string; productId?: string; photo?: Express.Multer.File; location?: { lat: number; lng: number } }) {
+  /** A message from one side: text, a photo, a voice message, a product and/or a location. The other side's unread count goes up. */
+  async send(
+    side: Side,
+    id: string,
+    input: { text?: string; productId?: string; photo?: Express.Multer.File; audio?: Express.Multer.File; audioMs?: number; location?: { lat: number; lng: number } },
+  ) {
     const conv = await this.own(side, id);
     const text = (input.text ?? '').trim();
     if (text.length > MESSAGE_LIMITS.textMax) throw new BadRequestException({ code: 'MESSAGE_TOO_LONG', message: 'Message is too long' });
-    if (!text && !input.photo && !input.productId && !input.location) throw new BadRequestException({ code: 'EMPTY_MESSAGE', message: 'Type a message or attach a photo' });
+    if (!text && !input.photo && !input.audio && !input.productId && !input.location) throw new BadRequestException({ code: 'EMPTY_MESSAGE', message: 'Type a message or attach a photo' });
     if (input.productId) {
       const ok = await this.prisma.product.count({ where: { id: input.productId, shopId: conv.shopId } });
       if (!ok) throw new BadRequestException({ code: 'INVALID_PRODUCT', message: 'That product isn’t from this shop' });
@@ -159,6 +174,17 @@ export class MessagesService {
       imageKey = `${filePrefix(storageFolder.conversation(id), 'photo')}${randomUUID()}.${type.ext}`;
       await this.storage.put(imageKey, input.photo.buffer, type.type);
     }
+    let audioKey: string | null = null;
+    let audioMs: number | null = null;
+    if (input.audio) {
+      if (input.audio.size > MESSAGE_LIMITS.audioMaxBytes) throw new BadRequestException({ code: 'AUDIO_TOO_LONG', message: 'Voice messages are up to a minute' });
+      if (input.audioMs !== undefined && input.audioMs > MESSAGE_LIMITS.audioMaxMs) throw new BadRequestException({ code: 'AUDIO_TOO_LONG', message: 'Voice messages are up to a minute' });
+      const type = detectAudio(input.audio.buffer);
+      if (!type) throw new BadRequestException({ code: 'INVALID_AUDIO', message: 'That recording can’t be played' });
+      audioKey = `${filePrefix(storageFolder.conversationAudio(id), 'voice')}${randomUUID()}.${type.ext}`;
+      audioMs = input.audioMs !== undefined ? Math.max(0, Math.round(input.audioMs)) : null;
+      await this.storage.put(audioKey, input.audio.buffer, type.type);
+    }
     const sender = side.kind === 'customer' ? 'CUSTOMER' : 'SHOP';
     const [message] = await this.prisma.$transaction([
       this.prisma.shopMessage.create({
@@ -167,6 +193,8 @@ export class MessagesService {
           sender,
           text,
           imageKey,
+          audioKey,
+          audioMs,
           productId: input.productId ?? null,
           // About 1 m precision is plenty to find a door.
           latitude: input.location ? Math.round(input.location.lat * 1e5) / 1e5 : null,
@@ -178,7 +206,7 @@ export class MessagesService {
         data: { lastMessageAt: new Date(), ...(sender === 'CUSTOMER' ? { shopUnread: { increment: 1 } } : { customerUnread: { increment: 1 } }) },
       }),
     ]);
-    await this.announce(conv, sender, text || (imageKey ? '📷' : input.location ? '📍' : '🛍'));
+    await this.announce(conv, sender, text || (imageKey ? '📷' : audioKey ? '🎤' : input.location ? '📍' : '🛍'));
     // The shop's bot answers the customer (in the background; it's announced when sent).
     // A shared location is for the shop to read, not a question for the bot.
     if (sender === 'CUSTOMER' && !(input.location && !text && !input.photo)) void this.bot.respond(id, input.photo);
@@ -236,6 +264,18 @@ export class MessagesService {
     });
   }
 
+  /** A voice message, for the conversation's two sides only. */
+  async audio(side: Side, id: string, messageId: string) {
+    await this.own(side, id);
+    const m = await this.prisma.shopMessage.findFirst({ where: { id: messageId, conversationId: id }, select: { audioKey: true } });
+    if (!m?.audioKey) throw new NotFoundException('No voice message');
+    const file = await this.storage.get(m.audioKey);
+    // Storage may not keep the type; players (Safari especially) need the real one. The extension
+    // was set from the file's own bytes when it was uploaded (detectAudio).
+    const ext = m.audioKey.slice(m.audioKey.lastIndexOf('.') + 1);
+    return { ...file, contentType: AUDIO_TYPES[ext] ?? file.contentType };
+  }
+
   /** A message photo, for the conversation's two sides only. */
   async photo(side: Side, id: string, messageId: string) {
     await this.own(side, id);
@@ -255,16 +295,20 @@ export class MessagesService {
   }
 }
 
+/** Content types of stored voice messages, by the extension they were saved with. */
+const AUDIO_TYPES: Record<string, string> = { webm: 'audio/webm', m4a: 'audio/mp4', ogg: 'audio/ogg', wav: 'audio/wav', mp3: 'audio/mpeg' };
+
 /** Whether `sender` is the viewer's side (the shop's bot counts as the shop; MC Mart is neither). */
 const mine = (side: Side, sender: string) =>
   sender !== 'SYSTEM' && (side.kind === 'customer' ? sender === 'CUSTOMER' : sender !== 'CUSTOMER');
 
 /** One-line summary for conversation lists. */
-function preview(m: { text: string; imageKey: string | null; productId: string | null; chatOrderId: string | null; latitude?: number | null; createdAt: Date }) {
+function preview(m: { text: string; imageKey: string | null; audioKey?: string | null; productId: string | null; chatOrderId: string | null; latitude?: number | null; createdAt: Date }) {
   return {
     text: m.text.slice(0, 120),
     location: m.latitude != null && !m.text && !m.imageKey,
     photo: !!m.imageKey && !m.text,
+    audio: !!m.audioKey && !m.text,
     product: !!m.productId && !m.text && !m.imageKey,
     order: !!m.chatOrderId && !m.text,
     createdAt: m.createdAt,

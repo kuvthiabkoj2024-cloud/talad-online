@@ -468,7 +468,7 @@ export interface AccountSession {
 export interface ConversationSummary {
   id: string
   customer: { name: string }
-  lastMessage: { text: string; photo: boolean; product: boolean; order: boolean; location?: boolean; mine: boolean; bot: boolean; system?: boolean; createdAt: string } | null
+  lastMessage: { text: string; photo: boolean; audio?: boolean; product: boolean; order: boolean; location?: boolean; mine: boolean; bot: boolean; system?: boolean; createdAt: string } | null
   lastMessageAt: string
   unread: number
 }
@@ -494,6 +494,8 @@ export interface ChatMessage {
   location?: { lat: number; lng: number } | null
   text: string
   hasPhoto: boolean
+  /** A voice message from the customer (up to a minute) and its length. */
+  audio: { ms: number } | null
   product: ChatProductRef | null
   /** Products the bot showed under its reply. */
   products: ChatProductRef[]

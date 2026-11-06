@@ -1,5 +1,5 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, StreamableFile, UploadedFiles, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Type } from 'class-transformer';
@@ -12,7 +12,16 @@ import { ChatOrderItemsDto, toItems } from '../orders/chat-orders.controller.js'
 import { MESSAGE_LIMITS, MessagesService, type Side } from './messages.service.js';
 
 const id = new ParseUUIDPipe({ version: '7' });
-const uploadPhoto = FileInterceptor('photo', { limits: { fileSize: MESSAGE_LIMITS.photoMaxBytes, files: 1 } });
+/** A message's attachments: one `photo` and/or one `audio` (a voice message). Sizes are checked per kind in the service. */
+const uploadFiles = FileFieldsInterceptor(
+  [
+    { name: 'photo', maxCount: 1 },
+    { name: 'audio', maxCount: 1 },
+  ],
+  { limits: { fileSize: Math.max(MESSAGE_LIMITS.photoMaxBytes, MESSAGE_LIMITS.audioMaxBytes), files: 2 } },
+);
+type Uploads = { photo?: Express.Multer.File[]; audio?: Express.Multer.File[] };
+/** A stored photo or voice message, streamed back inline. */
 const image = (file: StoredObject) =>
   new StreamableFile(file.body, { type: file.contentType, length: file.contentLength, disposition: 'inline' });
 
@@ -46,6 +55,14 @@ class SendDto {
   @Min(-180)
   @Max(180)
   longitude?: number;
+
+  /** How long the attached voice message is, in milliseconds. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(MESSAGE_LIMITS.audioMaxMs)
+  audioMs?: number;
 }
 
 class ThreadQuery {
@@ -97,14 +114,14 @@ export class CustomerMessagesController {
     return this.messages.thread(this.side(c), conversationId, q);
   }
 
-  /** Multipart: `text`, optional `productId` and `photo` (JPG/PNG/WebP ≤ 5 MB). */
+  /** Multipart: `text`, optional `productId`, `photo` (JPG/PNG/WebP ≤ 5 MB) and `audio` + `audioMs` (a voice message, ≤ 1 minute). */
   @Post(':id/messages')
   @HttpCode(200)
   @ApiConsumes('multipart/form-data')
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
-  @UseInterceptors(uploadPhoto)
-  send(@CurrentCustomer() c: Customer, @Param('id', id) conversationId: string, @Body() dto: SendDto, @UploadedFile() photo?: Express.Multer.File) {
-    return this.messages.send(this.side(c), conversationId, { text: dto.text, productId: dto.productId, photo, location: dto.latitude !== undefined && dto.longitude !== undefined ? { lat: dto.latitude, lng: dto.longitude } : undefined });
+  @UseInterceptors(uploadFiles)
+  send(@CurrentCustomer() c: Customer, @Param('id', id) conversationId: string, @Body() dto: SendDto, @UploadedFiles() files: Uploads = {}) {
+    return this.messages.send(this.side(c), conversationId, { text: dto.text, productId: dto.productId, photo: files.photo?.[0], audio: files.audio?.[0], audioMs: dto.audioMs, location: dto.latitude !== undefined && dto.longitude !== undefined ? { lat: dto.latitude, lng: dto.longitude } : undefined });
   }
 
   @Get(':id/products/:productId')
@@ -128,6 +145,11 @@ export class CustomerMessagesController {
   @Get(':id/messages/:messageId/photo')
   async photo(@CurrentCustomer() c: Customer, @Param('id', id) conversationId: string, @Param('messageId', id) messageId: string) {
     return image(await this.messages.photo(this.side(c), conversationId, messageId));
+  }
+
+  @Get(':id/messages/:messageId/audio')
+  async audio(@CurrentCustomer() c: Customer, @Param('id', id) conversationId: string, @Param('messageId', id) messageId: string) {
+    return image(await this.messages.audio(this.side(c), conversationId, messageId));
   }
 }
 
@@ -160,9 +182,9 @@ export class ShopMessagesController {
   @HttpCode(200)
   @ApiConsumes('multipart/form-data')
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
-  @UseInterceptors(uploadPhoto)
-  send(@CurrentShop() s: Shop, @Param('id', id) conversationId: string, @Body() dto: SendDto, @UploadedFile() photo?: Express.Multer.File) {
-    return this.messages.send(this.side(s), conversationId, { text: dto.text, productId: dto.productId, photo, location: dto.latitude !== undefined && dto.longitude !== undefined ? { lat: dto.latitude, lng: dto.longitude } : undefined });
+  @UseInterceptors(uploadFiles)
+  send(@CurrentShop() s: Shop, @Param('id', id) conversationId: string, @Body() dto: SendDto, @UploadedFiles() files: Uploads = {}) {
+    return this.messages.send(this.side(s), conversationId, { text: dto.text, productId: dto.productId, photo: files.photo?.[0], audio: files.audio?.[0], audioMs: dto.audioMs, location: dto.latitude !== undefined && dto.longitude !== undefined ? { lat: dto.latitude, lng: dto.longitude } : undefined });
   }
 
   /** The shop sends an order card (Facebook-style selling); the customer checks it and places it. */
@@ -187,5 +209,10 @@ export class ShopMessagesController {
   @Get(':id/messages/:messageId/photo')
   async photo(@CurrentShop() s: Shop, @Param('id', id) conversationId: string, @Param('messageId', id) messageId: string) {
     return image(await this.messages.photo(this.side(s), conversationId, messageId));
+  }
+
+  @Get(':id/messages/:messageId/audio')
+  async audio(@CurrentShop() s: Shop, @Param('id', id) conversationId: string, @Param('messageId', id) messageId: string) {
+    return image(await this.messages.audio(this.side(s), conversationId, messageId));
   }
 }

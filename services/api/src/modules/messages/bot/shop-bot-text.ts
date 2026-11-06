@@ -11,6 +11,8 @@ import { extractQuery, isGreeting, takeColor, type ChatLocale, type Color } from
 export type BotTopic =
   | { kind: 'faq'; index: number }
   | { kind: 'greeting' }
+  /** Thanks: a warm "you're welcome" and an invitation to keep shopping. */
+  | { kind: 'thanks' }
   /** Not a question or a request: the bot says nothing and leaves it to the seller. */
   | { kind: 'silent' }
   /** An existing order, a return, a refund… — only the seller can help. */
@@ -32,7 +34,7 @@ export type BotTopic =
   | { kind: 'unknown' };
 
 /** Information topics: answered with text, never with product cards. */
-export const INFO_TOPICS = new Set<BotTopic['kind']>(['faq', 'greeting', 'silent', 'order', 'hours', 'location', 'payment', 'delivery', 'discount', 'unknown']);
+export const INFO_TOPICS = new Set<BotTopic['kind']>(['faq', 'greeting', 'thanks', 'silent', 'order', 'hours', 'location', 'payment', 'delivery', 'discount', 'unknown']);
 
 const ORDER = /\b(my order|order status|order number|tracking|track|refund|return(ed|ing)?|cancel(led|ling)?|exchange|warranty|broken|damaged|wrong item|not (yet )?(arrived|received))\b|ຄຳສັ່ງຊື້|ອໍເດີ|ຕິດຕາມ|ສົ່ງຄືນ|ຄືນເງິນ|ຄືນສິນຄ້າ|ຍົກເລີກ|ຮັບປະກັນ|ເຄື່ອງເພ|ເປ່ເພ|ຍັງບໍ່ໄດ້ຮັບ|\bTL\d{6,}/i;
 const BUY =
@@ -87,6 +89,12 @@ const bare = (text: string) => text.replace(/[^\p{L}\p{M}\p{N}' ]/gu, ' ').repla
 
 /** Whether the customer asks or requests something (a question, "send me…", "I want…"). */
 export const asksSomething = (text: string) => QUESTION.test(text.replace(/ບໍ່ເປັນຫຍັງ/g, ' ')); // "no problem", not "what"
+
+/** Thanking the shop (and not also asking or ordering): "ຂອບໃຈເຈົ້າ", "Thanks a lot!". */
+export function isThanks(text: string): boolean {
+  const words = bare(text);
+  return !asksSomething(text) && THANKS.test(words) && !BUY.test(words);
+}
 
 /**
  * Nothing to answer: only emoji, thanks, an acknowledgement, or news that something is done
@@ -161,6 +169,7 @@ export function analyse(message: string, faqQuestions: string[] = []): BotTopic 
   const faq = matchFaq(text, faqQuestions);
   if (faq !== null) return { kind: 'faq', index: faq };
   if (isGreeting(text)) return { kind: 'greeting' };
+  if (isThanks(text)) return { kind: 'thanks' };
   if (isStatement(text)) return { kind: 'silent' };
   // Asking about something already ordered or paid ("ສັ່ງແລ້ວ ຈະໄດ້ມື້ໃດ?") is for the seller, not a new order.
   if (ORDER.test(text) || DONE.test(text)) return { kind: 'order' };

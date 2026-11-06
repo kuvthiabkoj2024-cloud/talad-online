@@ -22,6 +22,7 @@ import { ClipService } from './image-search/clip.service.js';
 import { ImageIndexService } from './image-search/image-index.service.js';
 import { PhotoSearchController } from './image-search/photo-search.controller.js';
 import { PhotoSearchService } from './image-search/photo-search.service.js';
+import { VoiceSearchService } from './voice-search/voice-search.service.js';
 import { VisionKeywordsService } from './image-search/vision-keywords.service.js';
 import { ProductsController } from './products/products.controller.js';
 import { ProductsService } from './products/products.service.js';
@@ -51,6 +52,7 @@ import { ProfilesService } from './videos/profiles.service.js';
     ImageIndexService,
     VisionKeywordsService,
     PhotoSearchService,
+    VoiceSearchService,
     AnthropicService,
     ChatService,
     VideoEngagementService,

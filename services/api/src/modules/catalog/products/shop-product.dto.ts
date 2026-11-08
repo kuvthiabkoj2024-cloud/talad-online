@@ -12,6 +12,7 @@ import {
   type ProductStatus,
 } from '@talad/shared';
 import { Transform, Type } from 'class-transformer';
+import { CommissionRequestDto } from '../commission/commission.dto.js';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -109,6 +110,15 @@ export class ShopProductDepositDto {
 export class ShopProductDto {
   @IsIn(PRODUCT_SAVE_INTENTS)
   intent: ProductSaveIntent;
+
+  /**
+   * New products only: ask MC Mart for this product's own commission, sent with the product
+   * (later changes go through `me/shop/products/:id/commission`).
+   */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CommissionRequestDto)
+  commissionRequest?: CommissionRequestDto;
 
   @Transform(trim)
   @IsString()

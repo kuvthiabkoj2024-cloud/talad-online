@@ -10,6 +10,7 @@ import {
   URGENT_RULES,
   WEEKDAYS,
   type BusinessHours,
+  type GeoPoint,
   type ProvinceCode,
   type SocialLink,
   type UrgentDelivery,
@@ -26,11 +27,12 @@ import { Switch } from '@talad/ui/components/switch'
 import { Textarea } from '@talad/ui/components/textarea'
 import { cn } from '@talad/ui/lib/utils'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BadgeCheck, Banknote, Copy, ExternalLink, ImagePlus, Link2, LoaderCircle, Plus, QrCode, Share2, ShieldAlert, Store, Trash2, Zap } from 'lucide-react'
+import { BadgeCheck, Banknote, Copy, ExternalLink, ImagePlus, Link2, LoaderCircle, Plus, QrCode, Share2, ShieldAlert, Store, Trash2, Truck, Zap } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { ME_KEY } from '@/auth/context'
 import { PageBody, PageIntro, TopBar } from '@/components/page-header'
+import { LocationPicker } from '@/components/location-picker'
 import { ShareDialog } from '@/components/share-dialog'
 import { ErrorState, LoadingState } from '@/components/states'
 import { queryKeys, useShopProfile } from '@/hooks/queries'
@@ -78,6 +80,7 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
   const [email, setEmail] = useState(p.email ?? '')
   const [phone, setPhone] = useState(formatPhone(p.phone))
   const [address, setAddress] = useState(p.address ?? '')
+  const [location, setLocation] = useState<GeoPoint | null>(p.location)
   const [hours, setHours] = useState<BusinessHours>(p.businessHours)
   const [links, setLinks] = useState<Partial<Record<SocialLink, string>>>(p.socialLinks)
   const [bank, setBank] = useState(p.payment.bankCode ?? '')
@@ -88,6 +91,7 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
   const [cod, setCod] = useState(p.cod)
   const [urgent, setUrgent] = useState<UrgentDelivery>(p.urgentDelivery)
   const [pickup, setPickup] = useState(p.pickupEnabled)
+  const [couriers, setCouriers] = useState(p.deliveryProviders)
   const { paymentWindowHrs: pw, autoConfirmHrs: ac } = SHOP_PROFILE_RULES
 
   const refresh = (saved: ShopProfile) => {
@@ -98,13 +102,15 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
 
   // `change`: the COD and pickup switches save at once (turning COD on carries the accepted terms).
   const save = useMutation({
-    mutationFn: (change?: { codEnabled?: boolean; codTermsAccepted?: boolean; pickupEnabled?: boolean }) =>
+    mutationFn: (change?: { codEnabled?: boolean; codTermsAccepted?: boolean; pickupEnabled?: boolean; disabledDeliveryProviderIds?: string[] }) =>
       send<ShopProfile>('PUT', '/me/shop/profile', {
         name: name.trim(),
         description: description.trim() || undefined,
         email: email.trim() || null,
         phone,
         address: address.trim(),
+        latitude: location?.latitude ?? null,
+        longitude: location?.longitude ?? null,
         businessHours: hours,
         socialLinks: links,
         paymentBankCode: bank || null,
@@ -114,6 +120,7 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
         autoConfirmHrs: Number(autoConfirm),
         codEnabled: change?.codEnabled ?? cod.enabled,
         pickupEnabled: change?.pickupEnabled ?? pickup,
+        disabledDeliveryProviderIds: change?.disabledDeliveryProviderIds ?? couriers.filter((c) => !c.enabled).map((c) => c.id),
         urgentDelivery: {
           ...urgent,
           eta: urgent.eta.trim(),
@@ -125,8 +132,11 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
       refresh(saved)
       setCod(saved.cod)
       setPickup(saved.pickupEnabled)
+      setCouriers(saved.deliveryProviders)
       toast.success(
-        change?.pickupEnabled !== undefined
+        change?.disabledDeliveryProviderIds !== undefined
+          ? t.couriers.saved
+          : change?.pickupEnabled !== undefined
           ? saved.pickupEnabled
             ? t.pickup.turnedOn
             : t.pickup.turnedOff
@@ -308,7 +318,51 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
           </CardContent>
         </Card>
 
-        <UrgentCard value={urgent} onChange={setUrgent} />
+        {couriers.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Truck className="size-5 text-primary" />
+                {t.couriers.title}
+              </CardTitle>
+              <CardDescription>{t.couriers.description}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2">
+              {couriers.map((c) => {
+                // The last courier on can't be turned off: customers need one way to get their order.
+                const last = c.enabled && couriers.filter((x) => x.enabled).length === 1
+                return (
+                  <label key={c.id} className="flex items-center gap-3 rounded-xl border p-3">
+                    {c.logoUrl ? (
+                      <img src={c.logoUrl} alt="" className="size-10 shrink-0 rounded-lg object-cover ring-1 ring-black/5" />
+                    ) : (
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                        <Truck className="size-5" />
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{c.name}</span>
+                      <span className={cn('mt-0.5 block text-xs', c.enabled ? 'text-primary' : 'text-muted-foreground')}>
+                        {c.enabled ? (last ? t.couriers.lastOn : t.couriers.on) : t.couriers.off}
+                      </span>
+                    </span>
+                    <Switch
+                      checked={c.enabled}
+                      disabled={save.isPending || last}
+                      onCheckedChange={(on) =>
+                        save.mutate({
+                          disabledDeliveryProviderIds: couriers.filter((x) => (x.id === c.id ? !on : !x.enabled)).map((x) => x.id),
+                        })
+                      }
+                    />
+                  </label>
+                )
+              })}
+            </CardContent>
+          </Card>
+        )}
+
+        <UrgentCard value={urgent} onChange={setUrgent} location={location} onLocation={setLocation} />
 
         <Card>
           <CardHeader>
@@ -638,7 +692,17 @@ function CodCard({
 }
 
 /** The shop's own urgent delivery: on/off, how fast, and a price per area it covers. */
-function UrgentCard({ value, onChange }: { value: UrgentDelivery; onChange: (v: UrgentDelivery) => void }) {
+function UrgentCard({
+  value,
+  onChange,
+  location,
+  onLocation,
+}: {
+  value: UrgentDelivery
+  onChange: (v: UrgentDelivery) => void
+  location: GeoPoint | null
+  onLocation: (point: GeoPoint | null) => void
+}) {
   const { t, locale } = useI18n()
   const setZone = (i: number, change: Partial<UrgentZone>) =>
     onChange({ ...value, zones: value.zones.map((z, j) => (j === i ? { ...z, ...change } : z)) })
@@ -672,9 +736,12 @@ function UrgentCard({ value, onChange }: { value: UrgentDelivery; onChange: (v: 
                 onChange={(e) => onChange({ ...value, eta: e.target.value })}
               />
             </Field>
+            <FreeRadius value={value} onChange={onChange} location={location} onLocation={onLocation} />
             <div className="flex flex-col gap-2">
               <Label>{t.urgent.zones}</Label>
-              {value.zones.length === 0 && <p className="text-sm text-muted-foreground">{t.urgent.noZones}</p>}
+              {value.zones.length === 0 && (
+                <p className="text-sm text-muted-foreground">{value.freeRadiusKm > 0 ? t.urgent.zonesOptional : t.urgent.noZones}</p>
+              )}
               <ul className="flex flex-col gap-3">
                 {value.zones.map((z, i) => (
                   <li key={i} className="grid gap-3 rounded-xl border p-3 sm:grid-cols-[10rem_1fr_8rem_auto] sm:items-end">
@@ -736,5 +803,68 @@ function UrgentCard({ value, onChange }: { value: UrgentDelivery; onChange: (v: 
         )}
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * Free urgent delivery within a distance of the shop's pin (set right here on the map); the
+ * area prices apply beyond it.
+ */
+function FreeRadius({
+  value,
+  onChange,
+  location,
+  onLocation,
+}: {
+  value: UrgentDelivery
+  onChange: (v: UrgentDelivery) => void
+  location: GeoPoint | null
+  onLocation: (point: GeoPoint | null) => void
+}) {
+  const { t } = useI18n()
+  const on = value.freeRadiusKm > 0
+  const [draft, setDraft] = useState(on ? String(value.freeRadiusKm) : '3')
+  const set = (text: string) => {
+    setDraft(text)
+    const km = Math.round(Number(text) * 10) / 10
+    if (Number.isFinite(km) && km > 0) onChange({ ...value, freeRadiusKm: Math.min(URGENT_RULES.freeRadiusMaxKm, km) })
+  }
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border p-4">
+      <label className="flex items-center justify-between gap-4">
+        <span className="min-w-0">
+          <span className="block text-sm font-medium">{t.urgent.free}</span>
+          <span className={cn('mt-0.5 block text-xs', on ? 'text-primary' : 'text-muted-foreground')}>
+            {on ? fill(t.urgent.freeOn, { km: value.freeRadiusKm }) : t.urgent.freeOff}
+          </span>
+        </span>
+        <Switch
+          checked={on}
+          onCheckedChange={(checked) => onChange({ ...value, freeRadiusKm: checked ? Math.min(URGENT_RULES.freeRadiusMaxKm, Number(draft) || 3) : 0 })}
+        />
+      </label>
+      {on && (
+        <div className="flex flex-col gap-1.5">
+          <Label>{t.location.title}</Label>
+          {!location && <p className="text-xs text-amber-700 dark:text-amber-400">{t.urgent.needsLocation}</p>}
+          <LocationPicker value={location} onChange={onLocation} radiusKm={value.freeRadiusKm} labels={t.location} />
+        </div>
+      )}
+      {on && (
+        <Field id="free-radius" label={t.urgent.freeRadius} hint={t.urgent.freeHint}>
+          <Input
+            id="free-radius"
+            type="number"
+            inputMode="decimal"
+            min={0.1}
+            max={URGENT_RULES.freeRadiusMaxKm}
+            step={0.1}
+            className="w-32"
+            value={draft}
+            onChange={(e) => set(e.target.value)}
+          />
+        </Field>
+      )}
+    </div>
   )
 }

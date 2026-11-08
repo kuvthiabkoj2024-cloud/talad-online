@@ -5,13 +5,13 @@ their business from a Seller Center, and Vreview staff run the platform from an 
 console. Product scope lives in [`marketplace-project-scope.md`](marketplace-project-scope.md)
 (code comments cite its sections as `§x.y`).
 
-| App            | What it is                                   | Users             | Dev URL                                        |
-| -------------- | -------------------------------------------- | ----------------- | ---------------------------------------------- |
-| `apps/web`     | Customer storefront (Next.js, Lao / English) | Shoppers          | http://localhost:3000                          |
-| `apps/shop`    | Seller Center (React SPA)                    | Shop owners       | http://localhost:5174                          |
+| App            | What it is                                   | Users         | Dev URL                                        |
+| -------------- | -------------------------------------------- | ------------- | ---------------------------------------------- |
+| `apps/web`     | Customer storefront (Next.js, Lao / English) | Shoppers      | http://localhost:3000                          |
+| `apps/shop`    | Seller Center (React SPA)                    | Shop owners   | http://localhost:5174                          |
 | `apps/admin`   | Admin console (React SPA)                    | Vreview staff | http://localhost:5173                          |
-| `apps/mobile`  | Customer app (Expo / React Native)           | Shoppers          | Expo, http://localhost:8081 on web             |
-| `services/api` | REST API for all of the above (NestJS)       | —                 | http://localhost:4000/api/v1 · docs at `/docs` |
+| `apps/mobile`  | Customer app (Expo / React Native)           | Shoppers      | Expo, http://localhost:8081 on web             |
+| `services/api` | REST API for all of the above (NestJS)       | —             | http://localhost:4000/api/v1 · docs at `/docs` |
 
 ---
 
@@ -202,11 +202,11 @@ in `services/api/.env`. The rest of the app works without it.
 
 ### Seeded accounts
 
-| Where         | Account                                                               | Password                                                            |
-| ------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Admin console | `admin@talad.local` (Super Admin)                                     | `SEED_ADMIN_PASSWORD`, default `ChangeMe123!`                       |
-| Admin console | `support@talad.local`, `finance@talad.local`                          | same                                                                |
-| Storefront    | Demo Customer, phone `020 9999 0000`                                  | SMS code: printed in the API log and shown on screen in development |
+| Where         | Account                                                           | Password                                                            |
+| ------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Admin console | `admin@talad.local` (Super Admin)                                 | `SEED_ADMIN_PASSWORD`, default `ChangeMe123!`                       |
+| Admin console | `support@talad.local`, `finance@talad.local`                      | same                                                                |
+| Storefront    | Demo Customer, phone `020 9999 0000`                              | SMS code: printed in the API log and shown on screen in development |
 | Seller Center | Demo Shop Owner (owns "Vreview Demo Shop"), phone `020 8888 0000` | same                                                                |
 
 ---
@@ -360,12 +360,12 @@ Every app reads its own env file. The `.env.example` files list every value with
 
 ### Storefront — `apps/web/.env.local`
 
-| Variable                                                                                        | Notes                                                                             |
-| ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Variable                                                                                        | Notes                                                                         |
+| ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | `API_URL`                                                                                       | API base URL used by the Next.js server, e.g. `https://api.mcmart.app/api/v1` |
 | `NEXT_PUBLIC_SHOP_URL`                                                                          | Seller Center URL ("Sell on Vreview" links)                                   |
-| `NEXT_PUBLIC_MEDIA_HOST`                                                                        | Bunny pull-zone hostname (no `https://`), for optimised images                    |
-| `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `NEXT_PUBLIC_APPLE_CLIENT_ID`, `NEXT_PUBLIC_APPLE_REDIRECT_URI` | Optional social sign-in                                                           |
+| `NEXT_PUBLIC_MEDIA_HOST`                                                                        | Bunny pull-zone hostname (no `https://`), for optimised images                |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `NEXT_PUBLIC_APPLE_CLIENT_ID`, `NEXT_PUBLIC_APPLE_REDIRECT_URI` | Optional social sign-in                                                       |
 
 ### Seller Center and admin — `apps/shop/.env.local`, `apps/admin/.env.local`
 
@@ -466,13 +466,13 @@ The example domains below are placeholders; use your own.
 Production settings live in a **`.env.production`** file in each app. Git ignores these files
 (`.gitignore`): copy them to the server yourself, never commit them.
 
-| File                           | Domain                                                           |
-| ------------------------------ | ---------------------------------------------------------------- |
+| File                           | Domain                                                          |
+| ------------------------------ | --------------------------------------------------------------- |
 | `services/api/.env.production` | api.mcmart.app (read when `NODE_ENV=production`, before `.env`) |
-| `apps/web/.env.production`     | mcmart.app and www.mcmart.app                                  |
+| `apps/web/.env.production`     | mcmart.app and www.mcmart.app                                   |
 | `apps/shop/.env.production`    | shop.mcmart.app                                                 |
 | `apps/admin/.env.production`   | admin.mcmart.app                                                |
-| `apps/mobile/.env.production`  | the mobile app's API address                                     |
+| `apps/mobile/.env.production`  | the mobile app's API address                                    |
 
 Fill in every `CHANGE_ME` value: database, Redis, and Bunny. The JWT secrets and the first
 admin password are already generated. Then, on the server or in CI, with Node 24 and pnpm 12:
@@ -544,13 +544,13 @@ Never use `pnpm dev` on a server: it starts development servers on fixed ports (
 Every container listens on **127.0.0.1 only**, on ports chosen to avoid other apps. The
 server's own nginx handles TLS and sends each domain to its port:
 
-| Domain                       | Container           | Local port                     |
-| ---------------------------- | ------------------- | ------------------------------ |
-| api.mcmart.app              | `api`               | 127.0.0.1:4000                 |
+| Domain                     | Container           | Local port                     |
+| -------------------------- | ------------------- | ------------------------------ |
+| api.mcmart.app             | `api`               | 127.0.0.1:4000                 |
 | mcmart.app, www.mcmart.app | `web`               | 127.0.0.1:3010                 |
-| shop.mcmart.app             | `shop`              | 127.0.0.1:8110                 |
-| admin.mcmart.app            | `admin`             | 127.0.0.1:8120                 |
-| (backups, admin tools)       | `postgres`, `redis` | 127.0.0.1:5433, 127.0.0.1:6380 |
+| shop.mcmart.app            | `shop`              | 127.0.0.1:8110                 |
+| admin.mcmart.app           | `admin`             | 127.0.0.1:8120                 |
+| (backups, admin tools)     | `postgres`, `redis` | 127.0.0.1:5433, 127.0.0.1:6380 |
 
 Change a port in `docker-compose.prod.yml` (and in nginx) if it's taken; `ss -tlnp` lists what's
 in use. Inside the stack the API reaches Postgres and Redis by service name. Compose sets
@@ -728,6 +728,9 @@ docker build -f infra/docker/Dockerfile --target api -t talad/api .
 docker build -f infra/docker/Dockerfile --target web -t talad/web .
 docker build -f infra/docker/Dockerfile --target shop -t talad/shop .
 docker build -f infra/docker/Dockerfile --target admin -t talad/admin .
+
+// deploay all in one.
+infra/docker/deploy.sh api web shop
 
 # How to build from local in spacial folder:
 

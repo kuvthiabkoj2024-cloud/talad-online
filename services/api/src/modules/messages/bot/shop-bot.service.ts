@@ -235,7 +235,7 @@ export class ShopBotService {
         return say(askedCod && !methods.cod ? t.codOff(methods.names) : t.payment(methods.names));
       }
       case 'delivery':
-        return say(await this.delivery(topic.province, lang));
+        return say(await this.delivery(shop, topic.province, lang));
       case 'discount':
         return say(await this.promotions(shop, lang));
       case 'unknown':
@@ -435,9 +435,11 @@ export class ShopBotService {
     return { names: usable.map((m) => PAYMENT_NAMES[m]?.[lang] ?? m), cod: usable.includes('COD') };
   }
 
-  private async delivery(province: string | null, lang: ChatLocale): Promise<string> {
+  /** Couriers the shop ships with (it may have turned some off). */
+  private async delivery(shop: ShopFacts, province: string | null, lang: ChatLocale): Promise<string> {
     const t = B[lang];
-    const providers = await this.prisma.deliveryProvider.findMany({ where: { isActive: true }, select: { name: true, zones: { select: { provinces: true } } } });
+    const { disabledDeliveryProviderIds: off } = await this.prisma.shop.findUniqueOrThrow({ where: { id: shop.id }, select: { disabledDeliveryProviderIds: true } });
+    const providers = await this.prisma.deliveryProvider.findMany({ where: { isActive: true, id: { notIn: off } }, select: { name: true, zones: { select: { provinces: true } } } });
     if (!province) return t.deliveryAll(providers.filter((p) => p.zones.length).map((p) => p.name));
     const couriers = providers.filter((p) => p.zones.some((z) => z.provinces.length === 0 || z.provinces.includes(province))).map((p) => p.name);
     const place = provinceName(province as Parameters<typeof provinceName>[0], lang);
@@ -523,7 +525,7 @@ export class ShopBotService {
       `- Opening hours: ${describeHours(shop.hours, 'en') ?? 'not set'}`,
       `- Address: ${shop.address ?? 'not set'}`,
       `- Payment: ${payment.names.join(', ')} (chosen at checkout)`,
-      `- Delivery: ${(await this.delivery(null, 'en')).replace(/\.$/, '')}`,
+      `- Delivery: ${(await this.delivery(shop, null, 'en')).replace(/\.$/, '')}`,
       `- Promotions: ${(await this.promotions(shop, 'en')).replace(/\n/g, ' ')}`,
       shop.faqs.length ? `\nThe shop's FAQ (use these answers when the question matches):\n${shop.faqs.map((f) => `Q: ${f.question}\nA: ${f.answer}`).join('\n')}` : '',
       focus

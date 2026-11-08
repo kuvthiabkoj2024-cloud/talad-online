@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { CUSTOMER_LIMITS, normalizePhone } from '@talad/shared';
+import { CUSTOMER_LIMITS, distanceKm, freeDeliveryOffer, geoPoint, normalizePhone, type DeliveryDistance } from '@talad/shared';
 import type { Address } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import type { AddressDto } from './dto/customer-profile.dto.js';
@@ -14,6 +14,8 @@ export function toAddress(a: Address) {
     district: a.district,
     village: a.village,
     line: a.line,
+    /** The pin on the map, used for distance-based (free) urgent delivery. */
+    location: geoPoint(a.latitude, a.longitude),
     isDefault: a.isDefault,
   };
 }
@@ -60,6 +62,23 @@ export class AddressesService {
     return toAddress(updated);
   }
 
+  /**
+   * How far the default address is from a shop offering free delivery nearby, and whether it
+   * is within the shop's distance. Only the distance leaves the server, never the shop's pin.
+   */
+  async distanceTo(customerId: string, shopId: string): Promise<DeliveryDistance> {
+    const [shop, address] = await Promise.all([
+      this.prisma.shop.findFirst({ where: { id: shopId, status: 'APPROVED' }, select: { urgentDelivery: true, latitude: true, longitude: true } }),
+      this.prisma.address.findFirst({ where: { customerId }, orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }], select: { id: true, latitude: true, longitude: true } }),
+    ]);
+    if (!shop) throw new NotFoundException('Shop not found');
+    const pin = geoPoint(shop.latitude, shop.longitude);
+    const offer = freeDeliveryOffer(shop.urgentDelivery, pin);
+    const at = address ? geoPoint(address.latitude, address.longitude) : null;
+    const km = offer && pin && at ? Math.round(distanceKm(pin, at) * 10) / 10 : null;
+    return { radiusKm: offer?.radiusKm ?? null, addressId: address?.id ?? null, distanceKm: km, free: km !== null && km <= offer!.radiusKm };
+  }
+
   async setDefault(customerId: string, id: string) {
     await this.owned(customerId, id);
     await this.prisma.$transaction([
@@ -97,6 +116,17 @@ export class AddressesService {
       district: dto.district.trim(),
       village: dto.village?.trim() || null,
       line: dto.line.trim(),
+      ...this.pin(dto),
     };
+  }
+
+  /** Left out (older apps): the pin stays as it is. Otherwise both or neither. */
+  private pin(dto: AddressDto) {
+    if (dto.latitude === undefined && dto.longitude === undefined) return {};
+    const point = geoPoint(dto.latitude, dto.longitude);
+    if (!point && (dto.latitude != null || dto.longitude != null)) {
+      throw new BadRequestException({ code: 'INVALID_LOCATION', message: 'Pin the address on the map again' });
+    }
+    return { latitude: point?.latitude ?? null, longitude: point?.longitude ?? null };
   }
 }

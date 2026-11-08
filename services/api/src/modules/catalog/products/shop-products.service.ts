@@ -13,6 +13,8 @@ import { detectVideo } from '../../media/video-type.js';
 import { priceRange } from './products.service.js';
 import type { ListShopProductsQuery, ShopProductDto } from './shop-product.dto.js';
 import { ImageIndexService } from '../image-search/image-index.service.js';
+import { commissionData } from '../commission/commission.js';
+import { CommissionRequestsService } from '../commission/commission-requests.service.js';
 import { productOptions, variantLabel, type ProductOption } from './product-options.js';
 
 export interface ShopProductRow {
@@ -80,6 +82,7 @@ export class ShopProductsService {
     private readonly media: MediaService,
     private readonly storage: StorageService,
     private readonly imageIndex: ImageIndexService,
+    private readonly commissions: CommissionRequestsService,
   ) {}
 
   async list(shopId: string, query: ListShopProductsQuery): Promise<ShopProductList> {
@@ -210,6 +213,8 @@ export class ShopProductsService {
 
   async create(shop: Shop, dto: ShopProductDto): Promise<ShopProductDetail> {
     await this.validate(shop.id, dto, []);
+    // A commission request outside the limits stops the save before anything is created.
+    if (dto.commissionRequest) commissionData({ type: dto.commissionRequest.type, value: dto.commissionRequest.value });
     const status = await this.statusFor(dto.intent, 'DRAFT');
     try {
       const product = await this.prisma.product.create({
@@ -224,6 +229,7 @@ export class ShopProductsService {
         },
       });
       this.imageIndex.requestSweep();
+      if (dto.commissionRequest) await this.commissions.request(shop.id, product.id, dto.commissionRequest);
       return this.get(shop.id, product.id);
     } catch (e) {
       throw this.conflict(e);

@@ -32,7 +32,7 @@ export interface ChatOrderItem {
   issue: "UNAVAILABLE" | "QUANTITY_EXCEEDS_STOCK" | "OWN_PRODUCT" | null;
 }
 
-export type ChatOrderMissing = "OPTION" | "ADDRESS" | "PAYMENT" | "SLIP" | "ISSUES";
+export type ChatOrderMissing = "OPTION" | "ADDRESS" | "DELIVERY" | "PAYMENT" | "SLIP" | "ISSUES";
 
 /** The full card, for its customer only. */
 export interface ChatOrderView {
@@ -45,7 +45,7 @@ export interface ChatOrderView {
   items: ChatOrderItem[];
   addresses: AddressItem[];
   addressId: string | null;
-  delivery: { options: DeliveryOption[]; selectedId: string | null };
+  delivery: { options: DeliveryOption[]; selectedId: string | null; noCommonCourier: boolean };
   paymentMethods: CheckoutPaymentMethod[];
   paymentMethod: CheckoutPaymentMethod | null;
   transfer: TransferAccount | null;

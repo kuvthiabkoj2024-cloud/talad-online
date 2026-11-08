@@ -272,7 +272,10 @@ model Shop {
   urgentDelivery       Json?
   /// Customers may choose to collect their order at the shop (at `address`), free of delivery.
   pickupEnabled        Boolean    @default(false)
-  ratingAvg            Decimal    @default(0) @db.Decimal(3, 2)
+  /// Couriers the shop doesn't ship with (DeliveryProvider ids). Empty = every active courier,
+  /// so couriers added later are on until the shop turns them off.
+  disabledDeliveryProviderIds String[] @default([])
+  ratingAvg           Decimal    @default(0) @db.Decimal(3, 2)
   ratingCount          Int        @default(0)
   /// Customers following the shop (denormalized from ShopFollow).
   followerCount        Int        @default(0)

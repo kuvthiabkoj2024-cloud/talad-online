@@ -189,6 +189,8 @@ export interface AddressItem {
   district: string;
   village: string | null;
   line: string;
+  /** Pinned location (shops can deliver free within a distance of it). */
+  location?: { latitude: number; longitude: number } | null;
   isDefault: boolean;
 }
 

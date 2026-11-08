@@ -34,6 +34,12 @@
         }
       ],
       "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "MC Mart uses your location to pin your delivery address, so shops nearby can deliver for free."
+        }
+      ],
       "expo-video",
       [
         "expo-image-picker",

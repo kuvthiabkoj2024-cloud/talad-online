@@ -6,6 +6,7 @@ import {
   normalizePhone,
   PROVINCE_CODES,
   provinceName,
+  type GeoPoint,
   type Locale,
 } from "@talad/shared";
 import { ContactRound, MapPin, MapPinPlus, Plus, Settings } from "lucide-react";
@@ -15,6 +16,7 @@ import type { Dictionary } from "@/app/[lang]/dictionaries";
 import { deleteAddress, saveAddress, setDefaultAddress } from "@/lib/account-actions";
 import type { AddressItem, ProfileErrorCode } from "@/lib/profile";
 import { Modal } from "../auth/modal";
+import { LocationPicker } from "../location-picker";
 import {
   CardAction,
   ConfirmDialog,
@@ -178,6 +180,7 @@ export function AddressForm({
   );
   const [district, setDistrict] = useState(initial?.district ?? "");
   const [village, setVillage] = useState(initial?.village ?? "");
+  const [location, setLocation] = useState<GeoPoint | null>(initial?.location ?? null);
   // The first address is always the default; the current default can't be switched off here.
   const lockedDefault = isFirst || initial?.isDefault === true;
   const [isDefault, setIsDefault] = useState(lockedDefault);
@@ -192,7 +195,7 @@ export function AddressForm({
     setError(null);
     startTransition(async () => {
       const res = await saveAddress(
-        { recipientName, phone, line, province, district, village, isDefault },
+        { recipientName, phone, line, province, district, village, isDefault, latitude: location?.latitude ?? null, longitude: location?.longitude ?? null },
         initial?.id,
       );
       if (res.ok) onSaved(res.id);
@@ -281,6 +284,9 @@ export function AddressForm({
             />
           </Field>
         </div>
+        <Field label={dict.mapPin}>
+          <LocationPicker value={location} onChange={setLocation} labels={dict.mapPinPicker} />
+        </Field>
       </div>
 
       <div className="flex flex-col gap-3">

@@ -1,4 +1,4 @@
-import { customerGuarantee, type DepositType, type GuaranteeUnit } from '@talad/shared';
+import { customerGuarantee, freeDeliveryOffer, geoPoint, type DepositType, type FreeDeliveryOffer, type GuaranteeUnit } from '@talad/shared';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../../generated/prisma/client.js';
 import { PrismaService } from '../../../prisma/prisma.service.js';
@@ -94,6 +94,8 @@ export interface ProductDetail extends Omit<ProductCard, 'imageUrl'> {
     logoUrl: string | null;
     verified: boolean;
     productCount: number;
+    /** Free urgent delivery within this distance of the shop (null: not offered). */
+    freeDelivery: FreeDeliveryOffer | null;
   };
 }
 
@@ -424,6 +426,9 @@ export class ProductsService {
             codEnabled: true,
             logoUrl: true,
             verifiedAt: true,
+            urgentDelivery: true,
+            latitude: true,
+            longitude: true,
             _count: { select: { products: { where: { status: 'PUBLISHED' } } } },
           },
         },
@@ -488,6 +493,7 @@ export class ProductsService {
         logoUrl: shop.logoUrl ? this.media.publicUrl(shop.logoUrl) : null,
         verified: shop.verifiedAt !== null,
         productCount: shop._count.products,
+        freeDelivery: freeDeliveryOffer(shop.urgentDelivery, geoPoint(shop.latitude, shop.longitude)),
       },
     };
   }

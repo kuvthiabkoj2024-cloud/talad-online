@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type { ProductStatus } from '@talad/shared';
+import { freeDeliveryOffer, geoPoint, type FreeDeliveryOffer, type ProductStatus } from '@talad/shared';
 import type { OrderStatus, Shop } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { ProductsService, type ShopProductSort } from '../catalog/products/products.service.js';
@@ -19,6 +19,8 @@ export interface PublicShop {
   /** Customers following the shop. */
   followerCount: number;
   joinedAt: Date;
+  /** Free urgent delivery within this distance of the shop (null: not offered). */
+  freeDelivery: FreeDeliveryOffer | null;
 }
 
 export interface ShopSummary {
@@ -54,6 +56,9 @@ export class ShopsService {
         ratingCount: true,
         followerCount: true,
         createdAt: true,
+        urgentDelivery: true,
+        latitude: true,
+        longitude: true,
         _count: { select: { products: { where: { status: 'PUBLISHED' } } } },
       },
     });
@@ -71,6 +76,7 @@ export class ShopsService {
       ratingCount: shop.ratingCount,
       followerCount: shop.followerCount,
       joinedAt: shop.createdAt,
+      freeDelivery: freeDeliveryOffer(shop.urgentDelivery, geoPoint(shop.latitude, shop.longitude)),
     };
   }
 

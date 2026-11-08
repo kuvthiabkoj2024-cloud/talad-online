@@ -1,6 +1,8 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   BANK_CODES,
+  geoPoint,
+  type GeoPoint,
   normalizeAccountNumber,
   normalizePhone,
   SHOP_PROFILE_RULES,
@@ -32,6 +34,8 @@ export interface ShopProfile {
   email: string | null;
   phone: string;
   address: string | null;
+  /** Pinned on the map: where urgent delivery distances are measured from. */
+  location: GeoPoint | null;
   logoUrl: string | null;
   coverUrl: string | null;
   businessHours: BusinessHours;
@@ -45,6 +49,8 @@ export interface ShopProfile {
   urgentDelivery: UrgentDelivery;
   /** Customers may collect their orders at the shop. */
   pickupEnabled: boolean;
+  /** Every active courier, and whether the shop ships with it (customers only see those it does). */
+  deliveryProviders: { id: string; code: string; name: string; logoUrl: string | null; enabled: boolean }[];
   verifiedAt: Date | null;
 }
 
@@ -59,7 +65,13 @@ export class ShopProfileService {
     private readonly storage: StorageService,
   ) {}
 
-  get(shop: Shop): ShopProfile {
+  async get(shop: Shop): Promise<ShopProfile> {
+    const providers = await this.prisma.deliveryProvider.findMany({
+      where: { isActive: true },
+      select: { id: true, code: true, name: true, logoUrl: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const disabled = new Set(shop.disabledDeliveryProviderIds);
     return {
       id: shop.id,
       slug: shop.slug,
@@ -70,6 +82,7 @@ export class ShopProfileService {
       email: shop.email,
       phone: shop.phone,
       address: shop.address,
+      location: geoPoint(shop.latitude, shop.longitude),
       logoUrl: shop.logoUrl ? this.media.publicUrl(shop.logoUrl) : null,
       coverUrl: shop.coverUrl ? this.media.publicUrl(shop.coverUrl) : null,
       businessHours: (shop.businessHours ?? {}) as BusinessHours,
@@ -83,8 +96,9 @@ export class ShopProfileService {
       paymentWindowHrs: shop.paymentWindowHrs,
       autoConfirmHrs: shop.autoConfirmHrs,
       cod: { enabled: shop.codEnabled, termsAcceptedAt: shop.codTermsAcceptedAt },
-      urgentDelivery: parseUrgentDelivery(shop.urgentDelivery) ?? { enabled: false, eta: '', zones: [] },
+      urgentDelivery: parseUrgentDelivery(shop.urgentDelivery) ?? { enabled: false, eta: '', zones: [], freeRadiusKm: 0 },
       pickupEnabled: shop.pickupEnabled,
+      deliveryProviders: providers.map((p) => ({ ...p, enabled: !disabled.has(p.id) })),
       verifiedAt: shop.verifiedAt,
     };
   }
@@ -108,6 +122,15 @@ export class ShopProfileService {
       throw new BadRequestException({ code: 'COD_TERMS_REQUIRED', message: 'Accept the cash on delivery terms to offer COD' });
     }
 
+    // The pin moves only as a pair; null clears it.
+    const pinChange = dto.latitude !== undefined || dto.longitude !== undefined;
+    const pin = pinChange ? geoPoint(dto.latitude, dto.longitude) : geoPoint(shop.latitude, shop.longitude);
+    if (pinChange && !pin && (dto.latitude != null || dto.longitude != null)) {
+      throw new BadRequestException({ code: 'INVALID_LOCATION', message: 'Pin the shop on the map again' });
+    }
+    const urgent = dto.urgentDelivery && this.urgent(dto.urgentDelivery, pin);
+    const disabledProviders = dto.disabledDeliveryProviderIds && (await this.disabledProviders(dto.disabledDeliveryProviderIds));
+
     const [email, phoneTaken] = await Promise.all([
       dto.email ? this.prisma.shop.findFirst({ where: { email: dto.email, NOT: { id: shop.id } }, select: { id: true } }) : null,
       this.prisma.shop.findFirst({ where: { phone, NOT: { id: shop.id } }, select: { id: true } }),
@@ -123,6 +146,7 @@ export class ShopProfileService {
         email: dto.email || null,
         phone,
         address: dto.address,
+        ...(pinChange && { latitude: pin?.latitude ?? null, longitude: pin?.longitude ?? null }),
         businessHours: this.hours(dto.businessHours),
         socialLinks: this.links(dto.socialLinks),
         paymentBankCode: dto.paymentBankCode || null,
@@ -133,16 +157,38 @@ export class ShopProfileService {
         ...(dto.codEnabled !== undefined && { codEnabled: dto.codEnabled }),
         ...(turningCodOn && { codTermsAcceptedAt: new Date() }),
         ...(dto.pickupEnabled !== undefined && { pickupEnabled: dto.pickupEnabled }),
-        ...(dto.urgentDelivery && { urgentDelivery: this.urgent(dto.urgentDelivery) as unknown as Prisma.InputJsonValue }),
+        ...(disabledProviders && { disabledDeliveryProviderIds: disabledProviders }),
+        ...(urgent && { urgentDelivery: urgent as unknown as Prisma.InputJsonValue }),
       },
     });
     return this.get(updated);
   }
 
-  /** Urgent delivery as stored: tidy zones; it can only be on with an area to deliver to. */
-  private urgent(dto: UrgentDeliveryDto): UrgentDelivery {
+  /**
+   * Couriers turned off, as stored: only real couriers' ids. At least one active courier has
+   * to stay on, or customers ordering by courier would have no way to get the order.
+   */
+  private async disabledProviders(ids: string[]): Promise<string[]> {
+    const active = await this.prisma.deliveryProvider.findMany({ where: { isActive: true }, select: { id: true } });
+    const off = new Set(ids);
+    if (active.length > 0 && active.every((p) => off.has(p.id))) {
+      throw new BadRequestException({ code: 'DELIVERY_PROVIDER_REQUIRED', message: 'Keep at least one delivery service on' });
+    }
+    // Inactive couriers stay in the list: if an admin turns one back on, the shop's choice holds.
+    const known = await this.prisma.deliveryProvider.findMany({ where: { id: { in: [...off] } }, select: { id: true } });
+    return known.map((p) => p.id);
+  }
+
+  /**
+   * Urgent delivery as stored: tidy zones. It can only be on with somewhere to deliver to (an
+   * area, or a free radius); a free radius is measured from the shop's pin, so it needs one.
+   */
+  private urgent(dto: UrgentDeliveryDto, pin: GeoPoint | null): UrgentDelivery {
     const parsed = parseUrgentDelivery(dto)!;
-    if (parsed.enabled && parsed.zones.length === 0) {
+    if (parsed.freeRadiusKm > 0 && !pin) {
+      throw new BadRequestException({ code: 'SHOP_LOCATION_REQUIRED', message: 'Pin the shop on the map to offer free delivery nearby' });
+    }
+    if (parsed.enabled && parsed.zones.length === 0 && parsed.freeRadiusKm === 0) {
       throw new BadRequestException({ code: 'URGENT_ZONE_REQUIRED', message: 'Add at least one area for urgent delivery' });
     }
     return parsed;

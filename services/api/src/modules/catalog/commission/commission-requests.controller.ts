@@ -33,6 +33,21 @@ export class ShopCommissionController {
   }
 }
 
+/** Seller Center: the commission a new product would pay, before it is saved. */
+@ApiTags('seller')
+@ApiBearerAuth()
+@UseGuards(ShopOwnerGuard)
+@Controller('me/shop/commission')
+export class ShopCommissionPreviewController {
+  constructor(private readonly requests: CommissionRequestsService) {}
+
+  /** `?categoryId=` */
+  @Get()
+  preview(@CurrentShop() shop: Shop, @Query('categoryId', id) categoryId: string) {
+    return this.requests.previewForShop(shop.id, categoryId);
+  }
+}
+
 /** Admin: review shops' commission requests and set a product's own commission. */
 @ApiTags('admin')
 @ApiBearerAuth()

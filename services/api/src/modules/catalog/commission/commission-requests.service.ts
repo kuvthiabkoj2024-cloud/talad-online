@@ -89,6 +89,20 @@ export class CommissionRequestsService {
 
   // ─── Seller Center ─────────────────────────────────────────────────────────
 
+  /**
+   * What a new product in this category would pay (before it is saved): its category's rate,
+   * else the shop's, else the platform's.
+   */
+  async previewForShop(shopId: string, categoryId: string): Promise<EffectiveCommission> {
+    const [category, shop, defaultRate] = await Promise.all([
+      this.prisma.category.findUnique({ where: { id: categoryId }, select: levels.category.select }),
+      this.prisma.shop.findUniqueOrThrow({ where: { id: shopId }, select: levels.shop.select }),
+      this.defaultRate(),
+    ]);
+    if (!category) throw new NotFoundException('Category not found');
+    return this.effective({ commissionRate: null, commissionFixed: null, category, shop }, defaultRate);
+  }
+
   /** The product's commission now, and its latest request (any status). */
   async forShop(shopId: string, productId: string) {
     const [product, latest, defaultRate] = await Promise.all([
@@ -100,23 +114,29 @@ export class CommissionRequestsService {
     return { current: this.effective(product, defaultRate), request: latest ? view(latest) : null };
   }
 
+  /** Sends a request, or changes the one still waiting (MC Mart reviews the new rate). */
   async request(shopId: string, productId: string, dto: CommissionRequestDto) {
     const product = await this.prisma.product.findFirst({ where: { id: productId, shopId }, select: { id: true, name: true, shop: { select: { name: true } } } });
     if (!product) throw new NotFoundException('Product not found');
     const requested: Commission = { type: dto.type, value: dto.value };
     commissionData(requested); // checks the limits
-    const pending = await this.prisma.commissionRequest.count({ where: { productId, status: 'PENDING' } });
-    if (pending) throw new ConflictException({ code: 'REQUEST_PENDING', message: 'A request for this product is already waiting' });
-
     await this.prisma.$transaction(async (tx) => {
-      await tx.commissionRequest.create({ data: { productId, shopId, type: dto.type, value: dto.value, reason: dto.reason ?? null } });
+      // Still waiting: the shop changes it in place (only if no admin decided it meanwhile).
+      const data = { type: dto.type, value: dto.value, reason: dto.reason ?? null };
+      const edited = await tx.commissionRequest.updateMany({ where: { productId, shopId, status: 'PENDING' }, data: { ...data, createdAt: new Date() } });
+      if (!edited.count) await tx.commissionRequest.create({ data: { productId, shopId, ...data } });
       await this.notifications.toAdmins(
         tx,
         'COMMISSION',
-        {
-          lo: { title: `ຂໍຄ່າຄອມ ${commissionText(requested, 'lo')}`, body: `${product.shop.name} · ${product.name}` },
-          en: { title: `Commission request ${commissionText(requested, 'en')}`, body: `${product.shop.name} · ${product.name}` },
-        },
+        edited.count
+          ? {
+              lo: { title: `ແກ້ໄຂຄຳຂໍຄ່າຄອມ ${commissionText(requested, 'lo')}`, body: `${product.shop.name} · ${product.name}` },
+              en: { title: `Commission request changed to ${commissionText(requested, 'en')}`, body: `${product.shop.name} · ${product.name}` },
+            }
+          : {
+              lo: { title: `ຂໍຄ່າຄອມ ${commissionText(requested, 'lo')}`, body: `${product.shop.name} · ${product.name}` },
+              en: { title: `Commission request ${commissionText(requested, 'en')}`, body: `${product.shop.name} · ${product.name}` },
+            },
         { link: '/commissions' },
       );
     });

@@ -111,3 +111,12 @@ export function pointsBase(
   const regular = lines.reduce((n, l) => n + (onPromotion(l) ? 0 : l.lineTotal), 0);
   return Math.max(0, regular - Math.round((pointsSpent * regular) / subtotal));
 }
+
+/**
+ * Couriers a multi-shop order can go with: one courier carries the whole order, so it must be
+ * one that every shop shipping by courier ships with — the shop allowing the fewest decides.
+ * `disabled`: each shop's turned-off courier ids. Keeps `serving`'s order.
+ */
+export function commonCouriers<T extends { id: string }>(serving: T[], shopIds: string[], disabled: Map<string, Set<string>>): T[] {
+  return serving.filter((c) => shopIds.every((shop) => !disabled.get(shop)?.has(c.id)));
+}

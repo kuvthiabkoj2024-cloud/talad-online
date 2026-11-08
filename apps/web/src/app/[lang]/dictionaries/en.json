@@ -84,6 +84,13 @@
     "wallets": "E-Wallet",
     "appSoon": "The mobile app is coming soon"
   },
+  "freeDelivery": {
+    "title": "Free delivery within {km} km of the shop",
+    "youAreFree": "You're {km} km away · your delivery is free",
+    "youAreFar": "You're {km} km away, outside the free area",
+    "pinToCheck": "Pin your address to see if you're close enough.",
+    "pinLink": "Pin my address"
+  },
   "product": {
     "home": "Home",
     "option": "Option",
@@ -357,6 +364,8 @@
     "districtPlaceholder": "e.g. Chanthabouly",
     "village": "Village",
     "villagePlaceholder": "e.g. Ban Haisok",
+    "mapPin": "Location on the map (optional)",
+    "mapPinPicker": {"hint": "Tap the map or drag the pin to the delivery spot. Some shops deliver free nearby.", "useCurrent": "Use my current location", "remove": "Remove pin", "locating": "Finding your location…", "locateFailed": "Couldn't get your location. Allow location access, or tap the map instead."},
     "settingsSection": "Settings",
     "setAsDefault": "Set as default",
     "defaultBadge": "Default",
@@ -620,6 +629,10 @@
     "deliveryUrgent": "Urgent, by the shop",
     "deliveryPickup": "Pick up at the shop",
     "deliveryPickupHint": "Free · collect it yourself",
+    "deliveryFree": "Free",
+    "distanceKm": "{km} km away",
+    "pinForFree": "This shop delivers free within {km} km. Pin your address on the map to see if you're close enough.",
+    "pinAddress": "Pin my address",
     "pickupAt": "Collect at",
     "openMap": "Open in Google Maps",
     "shippingFee": "Delivery fee",
@@ -642,6 +655,7 @@
     "discount": "Discount",
     "slipReset": "The amount changed, please upload new slips.",
     "deliveryFeeNote": "Delivery fee not included: you pay it to the courier.",
+    "deliveryNoCommon": "The shops in this order don't share a delivery service that reaches your address. Order from each shop separately, or choose pickup or the shop's urgent delivery where offered.",
     "slipsBody": "After transferring, add your slip. Paid in several transfers? Add up to {n} slips.",
     "addSlip": "Add slip",
     "removeSlip": "Remove slip",
@@ -689,6 +703,7 @@
     "FILE_TOO_LARGE": "Image must be 2 MB or smaller",
     "OWN_PRODUCT": "You can't buy from your own shop.",
     "DELIVERY_REQUIRED": "Please choose a delivery service.",
+    "NO_COMMON_DELIVERY": "These shops don't share a delivery service. Please order from them separately.",
     "COUPON_INVALID": "This coupon code doesn't exist.",
     "COUPON_NOT_STARTED": "This coupon can't be used yet — it hasn't started.",
     "COUPON_EXPIRED": "This coupon has expired.",
@@ -1086,6 +1101,7 @@
     "missing": {
       "OPTION": "Choose the options above.",
       "ADDRESS": "Add a delivery address.",
+      "DELIVERY": "This shop's delivery services don't reach this address.",
       "PAYMENT": "Choose how to pay.",
       "SLIP": "Attach your transfer slip to place the order.",
       "ISSUES": "Some items changed — check above."

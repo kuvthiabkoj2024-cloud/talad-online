@@ -11,7 +11,7 @@ export const CHAT_ORDER_LIMITS = { items: 10 } as const;
 export type ChatOrderSource = 'SHOP_CHAT' | 'MARKET_CHAT';
 export type ChatOrderCreator = 'CUSTOMER' | 'SHOP' | 'BOT' | 'ASSISTANT';
 /** What still has to be chosen before the order can be placed. */
-export type ChatOrderMissing = 'OPTION' | 'ADDRESS' | 'PAYMENT' | 'SLIP' | 'ISSUES';
+export type ChatOrderMissing = 'OPTION' | 'ADDRESS' | 'DELIVERY' | 'PAYMENT' | 'SLIP' | 'ISSUES';
 
 /** What both sides of a chat see on an order card. */
 export interface ChatOrderSummary {
@@ -154,6 +154,7 @@ export class ChatOrdersService {
     const missing: ChatOrderMissing[] = [];
     if (view.some((i) => i.needsOption)) missing.push('OPTION');
     if (!addressId) missing.push('ADDRESS');
+    if (quote.delivery.noCommonCourier) missing.push('DELIVERY');
     if (!paymentMethod) missing.push('PAYMENT');
     if (paymentMethod === 'BANK_TRANSFER' && !order.slipKey) missing.push('SLIP');
     if (view.some((i) => !i.needsOption && i.issue)) missing.push('ISSUES');
@@ -214,7 +215,7 @@ export class ChatOrdersService {
     const card = await this.view(customerId, id);
     const first = card.missing[0];
     if (first) {
-      const code = { OPTION: 'OPTION_REQUIRED', ADDRESS: 'ADDRESS_REQUIRED', PAYMENT: 'PAYMENT_REQUIRED', SLIP: 'SLIP_REQUIRED', ISSUES: 'CART_CHANGED' }[first];
+      const code = { OPTION: 'OPTION_REQUIRED', ADDRESS: 'ADDRESS_REQUIRED', DELIVERY: 'NO_COMMON_DELIVERY', PAYMENT: 'PAYMENT_REQUIRED', SLIP: 'SLIP_REQUIRED', ISSUES: 'CART_CHANGED' }[first];
       throw new BadRequestException({ code, message: 'Complete the order first' });
     }
     const result = await this.checkout.place(customerId, {

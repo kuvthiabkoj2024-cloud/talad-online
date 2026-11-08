@@ -106,7 +106,8 @@ export function CheckoutForm({
   const [depositSlips, setDepositSlips] = useState<Record<string, SlipState & { key: string | null }>>({});
   const [slipNotice, setSlipNotice] = useState<string | null>(null);
   const [note, setNote] = useState("");
-  const [picker, setPicker] = useState<"list" | "new" | null>(null);
+  // "pin": the chosen address opened to pin it on the map (for free delivery nearby).
+  const [picker, setPicker] = useState<"list" | "new" | "pin" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -327,7 +328,7 @@ export function CheckoutForm({
   const placeButton = (
     <button
       type="button"
-      disabled={pending || requoting || blocked || !address || slipsMissing}
+      disabled={pending || requoting || blocked || quote.delivery.noCommonCourier || !address || slipsMissing}
       onClick={submit}
       className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-full bg-primary px-6 font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition hover:brightness-110 disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none"
     >
@@ -362,7 +363,7 @@ export function CheckoutForm({
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
         <div className="flex min-w-0 flex-col gap-4">
           {/* Items per shop */}
-          {quote.shops.map(({ shop, items, discount, total, urgent, urgentSelected, pickup, pickupSelected, shippingFee }) => (
+          {quote.shops.map(({ shop, items, discount, total, urgent, urgentSelected, pickup, pickupSelected, pinForFreeKm, shippingFee }) => (
             <Card key={shop.id} flush>
               <div className="flex items-center gap-2 border-b border-border px-4 py-3 text-sm font-semibold">
                 <Store className="size-4 text-primary" />
@@ -429,7 +430,13 @@ export function CheckoutForm({
                           </span>
                           <span className="block text-xs text-muted-foreground">
                             {mode === "urgent"
-                              ? [formatMoney(urgent!.fee, locale), urgent!.eta].filter(Boolean).join(" · ")
+                              ? [
+                                  urgent!.free ? dict.deliveryFree : formatMoney(urgent!.fee, locale),
+                                  urgent!.distanceKm !== null && interpolate(dict.distanceKm, { km: urgent!.distanceKm.toFixed(1) }),
+                                  urgent!.eta,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")
                               : mode === "pickup"
                                 ? dict.deliveryPickupHint
                                 : dict.deliveryStandardHint}
@@ -438,6 +445,22 @@ export function CheckoutForm({
                       </button>
                     );
                   })}
+                </div>
+              )}
+              {/* Free nearby, but the address has no pin to measure from. */}
+              {pinForFreeKm !== null && address && (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border bg-primary-soft/50 px-4 py-2.5">
+                  <p className="flex min-w-0 flex-1 items-start gap-2 text-xs text-foreground">
+                    <MapPin className="mt-px size-3.5 shrink-0 text-primary" />
+                    {interpolate(dict.pinForFree, { km: pinForFreeKm })}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setPicker("pin")}
+                    className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+                  >
+                    {dict.pinAddress}
+                  </button>
                 </div>
               )}
               {pickupSelected && pickup?.address && (
@@ -569,6 +592,17 @@ export function CheckoutForm({
                 })}
               </div>
               <p className="mt-2 text-xs text-muted-foreground">{dict.deliveryFeeNote}</p>
+            </Card>
+          )}
+          {/* Each shop chooses its couriers; these shops have none in common. */}
+          {quote.delivery.noCommonCourier && (
+            <Card>
+              <CardTitle icon={Truck} required>
+                {dict.delivery}
+              </CardTitle>
+              <p role="alert" className="mt-2 text-sm text-destructive">
+                {dict.deliveryNoCommon}
+              </p>
             </Card>
           )}
 
@@ -823,6 +857,20 @@ export function CheckoutForm({
               {dict.addAddress}
             </button>
           </div>
+        )}
+        {/* Same form, opened on the chosen address; saving re-prices delivery with the pin. */}
+        {picker === "pin" && address && (
+          <AddressForm
+            locale={locale}
+            dict={accountDict}
+            initial={address}
+            isFirst={false}
+            onSaved={() => {
+              chooseAddress(address.id);
+              setPicker(null);
+              router.refresh();
+            }}
+          />
         )}
         {picker === "new" && (
           <AddressForm

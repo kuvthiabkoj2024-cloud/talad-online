@@ -1,6 +1,7 @@
 import type {
   BusinessHours,
   Commission,
+  GeoPoint,
   Locale,
   OrderStatus,
   PaymentMethod,
@@ -437,6 +438,8 @@ export interface ShopProfile {
   email: string | null
   phone: string
   address: string | null
+  /** Pinned on the map: where urgent delivery distances are measured from. */
+  location: GeoPoint | null
   logoUrl: string | null
   coverUrl: string | null
   businessHours: BusinessHours
@@ -450,6 +453,8 @@ export interface ShopProfile {
   urgentDelivery: UrgentDelivery
   /** Customers may collect their orders at the shop's address. */
   pickupEnabled: boolean
+  /** Every active courier, and whether the shop ships with it (customers only see those it does). */
+  deliveryProviders: { id: string; code: string; name: string; logoUrl: string | null; enabled: boolean }[]
   verifiedAt: string | null
 }
 

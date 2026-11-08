@@ -5,6 +5,7 @@ import { Banknote, ChevronRight, ShieldCheck, Store, Truck } from "lucide-react"
 import Link from "next/link";
 import { Suspense } from "react";
 import { Breadcrumb } from "@/components/breadcrumb";
+import { FreeDeliveryBadge } from "@/components/free-delivery-badge";
 import { ProductGallery } from "@/components/product/product-gallery";
 import { ProductPurchase } from "@/components/product/product-purchase";
 import { ShareButton } from "@/components/product/share-button";
@@ -54,7 +55,7 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
 export default async function ProductPage(props: Props) {
   const product = await getProduct(props);
   const locale = await getLocale();
-  const { product: dict, cart: cartDict, cartErrors, account, feed } = await getDictionary();
+  const { product: dict, cart: cartDict, cartErrors, account, feed, freeDelivery } = await getDictionary();
   const { category } = product;
 
   const jsonLd = {
@@ -137,6 +138,10 @@ export default async function ProductPage(props: Props) {
               <p className="text-sm text-muted-foreground">{dict.deliveryDesc}</p>
             </div>
           </div>
+
+          {product.shop.freeDelivery && (
+            <FreeDeliveryBadge shopId={product.shop.id} offer={product.shop.freeDelivery} locale={locale} labels={freeDelivery} className="self-start" />
+          )}
 
           {product.guarantee && (
             <div className="flex items-start gap-3 self-start rounded-xl bg-primary-soft px-4 py-3">

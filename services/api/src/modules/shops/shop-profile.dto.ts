@@ -2,6 +2,9 @@ import { PROVINCE_CODES, SHOP_PROFILE_RULES, SHOP_RULES, URGENT_RULES } from '@t
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  IsLatitude,
+  IsLongitude,
+  IsNumber,
   IsArray,
   IsBoolean,
   IsEmail,
@@ -51,6 +54,13 @@ export class UrgentDeliveryDto {
   @ValidateNested({ each: true })
   @Type(() => UrgentZoneDto)
   zones: UrgentZoneDto[];
+
+  /** Free within this many km of the shop's pin; 0 = never free. Left out, it is 0. */
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 1 })
+  @Min(0)
+  @Max(URGENT_RULES.freeRadiusMaxKm)
+  freeRadiusKm?: number;
 }
 
 export class ShopProfileDto {
@@ -81,6 +91,17 @@ export class ShopProfileDto {
   @IsString()
   @Length(5, SHOP_RULES.addressMax)
   address: string;
+
+  /** The shop's pin on the map (both, or null to remove it); left out, it stays. */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsLatitude()
+  latitude?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsLongitude()
+  longitude?: number | null;
 
   /** `{ mon: { open: "08:00", close: "18:00" }, … }`; missing days are closed. */
   @IsOptional()
@@ -132,6 +153,13 @@ export class ShopProfileDto {
   @IsOptional()
   @IsBoolean()
   pickupEnabled?: boolean;
+
+  /** Couriers the shop doesn't ship with (ids); left out, the current choice stays. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  disabledDeliveryProviderIds?: string[];
 
   /** The shop's own urgent delivery; left out, the current settings stay. */
   @IsOptional()

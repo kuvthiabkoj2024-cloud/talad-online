@@ -1,4 +1,4 @@
-import type { DepositType, GuaranteeUnit } from "@talad/shared";
+import type { DepositType, FreeDeliveryOffer, GuaranteeUnit } from "@talad/shared";
 import "server-only";
 
 export const API_URL = process.env.API_URL ?? "http://localhost:4000/api/v1";
@@ -86,6 +86,8 @@ export interface ProductDetail extends Omit<ProductCard, "imageUrl" | "shop"> {
     logoUrl: string | null;
     verified: boolean;
     productCount: number;
+    /** Free urgent delivery within this distance of the shop (null: not offered). */
+    freeDelivery: FreeDeliveryOffer | null;
   };
 }
 

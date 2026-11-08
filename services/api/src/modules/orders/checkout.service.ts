@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
-import { customerGuarantee, DEPOSIT_NOTES, DEPOSIT_RULES, formatMoney, lineDeposit, MAX_PAYMENT_SLIPS, parseUrgentDelivery, urgentFee, type CheckoutPaymentMethod, type UrgentDelivery } from '@talad/shared';
+import { customerGuarantee, DEPOSIT_NOTES, DEPOSIT_RULES, formatMoney, geoPoint, lineDeposit, MAX_PAYMENT_SLIPS, parseUrgentDelivery, urgentQuote, type CheckoutPaymentMethod, type UrgentDelivery } from '@talad/shared';
 import { randomInt } from 'node:crypto';
 import { Prisma, type OrderStatus } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
@@ -8,6 +8,7 @@ import { NotificationsService } from '../notifications/notifications.service.js'
 import { CartService, groupByShop, type CartLine, type VirtualItem } from '../cart/cart.service.js';
 import {
   allocateDiscount,
+  commonCouriers,
   couponDiscount,
   couponProblem,
   itemCommissions,
@@ -100,7 +101,7 @@ export class CheckoutService {
     }
 
     const groups = groupByShop(lines);
-    const [transfer, { cod, pickup, accounts }, urgentSettings, address, options] = await Promise.all([
+    const [transfer, { cod, pickup, accounts, disabledCouriers, locations }, urgentSettings, address, serving] = await Promise.all([
       this.account.available(),
       this.shopOptions(groups.map((g) => g.shop.id)),
       this.urgentSettings(groups.map((g) => g.shop.id)),
@@ -109,16 +110,20 @@ export class CheckoutService {
     ]);
     const wantsUrgent = new Set(selection.urgentShopIds ?? []);
     const wantsPickup = new Set(selection.pickupShopIds ?? []);
-    // Unknown or missing choice falls back to the first courier.
-    const courier = options.find((o) => o.id === selection.deliveryProviderId) ?? options[0] ?? null;
 
     const { coupon, couponError, discounts } = await this.applyCoupon(customerId, selection.couponCode, groups);
     const shops = groups.map((g) => {
       const discount = discounts.get(g.shop.id) ?? 0;
-      // The shop's own urgent delivery, when it covers the address (its fee joins the total).
+      // The shop's own urgent delivery, when it covers the address (its fee joins the total):
+      // free within the shop's free radius, else the fee for the address's area.
       const settings = urgentSettings.get(g.shop.id);
-      const fee = address ? urgentFee(settings, address) : null;
-      const urgent = fee !== null ? { fee, eta: settings!.eta } : null;
+      const addressPin = address ? geoPoint(address.latitude, address.longitude) : null;
+      const shopPin = locations.get(g.shop.id) ?? null;
+      const quoted = address ? urgentQuote(settings, { ...address, location: addressPin }, shopPin) : null;
+      const urgent = quoted ? { fee: quoted.fee, free: quoted.free, distanceKm: quoted.distanceKm, eta: settings!.eta } : null;
+      // The shop delivers free nearby but the address has no pin to measure from: checkout asks
+      // the customer to pin it (whether or not the shop also serves the address's area).
+      const pinForFreeKm = address && !addressPin && settings && settings.freeRadiusKm > 0 && shopPin ? settings.freeRadiusKm : null;
       // Pickup wins over urgent delivery if both were sent.
       const pickupSelected = pickup.has(g.shop.id) && wantsPickup.has(g.shop.id);
       const urgentSelected = !pickupSelected && urgent !== null && wantsUrgent.has(g.shop.id);
@@ -128,6 +133,7 @@ export class CheckoutService {
         discount,
         urgent,
         urgentSelected,
+        pinForFreeKm,
         /** The shop lets customers collect at its address (`pickupAddress`). */
         pickup: pickup.get(g.shop.id) ?? null,
         pickupSelected,
@@ -164,6 +170,11 @@ export class CheckoutService {
         cod: s.cod && (deposit === 0 || depositAccount?.hasQr === true),
       };
     });
+    // Only shops shipping by courier have a say (not those delivering themselves or collected from).
+    const byCourier = priced.filter((s) => !s.urgentSelected && !s.pickupSelected);
+    const options = commonCouriers(serving, byCourier.map((s) => s.shop.id), disabledCouriers);
+    // Unknown or missing choice falls back to the first courier.
+    const courier = options.find((o) => o.id === selection.deliveryProviderId) ?? options[0] ?? null;
     const subtotal = priced.reduce((n, s) => n + s.subtotal, 0);
     const discountTotal = priced.reduce((n, s) => n + s.discount, 0);
     const shippingTotal = priced.reduce((n, s) => n + s.shippingFee, 0);
@@ -180,7 +191,13 @@ export class CheckoutService {
         points: { balance, value: pointValue, usable, used, discount: pointsDiscount },
         issues,
         // No courier is needed when every shop delivers itself or is collected from.
-        delivery: { options, selectedId: courier?.id ?? null, needed: priced.some((s) => !s.urgentSelected && !s.pickupSelected) },
+        delivery: {
+          options,
+          selectedId: courier?.id ?? null,
+          needed: byCourier.length > 0,
+          // Couriers serve the address, but the shops share none: order from them separately.
+          noCommonCourier: byCourier.length > 0 && serving.length > 0 && options.length === 0,
+        },
         coupon: coupon ? { code: coupon.code, shopId: coupon.shopId, discount: discountTotal } : null,
         couponError,
         // Transfers go to MC Mart's account (checked by an admin), once one is set up.
@@ -199,6 +216,9 @@ export class CheckoutService {
     // Admins choose which methods checkout offers (§2.8).
     if (!quote.paymentMethods.includes(input.paymentMethod)) {
       throw new BadRequestException({ code: 'PAYMENT_METHOD_DISABLED', message: 'This payment method is not available' });
+    }
+    if (quote.delivery.noCommonCourier) {
+      throw new BadRequestException({ code: 'NO_COMMON_DELIVERY', message: 'These shops share no delivery service; order from them separately' });
     }
     if (quote.delivery.needed && quote.delivery.options.length > 0 && quote.delivery.selectedId !== input.deliveryProviderId) {
       throw new BadRequestException({ code: 'DELIVERY_REQUIRED', message: 'Choose a delivery service' });
@@ -550,7 +570,7 @@ export class CheckoutService {
     return this.prisma.address.findFirst({
       where: addressId ? { id: addressId, customerId } : { customerId },
       orderBy: { isDefault: 'desc' },
-      select: { province: true, district: true },
+      select: { province: true, district: true, latitude: true, longitude: true },
     });
   }
 
@@ -569,9 +589,14 @@ export class CheckoutService {
         paymentBankCode: true,
         paymentAccountName: true,
         paymentAccountNumber: true,
+        disabledDeliveryProviderIds: true,
       },
     });
     return {
+      /** Each shop's pin on the map (urgent delivery distances are measured from it). */
+      locations: new Map(shops.map((s) => [s.id, geoPoint(s.latitude, s.longitude)] as const)),
+      /** Couriers each shop doesn't ship with. */
+      disabledCouriers: new Map(shops.map((s) => [s.id, new Set(s.disabledDeliveryProviderIds)] as const)),
       accounts: new Map(
         shops.map((s) => [s.id, { bankCode: s.paymentBankCode, accountName: s.paymentAccountName, accountNumber: s.paymentAccountNumber, hasQr: s.paymentQrKey !== null }] as const),
       ),

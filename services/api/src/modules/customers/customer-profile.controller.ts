@@ -49,6 +49,12 @@ export class AddressesController {
     return this.addresses.update(c.id, addressId, dto);
   }
 
+  /** From the default address to a shop offering free delivery nearby (km only). */
+  @Get('distance/:shopId')
+  distance(@CurrentCustomer() c: Customer, @Param('shopId', id) shopId: string) {
+    return this.addresses.distanceTo(c.id, shopId);
+  }
+
   @Post(':id/default')
   @HttpCode(200)
   setDefault(@CurrentCustomer() c: Customer, @Param('id', id) addressId: string) {

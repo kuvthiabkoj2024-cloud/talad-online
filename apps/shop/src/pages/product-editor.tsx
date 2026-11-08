@@ -14,7 +14,8 @@ import { useId, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { Link } from 'react-router'
 import { toast } from 'sonner'
-import { CommissionCard } from '@/components/commission-card'
+import { CommissionCard, NewProductCommission } from '@/components/commission-card'
+import { askBody, askProblem, type CommissionAsk } from '@/lib/commission-ask'
 import { PageBody, TopBar } from '@/components/page-header'
 import { ProductOptionsEditor } from '@/components/product-options'
 import { SearchSelect } from '@/components/search-select'
@@ -152,6 +153,9 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
   const [images, setImages] = useState<Media[]>(() => product?.images.map(toMedia) ?? [])
   const [video, setVideo] = useState<Media | null>(() => (product?.video ? toMedia(product.video) : null))
   const [errors, setErrors] = useState<Partial<Record<string, ErrorKey>>>({})
+  // New products: a commission request sent along with the product.
+  const [commissionAsk, setCommissionAsk] = useState<CommissionAsk | null>(null)
+  const [commissionError, setCommissionError] = useState<string | null>(null)
   const profile = useShopProfile()
   const imageInput = useRef<HTMLInputElement>(null)
   const videoInput = useRef<HTMLInputElement>(null)
@@ -269,7 +273,9 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
     }
     if (intent === 'publish' && images.length === 0) e.images = 'images'
     setErrors(e)
-    return Object.keys(e).length === 0
+    const commissionProblem = !product && commissionAsk ? askProblem(commissionAsk, t, locale) : null
+    setCommissionError(commissionProblem)
+    return Object.keys(e).length === 0 && !commissionProblem
   }
 
   const save = useMutation({
@@ -303,6 +309,7 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
               }
             })
           : [],
+        ...(!product && commissionAsk && { commissionRequest: askBody(commissionAsk) }),
       }
       return product
         ? send<ShopProductDetail>('PUT', `/me/shop/products/${product.id}`, body)
@@ -768,8 +775,17 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
             )}
           </Card>
 
-          {/* Saved products only: the rate is set per product. */}
-          {product?.id && <CommissionCard productId={product.id} />}
+          {/* Saved: request (or change a waiting request) now. New: sent with the product. */}
+          {product?.id ? (
+            <CommissionCard productId={product.id} />
+          ) : (
+            <NewProductCommission
+              categoryId={form.categoryId}
+              value={commissionAsk}
+              onChange={(ask) => (setCommissionAsk(ask), setCommissionError(null))}
+              error={commissionError}
+            />
+          )}
         </form>
       </PageBody>
 

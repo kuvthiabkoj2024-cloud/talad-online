@@ -1,5 +1,5 @@
 import { ADDRESS_LABELS, BANK_CODES, PROVINCE_CODES, type AddressLabel, type BankCode, type ProvinceCode } from '@talad/shared';
-import { IsBoolean, IsEmail, IsIn, IsNotEmpty, IsOptional, IsString, Length, ValidateIf } from 'class-validator';
+import { IsBoolean, IsEmail, IsIn, IsLatitude, IsLongitude, IsNotEmpty, IsOptional, IsString, Length, ValidateIf } from 'class-validator';
 
 export class ProfileDto {
   @IsString()
@@ -44,6 +44,17 @@ export class AddressDto {
   @IsString()
   @Length(3, 255)
   line: string;
+
+  /** Pinned on the map (both, or null to remove the pin); left out, the pin stays. */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsLatitude()
+  latitude?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsLongitude()
+  longitude?: number | null;
 
   @IsOptional()
   @IsBoolean()

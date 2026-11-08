@@ -11,7 +11,7 @@ import { AdminProductsController } from './products/admin-products.controller.js
 import { AdminProductsService } from './products/admin-products.service.js';
 import { AdminCatalogController } from './admin-catalog.controller.js';
 import { AdminCatalogService } from './admin-catalog.service.js';
-import { AdminCommissionController, ShopCommissionController } from './commission/commission-requests.controller.js';
+import { AdminCommissionController, ShopCommissionController, ShopCommissionPreviewController } from './commission/commission-requests.controller.js';
 import { CommissionRequestsService } from './commission/commission-requests.service.js';
 import { CategoriesController } from './categories/categories.controller.js';
 import { CategoriesService } from './categories/categories.service.js';
@@ -39,7 +39,7 @@ import { ProfilesService } from './videos/profiles.service.js';
 /** Categories, units, products, variants and moderation (§2.5, §2.6, §3.3). */
 @Module({
   imports: [AuthModule, CmsModule, MediaModule, PromotionsModule, NotificationsModule, OrdersModule],
-  controllers: [AdminVideosController, ChatController, PhotoSearchController, CategoriesController, UnitsController, ProductsController, ShopProductsController, AdminProductsController, AdminCatalogController, VideosController, MyVideosController, ShopVideosController, FeedPostsController, MyFeedPostsController, ProfilesController, MyProfileFollowsController, MyLikedVideosController, ShopCommissionController, AdminCommissionController],
+  controllers: [AdminVideosController, ChatController, PhotoSearchController, CategoriesController, UnitsController, ProductsController, ShopProductsController, AdminProductsController, AdminCatalogController, VideosController, MyVideosController, ShopVideosController, FeedPostsController, MyFeedPostsController, ProfilesController, MyProfileFollowsController, MyLikedVideosController, ShopCommissionController, ShopCommissionPreviewController, AdminCommissionController],
   providers: [
     AdminVideosService,
     CommissionRequestsService,

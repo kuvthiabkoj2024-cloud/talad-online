@@ -1,4 +1,4 @@
-import type { AddressLabel, BankCode, ProvinceCode } from "@talad/shared";
+import type { AddressLabel, BankCode, GeoPoint, ProvinceCode } from "@talad/shared";
 
 /** Mirrors the API's saved address (services/api customers module). */
 export interface AddressItem {
@@ -10,12 +10,17 @@ export interface AddressItem {
   district: string;
   village: string | null;
   line: string;
+  /** Pinned on the map (shops can deliver free within a distance of it). */
+  location?: GeoPoint | null;
   isDefault: boolean;
 }
 
-export type AddressInput = Omit<AddressItem, "id" | "label" | "village"> & {
+export type AddressInput = Omit<AddressItem, "id" | "label" | "village" | "location"> & {
   label?: AddressLabel;
   village?: string;
+  /** Both, or null to remove the pin. */
+  latitude: number | null;
+  longitude: number | null;
 };
 
 export interface BankAccountItem {

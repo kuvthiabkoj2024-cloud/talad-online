@@ -1,3 +1,4 @@
+import type { FreeDeliveryOffer } from "@talad/shared";
 import type { ProductCard } from "./api";
 
 /** Mirrors the public shop profile (services/api shops module). */
@@ -15,6 +16,8 @@ export interface PublicShop {
   /** Customers following the shop. */
   followerCount: number;
   joinedAt: string;
+  /** Free urgent delivery within this distance of the shop (null: not offered). */
+  freeDelivery: FreeDeliveryOffer | null;
 }
 
 export const SHOP_SORTS = ["popular", "new", "price_asc", "price_desc"] as const;

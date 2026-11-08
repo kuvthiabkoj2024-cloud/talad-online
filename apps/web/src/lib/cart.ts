@@ -64,9 +64,18 @@ export interface CheckoutQuote {
     total: number;
     cod: boolean;
     /** The shop's own urgent delivery to this address (null when it doesn't deliver there). */
-    urgent: { fee: number; eta: string } | null;
+    urgent: {
+      fee: number;
+      /** Free: the pinned address is within the shop's free radius. */
+      free: boolean;
+      /** From the shop to the pinned address (null when either isn't pinned). */
+      distanceKm: number | null;
+      eta: string;
+    } | null;
     /** The customer chose it; its fee is `shippingFee` (in `total`). */
     urgentSelected: boolean;
+    /** The shop delivers free within this many km, but the address isn't pinned to check. */
+    pinForFreeKm: number | null;
     /** The shop lets customers collect at its address (null when it doesn't). */
     pickup: { address: string | null; latitude: number | null; longitude: number | null } | null;
     pickupSelected: boolean;
@@ -87,7 +96,8 @@ export interface CheckoutQuote {
   shippingTotal: number;
   total: number;
   /** `needed`: some shop goes by courier (not urgent delivery or pickup). */
-  delivery: { options: DeliveryOption[]; selectedId: string | null; needed: boolean };
+  /** `noCommonCourier`: couriers reach the address, but the shops ship with none in common. */
+  delivery: { options: DeliveryOption[]; selectedId: string | null; needed: boolean; noCommonCourier: boolean };
   /** The applied coupon; `couponError` says why a requested code wasn't applied. */
   coupon: { code: string; shopId: string | null; discount: number } | null;
   couponError: CouponErrorCode | null;
@@ -127,6 +137,7 @@ export type CartErrorCode =
   | "OWN_PRODUCT"
   | "SHOP_BLOCKED"
   | "DELIVERY_REQUIRED"
+  | "NO_COMMON_DELIVERY"
   | "PAYMENT_METHOD_DISABLED"
   | CouponErrorCode
   | "UNAUTHENTICATED"

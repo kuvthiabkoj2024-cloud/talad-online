@@ -18,7 +18,7 @@ import { useSearchParamInput, useUrlParams } from '@/hooks/use-url-params'
 import { useI18n } from '@/i18n/context'
 import { api, send } from '@/lib/api'
 import { fill, formatDate, formatMoney, formatNumber } from '@/lib/format'
-import { openPrivateFile } from '@/lib/private-file'
+import { PrivateFileThumb } from '@/components/file-viewer'
 import type { OrderDetail, OrderList } from '@/lib/types'
 import { PaymentCheckPanel } from '@/pages/payments'
 
@@ -307,10 +307,7 @@ export function OrderDetailPage() {
                   </div>
                 )}
                 {o.payment?.hasSlip && (
-                  <Button variant="outline" size="sm" className="mt-1 self-start" onClick={() => void openPrivateFile(`/admin/orders/${encodeURIComponent(o.number)}/slip`)}>
-                    <ScanSearch />
-                    {t.orders.viewSlip}
-                  </Button>
+                  <PrivateFileThumb path={`/admin/orders/${encodeURIComponent(o.number)}/slip`} title={t.orders.viewSlip} className="mt-1 w-28" />
                 )}
                 <div className="my-1 border-t" />
                 <Row label={t.orders.subtotal} value={formatMoney(o.subtotal, locale)} />

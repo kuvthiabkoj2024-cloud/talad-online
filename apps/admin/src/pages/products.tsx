@@ -7,6 +7,7 @@ import { CheckCircle2, ExternalLink, ImageOff, Package, TriangleAlert, Video } f
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
+import { ImageGallery } from '@/components/file-viewer'
 import { ALERTS_KEY } from '@/nav'
 import { ProductStatusBadge } from '@/components/badges'
 import { ConfirmDialog, type ConfirmOptions } from '@/components/confirm-dialog'
@@ -202,11 +203,7 @@ export function ProductDetailPage() {
             </CardHeader>
             <CardContent className="flex flex-wrap gap-3">
               {p.videoUrl && <video src={p.videoUrl} controls playsInline className="aspect-[9/16] w-40 rounded-xl bg-black object-contain" />}
-              {p.imageUrls.map((u) => (
-                <a key={u} href={u} target="_blank" rel="noreferrer" className="block size-40 overflow-hidden rounded-xl border bg-muted">
-                  <img src={u} alt="" className="size-full object-cover" />
-                </a>
-              ))}
+              <ImageGallery urls={p.imageUrls} title={p.name} />
               {!p.videoUrl && p.imageUrls.length === 0 && <ImageOff className="size-6 text-muted-foreground" />}
             </CardContent>
           </Card>

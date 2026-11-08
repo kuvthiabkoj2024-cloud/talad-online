@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@talad/ui/comp
 import { Label } from '@talad/ui/components/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@talad/ui/components/table'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ExternalLink, FileText, ImageOff, LoaderCircle, Store } from 'lucide-react'
+import { ExternalLink, ImageOff, LoaderCircle, Store } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
@@ -22,7 +22,8 @@ import type { Dict } from '@/i18n/en'
 import { useI18n } from '@/i18n/context'
 import { ApiError, api, send } from '@/lib/api'
 import { fill, formatDate, formatMoney, formatNumber, storefrontUrl } from '@/lib/format'
-import { openPrivateFile, usePrivateImage } from '@/lib/private-file'
+import { PrivateFileThumb } from '@/components/file-viewer'
+import { usePrivateImage } from '@/lib/private-file'
 import type { Paged, ShopDetail, ShopRow, ShopStatus } from '@/lib/types'
 import { ALERTS_KEY } from '@/nav'
 
@@ -228,21 +229,18 @@ export function ShopDetailPage() {
                 {s.documents.length === 0 ? (
                   <p className="text-sm text-muted-foreground">{t.shops.noDocuments}</p>
                 ) : (
-                  s.documents.map((d) => (
-                    <div key={d.id} className="flex items-center gap-3 rounded-lg border p-3">
-                      <FileText className="size-5 text-muted-foreground" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-medium">{t.shops.docTypes[d.type]}</span>
-                        <span className="block text-xs text-muted-foreground">
-                          {formatDate(d.createdAt, locale, true)} · {d.ext?.toUpperCase()}
-                          {d.reviewedAt && ` · ${fill(t.shops.reviewed, { date: formatDate(d.reviewedAt, locale) })}`}
-                        </span>
-                      </span>
-                      <Button variant="outline" size="sm" onClick={() => void openPrivateFile(`/admin/shops/${s.id}/documents/${d.id}`)}>
-                        {t.shops.viewDocument}
-                      </Button>
-                    </div>
-                  ))
+                  <div className="flex flex-wrap gap-4">
+                    {s.documents.map((d) => (
+                      <PrivateFileThumb
+                        key={d.id}
+                        path={`/admin/shops/${s.id}/documents/${d.id}`}
+                        title={t.shops.docTypes[d.type]}
+                        caption={[formatDate(d.createdAt, locale, true), d.reviewedAt && fill(t.shops.reviewed, { date: formatDate(d.reviewedAt, locale) })]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      />
+                    ))}
+                  </div>
                 )}
               </CardContent>
             </Card>

@@ -231,6 +231,7 @@ export function LoginPage() {
         </div>
         <CodeInput value={code} onChange={setCode} onComplete={(v) => void submit(v)} disabled={pending} />
         {devCode && <DevCode code={devCode} />}
+        {!tf && captcha.widget}
         {errorText}
         <Button type="submit" size="lg" className="w-full" disabled={pending || code.length !== OTP_LENGTH}>
           {pending && <LoaderCircle className="animate-spin" />}
@@ -263,6 +264,7 @@ export function LoginPage() {
       >
         <Heading title={t.auth.forgotTitle} subtitle={t.auth.forgotSubtitle} />
         {phoneField}
+        {captcha.widget}
         {errorText}
         <Button type="submit" size="lg" disabled={pending || !phone.trim()}>
           {pending && <LoaderCircle className="animate-spin" />}
@@ -297,6 +299,7 @@ export function LoginPage() {
           />
           <p className="text-xs text-muted-foreground">{fill(t.auth.passwordHint, { n: ACCOUNT_PASSWORD.min })}</p>
         </div>
+        {captcha.widget}
         {errorText}
         <Button type="submit" size="lg" className="w-full" disabled={pending || code.length !== OTP_LENGTH || !newPassword}>
           {pending && <LoaderCircle className="animate-spin" />}
@@ -348,6 +351,7 @@ export function LoginPage() {
           </div>
           <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
+        {captcha.widget}
         {errorText}
         <Button type="submit" size="lg" disabled={pending || !identifier.trim() || !password}>
           {pending && <LoaderCircle className="animate-spin" />}
@@ -382,6 +386,7 @@ export function LoginPage() {
           </div>
         )}
         {phoneField}
+        {captcha.widget}
         {errorText}
         <Button type="submit" size="lg" disabled={pending || !phone.trim() || (register && !name.trim())}>
           {pending && <LoaderCircle className="animate-spin" />}
@@ -409,7 +414,6 @@ export function LoginPage() {
       aside={<LocaleToggle locale={locale} onChange={setLocale} />}
     >
       <div className="flex flex-col gap-5">{body}</div>
-      {captcha.widget}
       {step.kind === 'start' && (
         <p className="mt-6 text-center text-sm text-muted-foreground">
           {register ? t.auth.haveAccount : t.auth.noAccount}{' '}

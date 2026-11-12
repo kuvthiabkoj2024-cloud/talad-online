@@ -33,25 +33,27 @@ function loadTurnstile(): Promise<TurnstileApi> {
  * ("Verifying… → Success", a checkbox to tick when Cloudflare is unsure). Without a site key
  * (development) it's off.
  *
- * Render `widget` inside the form; send `headers()` with the request (it uses up the token and
+ * Render `widget` inside the form, e.g. above its button (forms can swap: the box follows
+ * wherever `widget` is mounted, one place at a time); send `headers()` with the request (it uses up the token and
  * fetches a fresh one for the next try). Without a pass yet, `headers()` is empty and the API
  * answers CAPTCHA_REQUIRED, so buttons never get stuck disabled. When the check can't run, the
  * widget shows `failedText` with Cloudflare's code (e.g. 110200: hostname not allowed).
  */
 function useTurnstile(siteKey: string | undefined, options: { action: string; language?: string; failedText?: string }) {
-  const slot = React.useRef<HTMLDivElement>(null)
+  // A callback ref: when the form showing the box changes, it's drawn again in the new one.
+  const [slot, setSlot] = React.useState<HTMLDivElement | null>(null)
   const widget = React.useRef<string | null>(null)
   const [token, setToken] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const { action, language, failedText } = options
 
   React.useEffect(() => {
-    if (!siteKey) return
+    if (!siteKey || !slot) return
     let cancelled = false
     loadTurnstile()
       .then((api) => {
-        if (cancelled || !slot.current) return
-        widget.current = api.render(slot.current, {
+        if (cancelled) return
+        widget.current = api.render(slot, {
           sitekey: siteKey,
           action,
           language: language ?? "auto",
@@ -75,8 +77,9 @@ function useTurnstile(siteKey: string | undefined, options: { action: string; la
       cancelled = true
       if (widget.current) window.turnstile?.remove(widget.current)
       widget.current = null
+      setToken(null)
     }
-  }, [siteKey, action, language])
+  }, [siteKey, slot, action, language])
 
   const headers = React.useCallback((): Record<string, string> => {
     if (!siteKey || !token) return {}
@@ -88,7 +91,7 @@ function useTurnstile(siteKey: string | undefined, options: { action: string; la
   return {
     widget: siteKey ? (
       <>
-        <div ref={slot} className="min-h-[65px] w-full" />
+        <div ref={setSlot} className="min-h-[65px] w-full" />
         {error && failedText && (
           <p role="alert" className="text-center text-sm text-destructive">
             {failedText} ({error})

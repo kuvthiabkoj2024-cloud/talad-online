@@ -1,4 +1,4 @@
-import { MEDIA_LIMITS, PRODUCT_RULES, type ProductSaveIntent, DEPOSIT_RULES, DEPOSIT_TYPES, GUARANTEE_RULES, GUARANTEE_UNITS, customerGuarantee, type DepositType, type GuaranteeUnit } from '@talad/shared'
+import { MEDIA_LIMITS, PRICE_TIER_RULES, PRODUCT_RULES, formatMoney, type ProductSaveIntent, DEPOSIT_RULES, DEPOSIT_TYPES, GUARANTEE_RULES, GUARANTEE_UNITS, customerGuarantee, type DepositType, type GuaranteeUnit } from '@talad/shared'
 import { Button } from '@talad/ui/components/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@talad/ui/components/card'
 import { Input } from '@talad/ui/components/input'
@@ -9,7 +9,7 @@ import { Switch } from '@talad/ui/components/switch'
 import { Textarea } from '@talad/ui/components/textarea'
 import { cn } from '@talad/ui/lib/utils'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, ImagePlus, Info, LoaderCircle, Shuffle, Trash2, TriangleAlert, Video, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ImagePlus, Info, LoaderCircle, Plus, Shuffle, Trash2, TriangleAlert, Video, X } from 'lucide-react'
 import { useId, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { Link } from 'react-router'
@@ -51,6 +51,9 @@ interface FormState {
   sku: string
   price: string
   compareAtPrice: string
+  bulkOn: boolean
+  /** Bulk prices as typed, in the seller's order. */
+  tiers: TierRow[]
   stock: string
   lowStockThreshold: string
   guaranteeOn: boolean
@@ -67,7 +70,15 @@ interface FormState {
   cells: Record<string, VariantCell>
 }
 
+/** One bulk price row: from `minQuantity` items, `price` each. */
+interface TierRow {
+  uid: string
+  minQuantity: string
+  price: string
+}
+
 const uid = () => crypto.randomUUID()
+const blankTier = (): TierRow => ({ uid: uid(), minQuantity: '', price: '' })
 const num = (s: string) => (s.trim() === '' ? NaN : Number(s.replace(/,/g, '')))
 const isWhole = (s: string) => /^\d+$/.test(s.trim())
 
@@ -80,6 +91,8 @@ function fromProduct(p?: ShopProductDetail): FormState {
     sku: p?.sku ?? '',
     price: p ? String(p.price) : '',
     compareAtPrice: p?.compareAtPrice != null ? String(p.compareAtPrice) : '',
+    bulkOn: (p?.priceTiers.length ?? 0) > 0,
+    tiers: (p?.priceTiers ?? []).map((t) => ({ uid: uid(), minQuantity: String(t.minQuantity), price: String(t.price) })),
     stock: p ? String(p.stock) : '0',
     lowStockThreshold: p ? String(p.lowStockThreshold) : '5',
     guaranteeOn: p?.guarantee != null,
@@ -176,6 +189,12 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
     return (c.autoSku ? autoSku(form.sku, values) : c.sku).trim()
   }
   const uploading = images.some((i) => !i.key) || (video !== null && !video.key)
+  // Rows left completely empty are ignored.
+  const usedTiers = form.tiers.filter((r) => r.minQuantity.trim() || r.price.trim())
+  const setTiers = (tiers: TierRow[]) => {
+    setForm((f) => ({ ...f, tiers }))
+    setErrors((e) => Object.fromEntries(Object.entries(e).filter(([k]) => !k.startsWith('tier'))))
+  }
 
   async function addImages(files: FileList | null) {
     if (!files?.length) return
@@ -250,6 +269,21 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
     if (!(num(form.price) >= 0)) e.price = 'price'
     if (form.compareAtPrice.trim() && !(num(form.compareAtPrice) > num(form.price))) e.compareAtPrice = 'compareAt'
     if (!PRODUCT_RULES.skuPattern.test(form.sku.trim())) e.sku = 'sku'
+    if (form.bulkOn) {
+      // Each row: more items and a lower price than the row above, and below the product price.
+      let quantity = 1
+      let price = num(form.price)
+      for (const row of usedTiers) {
+        const q = num(row.minQuantity)
+        const p = num(row.price)
+        if (!isWhole(row.minQuantity) || q < PRICE_TIER_RULES.minQuantity || q > PRICE_TIER_RULES.maxQuantity) e[`tierQty-${row.uid}`] = 'tierQuantity'
+        else if (q <= quantity) e[`tierQty-${row.uid}`] = 'tierQuantityOrder'
+        else quantity = q
+        if (!(p > 0) || !(p < num(form.price))) e[`tierPrice-${row.uid}`] = 'tierPrice'
+        else if (p >= price) e[`tierPrice-${row.uid}`] = 'tierPriceOrder'
+        else price = p
+      }
+    }
     if (!isWhole(form.lowStockThreshold)) e.lowStockThreshold = 'stock'
     if (form.guaranteeOn && !(isWhole(form.guaranteeDuration) && num(form.guaranteeDuration) >= 1 && num(form.guaranteeDuration) <= GUARANTEE_RULES.durationMax)) e.guarantee = 'guarantee'
     if (form.depositOn && !(num(form.depositValue) >= 1 && (form.depositType === 'AMOUNT' || num(form.depositValue) <= DEPOSIT_RULES.percentMax))) e.deposit = 'deposit'
@@ -290,6 +324,7 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
         sku: form.sku.trim(),
         price: num(form.price),
         compareAtPrice: form.compareAtPrice.trim() ? num(form.compareAtPrice) : null,
+        priceTiers: form.bulkOn ? usedTiers.map((r) => ({ minQuantity: num(r.minQuantity), price: num(r.price) })) : [],
         guarantee: form.guaranteeOn ? { duration: num(form.guaranteeDuration), unit: form.guaranteeUnit, terms: form.guaranteeTerms.trim() || undefined } : null,
         deposit: form.depositOn ? { type: form.depositType, value: num(form.depositValue) } : null,
         stock: options ? 0 : Number(form.stock),
@@ -640,6 +675,80 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
           <Card className="xl:self-stretch">
             <CardHeader className="flex flex-row items-center justify-between gap-3">
               <div>
+                <CardTitle>{t.editor.bulk.title}</CardTitle>
+                <CardDescription>{t.editor.bulk.hint}</CardDescription>
+              </div>
+              <Switch
+                aria-label={t.editor.bulk.title}
+                checked={form.bulkOn}
+                onCheckedChange={(on) => {
+                  setForm((f) => ({ ...f, bulkOn: on, tiers: on && !f.tiers.length ? [blankTier()] : f.tiers }))
+                  clearErrors('priceTiers')
+                }}
+              />
+            </CardHeader>
+            {form.bulkOn && (
+              <CardContent className="flex flex-col gap-3">
+                <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)_2.25rem] gap-2 text-sm font-medium">
+                  <span>{t.editor.bulk.quantity}</span>
+                  <span>{t.editor.bulk.price}</span>
+                </div>
+                {form.tiers.map((row, i) => {
+                  const qtyError = errors[`tierQty-${row.uid}`]
+                  const priceError = errors[`tierPrice-${row.uid}`]
+                  return (
+                    <div key={row.uid} className="flex flex-col gap-1">
+                      <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)_2.25rem] items-center gap-2">
+                        <Input
+                          inputMode="numeric"
+                          aria-label={`${t.editor.bulk.quantity} ${i + 1}`}
+                          placeholder={String(i === 0 ? 10 : 10 * (i + 1))}
+                          value={row.minQuantity}
+                          onChange={(e) => setTiers(form.tiers.map((r) => (r.uid === row.uid ? { ...r, minQuantity: e.target.value.replace(/\D/g, '') } : r)))}
+                          {...(qtyError ? { 'aria-invalid': true as const } : {})}
+                        />
+                        <MoneyInput
+                          aria-label={`${t.editor.bulk.price} ${i + 1}`}
+                          value={row.price}
+                          onValueChange={(v) => setTiers(form.tiers.map((r) => (r.uid === row.uid ? { ...r, price: v } : r)))}
+                          {...(priceError ? { 'aria-invalid': true as const } : {})}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={t.editor.bulk.remove}
+                          title={t.editor.bulk.remove}
+                          onClick={() => {
+                            const rest = form.tiers.filter((r) => r.uid !== row.uid)
+                            setTiers(rest)
+                            if (!rest.length) set('bulkOn', false)
+                          }}
+                        >
+                          <Trash2 />
+                        </Button>
+                      </div>
+                      {(qtyError || priceError) && (
+                        <p className="text-sm text-destructive">{t.editor.errors[(qtyError ?? priceError)!]}</p>
+                      )}
+                    </div>
+                  )
+                })}
+                {form.tiers.length < PRICE_TIER_RULES.maxTiers && (
+                  <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setTiers([...form.tiers, blankTier()])}>
+                    <Plus />
+                    {t.editor.bulk.add}
+                  </Button>
+                )}
+                <BulkPreview price={form.price} tiers={usedTiers} t={t} locale={locale} />
+                {form.hasOptions && <p className="text-xs text-muted-foreground">{t.editor.bulk.options}</p>}
+              </CardContent>
+            )}
+          </Card>
+
+          <Card className="xl:self-stretch">
+            <CardHeader className="flex flex-row items-center justify-between gap-3">
+              <div>
                 <CardTitle>{t.editor.guarantee.title}</CardTitle>
                 <CardDescription>{t.editor.guarantee.hint}</CardDescription>
               </div>
@@ -803,6 +912,30 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
         </div>
       </div>
     </>
+  )
+}
+
+/**
+ * What customers will pay, e.g. "Buy 1–9: 120,000 ₭ each" then "Buy 10+: 100,000 ₭ each, 17% off".
+ * Shown once the rows make sense together.
+ */
+function BulkPreview({ price, tiers, t, locale }: { price: string; tiers: TierRow[]; t: Dict; locale: ReturnType<typeof useI18n>['locale'] }) {
+  const base = num(price)
+  const rows = tiers.map((r) => ({ from: num(r.minQuantity), price: num(r.price) }))
+  const sensible =
+    base > 0 &&
+    rows.length > 0 &&
+    rows.every((r, i) => Number.isInteger(r.from) && r.from >= PRICE_TIER_RULES.minQuantity && r.price > 0 && r.price < (i ? rows[i - 1].price : base) && (!i || r.from > rows[i - 1].from))
+  if (!sensible) return null
+  return (
+    <ul className="flex flex-col gap-1 rounded-lg bg-muted px-3 py-2 text-sm">
+      <li>{fill(t.editor.bulk.single, { range: rows[0].from > 2 ? `1–${rows[0].from - 1}` : '1', price: formatMoney(base, locale) })}</li>
+      {rows.map((r) => (
+        <li key={r.from} className="font-medium text-primary">
+          {fill(t.editor.bulk.preview, { from: r.from, price: formatMoney(r.price, locale), percent: Math.round((1 - r.price / base) * 100) })}
+        </li>
+      ))}
+    </ul>
   )
 }
 

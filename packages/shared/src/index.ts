@@ -1,5 +1,6 @@
 export * from './auth.js';
 export * from './address.js';
+export * from './bulk-pricing.js';
 export * from './catalog.js';
 export * from './commission.js';
 export * from './delivery.js';

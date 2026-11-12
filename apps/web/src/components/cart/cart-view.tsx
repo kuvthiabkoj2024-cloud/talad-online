@@ -177,7 +177,7 @@ export function CartView({
                           )
                         )}
                         <div className="mt-auto flex flex-wrap items-end justify-between gap-2 pt-1">
-                          <LinePrice item={item} quantity={qty(item)} locale={locale} />
+                          <LinePrice item={item} quantity={qty(item)} locale={locale} dict={dict} />
                           {item.available && (
                             <QuantityStepper
                               value={qty(item)}
@@ -246,15 +246,30 @@ function Checkbox({
 }
 
 /** Line total, with "unit × n" (and the struck-through list price) underneath. */
-function LinePrice({ item, quantity, locale }: { item: CartItem; quantity: number; locale: Locale }) {
-  const discounted = item.compareAtPrice !== null && item.compareAtPrice > item.unitPrice;
+function LinePrice({ item, quantity, locale, dict }: { item: CartItem; quantity: number; locale: Locale; dict: Dict }) {
+  // A bulk price is crossed out against the single-unit price (or the higher list price).
+  const was = Math.max(item.compareAtPrice ?? 0, item.bulk ? item.basePrice : 0);
+  const discounted = was > item.unitPrice;
+  // Shown only once the server has priced this quantity (the stepper refreshes the cart).
+  const settled = quantity === item.quantity;
   return (
     <div className="flex flex-col">
       <span className="font-bold tabular-nums text-primary">{formatMoney(item.unitPrice * quantity, locale)}</span>
       {(quantity > 1 || discounted) && (
         <span className="flex flex-wrap gap-x-1.5 text-xs tabular-nums text-muted-foreground">
           {quantity > 1 && <span>{formatMoney(item.unitPrice, locale)} × {quantity}</span>}
-          {discounted && <span className="line-through">{formatMoney(item.compareAtPrice!, locale)}</span>}
+          {discounted && <span className="line-through">{formatMoney(was, locale)}</span>}
+        </span>
+      )}
+      {settled && item.available && item.bulk && (
+        <span className="text-xs font-medium text-sale">{interpolate(dict.bulkApplied, { n: item.bulk.quantity })}</span>
+      )}
+      {settled && item.available && item.nextBulk && (
+        <span className="text-xs text-primary">
+          {interpolate(dict.bulkNext, {
+            n: item.nextBulk.more,
+            price: formatMoney(item.nextBulk.unitPrice, locale),
+          })}
         </span>
       )}
     </div>

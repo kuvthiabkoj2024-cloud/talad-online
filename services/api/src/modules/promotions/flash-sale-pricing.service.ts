@@ -6,8 +6,8 @@ export interface FlashDiscount {
   endsAt: Date;
 }
 
-/** Sale price for `price` at `percent` off, in whole kip. */
-export const flashPrice = (price: number, percent: number) => Math.round((price * (100 - percent)) / 100);
+/** Sale price for `price` at `percent` off, in whole kip (shared with the clients). */
+export { flashPrice } from '@talad/shared';
 
 /**
  * Which products are in a running flash sale (§3.4), used wherever a price is shown or

@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import type { ProductVariantOption } from "@/lib/api";
+import { bulkPrice, bulkRows, type BulkPricing } from "@/lib/bulk-price";
 import { addToCart } from "@/lib/cart-actions";
 import { SELLER_CENTER_URL } from "@/lib/customer";
 import { formatPriceRange, interpolate } from "@/lib/format";
@@ -27,6 +28,8 @@ export function ProductPurchase({
   price,
   priceMax,
   compareAtPrice,
+  bulkPricing = null,
+  flashPercent = null,
   stock,
   options,
   variants,
@@ -42,6 +45,10 @@ export function ProductPurchase({
   price: number;
   priceMax: number | null;
   compareAtPrice: number | null;
+  /** Cheaper per unit when buying more; null = one price. */
+  bulkPricing?: BulkPricing | null;
+  /** A running flash sale's percent off (already in `price` and the variants' prices). */
+  flashPercent?: number | null;
   stock: number;
   /** What the variants differ by; each gets its own row of choices (Colour, Size…). */
   options: { name: string; values: string[] }[];
@@ -69,12 +76,18 @@ export function ProductPurchase({
   const ownProduct = customer?.shop?.id === shopId;
   const canBuy = !needsOption && available > 0 && !ownProduct;
 
-  const shownPrice = variant
-    ? formatMoney(variant.price, locale)
-    : formatPriceRange(price, priceMax, locale);
-  const unitPrice = variant?.price ?? price;
-  // During a flash sale each option is crossed out against its own regular price.
-  const wasPrice = variant?.regularPrice ?? compareAtPrice;
+  // The single-unit price before any flash sale, once it's known (an option chosen, or none to choose).
+  const regular = variant ? (variant.regularPrice ?? variant.price) : variants.length === 0 && bulkPricing ? bulkPricing.basePrice : null;
+  const bulk = bulkPricing && regular !== null ? bulkPrice(bulkPricing, regular, quantity, flashPercent) : null;
+  const onePrice = variant?.price ?? price;
+  const unitPrice = bulk ?? onePrice;
+  const shownPrice = variant || bulk !== null ? formatMoney(unitPrice, locale) : formatPriceRange(price, priceMax, locale);
+  // During a flash sale each option is crossed out against its own regular price; a bulk price
+  // against the price of one.
+  const wasPrice = bulk !== null && bulk < onePrice ? Math.max(onePrice, variant?.regularPrice ?? compareAtPrice ?? 0) : (variant?.regularPrice ?? compareAtPrice);
+  // Without a chosen option, the table shows the cheapest one's prices.
+  const tableRegular = regular ?? (bulkPricing ? Math.min(...variants.map((v) => v.regularPrice ?? v.price)) : null);
+  const tiers = bulkPricing && tableRegular !== null && Number.isFinite(tableRegular) ? bulkRows(bulkPricing, tableRegular, quantity, flashPercent) : null;
   // A crossed-out "was" price only makes sense against a single price, not a range.
   const showCompare = (priceMax === null || variant !== null) && wasPrice !== null && wasPrice > unitPrice;
 
@@ -129,6 +142,31 @@ export function ProductPurchase({
           </p>
         )}
       </div>
+
+      {tiers && (
+        <div className="flex flex-col gap-2 sm:max-w-md">
+          <p className="text-sm font-semibold">{dict.bulkTitle}</p>
+          <ul className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-2">
+            {tiers.map((r) => (
+              <li
+                key={r.from}
+                aria-current={r.active || undefined}
+                className={`rounded-lg border px-3 py-2 text-sm ${r.active ? "border-sale bg-sale/10 text-sale" : "border-border"}`}
+              >
+                <span className="block text-xs text-muted-foreground">
+                  {r.to === null
+                    ? interpolate(dict.bulkFrom, { n: r.from })
+                    : r.to === r.from
+                      ? interpolate(dict.bulkExact, { n: r.from })
+                      : interpolate(dict.bulkRange, { from: r.from, to: r.to })}
+                </span>
+                <span className="font-semibold tabular-nums">{interpolate(dict.bulkEach, { price: formatMoney(r.price, locale) })}</span>
+              </li>
+            ))}
+          </ul>
+          {variants.length > 0 && <p className="text-xs text-muted-foreground">{dict.bulkNote}</p>}
+        </div>
+      )}
 
       {byOptions &&
         options.map((o) => (

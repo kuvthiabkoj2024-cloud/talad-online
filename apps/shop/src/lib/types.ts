@@ -3,6 +3,7 @@ import type {
   Commission,
   GeoPoint,
   Locale,
+  PriceTier,
   OrderStatus,
   PaymentMethod,
   ProductStatus,
@@ -169,6 +170,8 @@ export interface ShopProductDetail {
   sku: string
   price: number
   compareAtPrice: number | null
+  /** Bulk prices in quantity order; [] = one price for any quantity. */
+  priceTiers: PriceTier[]
   /** The period the shop gives; customers get double. */
   guarantee: { duration: number; unit: GuaranteeUnit; terms: string | null } | null
   deposit: { type: DepositType; value: number } | null

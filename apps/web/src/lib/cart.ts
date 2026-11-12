@@ -11,6 +11,12 @@ export interface CartItem {
   sku: string;
   imageUrl: string | null;
   unitPrice: number;
+  /** One unit's price before bulk pricing and flash sales. */
+  basePrice: number;
+  /** The bulk price reached: units of this product in the cart (all options) and the tier. */
+  bulk: { quantity: number; minQuantity: number } | null;
+  /** The next bulk price and how many more units reach it; null at the top or without bulk prices. */
+  nextBulk: { minQuantity: number; unitPrice: number; more: number } | null;
   compareAtPrice: number | null;
   quantity: number;
   stock: number;

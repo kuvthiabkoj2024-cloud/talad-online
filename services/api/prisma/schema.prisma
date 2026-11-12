@@ -485,6 +485,9 @@ model Product {
   description       String?
   price             Decimal       @db.Decimal(14, 2)
   compareAtPrice    Decimal?      @db.Decimal(14, 2)
+  /// Bulk pricing: [{ minQuantity: 10, price: 100000 }, …] in quantity order, each cheaper (PriceTier
+  /// in @talad/shared). Units of every option count together; null = one price for any quantity.
+  priceTiers        Json?
   /// The guarantee the shop gives, as entered (customers get double, GUARANTEE_RULES); null = none.
   guaranteeDuration Int?
   guaranteeUnit     GuaranteeUnit?

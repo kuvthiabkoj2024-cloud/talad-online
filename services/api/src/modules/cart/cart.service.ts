@@ -1,8 +1,9 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { commissionOf, MAX_CART_QUANTITY, type Commission, type DepositType, type GuaranteeUnit } from '@talad/shared';
+import { bulkUnitPrice, commissionOf, MAX_CART_QUANTITY, tierFor, type Commission, type DepositType, type GuaranteeUnit, type PriceTier } from '@talad/shared';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { MediaService } from '../media/media.service.js';
+import { readPriceTiers } from '../catalog/products/price-tiers.js';
 import { flashPrice, FlashSalePricingService, type FlashDiscount } from '../promotions/flash-sale-pricing.service.js';
 
 const MAX_LINES = 100;
@@ -28,6 +29,7 @@ const lineInclude = {
       sku: true,
       price: true,
       compareAtPrice: true,
+      priceTiers: true,
       guaranteeDuration: true,
       guaranteeUnit: true,
       guaranteeTerms: true,
@@ -69,8 +71,14 @@ export interface CartLine {
   sku: string;
   imageUrl: string | null;
   unitPrice: number;
-  /** Before a running flash sale (equal to `unitPrice` otherwise). */
+  /** Before a running flash sale (equal to `unitPrice` otherwise); already the bulk price. */
   regularPrice: number;
+  /** One unit's price, before bulk pricing and flash sales. */
+  basePrice: number;
+  /** The bulk price reached: units of the product in this cart (all options together) and the tier. */
+  bulk: { quantity: number; minQuantity: number } | null;
+  /** The next bulk price, to tell the buyer how many more to add; null at the top or without tiers. */
+  nextBulk: { minQuantity: number; unitPrice: number; more: number } | null;
   compareAtPrice: number | null;
   quantity: number;
   stock: number;
@@ -83,6 +91,8 @@ export interface CartLine {
   /** Checkout-only details, not sent to clients. */
   /** `commission`: the product's own (approved), else its category's, else the shop's; null = platform default. */
   internal: {
+    /** What `priceLines` needs: the product's own price, its bulk tiers and any flash sale. */
+    pricing: { productPrice: number; compareAtPrice: number | null; tiers: PriceTier[]; flashPercent: number | null };
     commission: Commission | null;
     paymentWindowHrs: number;
     /** The period the shop entered. */
@@ -122,7 +132,7 @@ export class CartService {
       }),
     ]);
     const blocked = new Set(blocks.map((b) => b.shopId));
-    return rows.map((r) => this.toLine(r, customerId, discounts.get(r.productId), blocked.has(r.product.shop.id)));
+    return priceLines(rows.map((r) => this.toLine(r, customerId, discounts.get(r.productId), blocked.has(r.product.shop.id))));
   }
 
   /**
@@ -143,14 +153,14 @@ export class CartService {
       this.prisma.shopCustomerNote.findMany({ where: { customerId, blacklisted: true, shopId: { in: shopIds } }, select: { shopId: true } }),
     ]);
     const blocked = new Set(blocks.map((b) => b.shopId));
-    return items.flatMap((item, i) => {
+    return priceLines(items.flatMap((item, i) => {
       const product = products.get(item.productId);
       if (!product) return [];
       const v = item.variantId ? variants.get(item.variantId) : undefined;
       const variant = v && v.productId === product.id ? { id: v.id, sku: v.sku, attributes: v.attributes, price: v.price, stock: v.stock } : null;
       const row = { id: `chat-${i}`, customerId, productId: product.id, variantId: variant?.id ?? null, quantity: item.quantity, product, variant } as unknown as CartRow;
       return [this.toLine(row, customerId, discounts.get(product.id), blocked.has(product.shop.id))];
-    });
+    }));
   }
 
   async view(customerId: string) {
@@ -228,6 +238,7 @@ export class CartService {
     return this.prisma.cartItem.create({ data: { customerId, productId, variantId: variantId ?? null, quantity } });
   }
 
+  /** One line at its single-unit price; `priceLines` then applies bulk prices across the lines. */
   private toLine(r: CartRow, customerId: string, flash?: FlashDiscount, blocked = false): CartLine {
     const { product, variant } = r;
     const regular = (variant?.price ?? product.price).toNumber();
@@ -247,6 +258,9 @@ export class CartService {
       imageUrl: product.images[0] ? this.media.publicUrl(product.images[0].key) : null,
       unitPrice,
       regularPrice: regular,
+      basePrice: regular,
+      bulk: null,
+      nextBulk: null,
       compareAtPrice: flash ? Math.max(product.compareAtPrice?.toNumber() ?? 0, regular) : (product.compareAtPrice?.toNumber() ?? null),
       quantity: r.quantity,
       stock,
@@ -261,6 +275,12 @@ export class CartService {
       lineTotal: unitPrice * r.quantity,
       shop: { id: product.shop.id, slug: product.shop.slug, name: product.shop.name },
       internal: {
+        pricing: {
+          productPrice: product.price.toNumber(),
+          compareAtPrice: product.compareAtPrice?.toNumber() ?? null,
+          tiers: readPriceTiers(product.priceTiers),
+          flashPercent: flash?.percent ?? null,
+        },
         commission: resolveCommission([product, product.category, ...(product.category.parent ? [product.category.parent] : []), product.shop]),
         paymentWindowHrs: product.shop.paymentWindowHrs,
         guarantee: product.guaranteeDuration && product.guaranteeUnit ? { duration: product.guaranteeDuration, unit: product.guaranteeUnit, terms: product.guaranteeTerms } : null,
@@ -268,6 +288,37 @@ export class CartService {
       },
     };
   }
+}
+
+/**
+ * Bulk prices (§3.3): every option of a product counts towards its tiers, so 5 red and 5 blue
+ * shirts reach the "from 10" price. Only lines that can be bought count. A running flash sale
+ * then takes its percent off the bulk price.
+ */
+export function priceLines(lines: CartLine[]): CartLine[] {
+  const units = new Map<string, number>();
+  for (const l of lines) if (l.available) units.set(l.productId, (units.get(l.productId) ?? 0) + l.quantity);
+  return lines.map((l) => {
+    const { productPrice, compareAtPrice, tiers, flashPercent } = l.internal.pricing;
+    if (!tiers.length) return l;
+    const quantity = units.get(l.productId) ?? l.quantity;
+    const tier = tierFor(tiers, quantity);
+    const sale = (price: number) => (flashPercent === null ? price : flashPrice(price, flashPercent));
+    const regular = bulkUnitPrice(productPrice, l.basePrice, tiers, quantity);
+    const unitPrice = sale(regular);
+    const next = tiers.find((t) => t.minQuantity > quantity);
+    return {
+      ...l,
+      unitPrice,
+      regularPrice: regular,
+      compareAtPrice: flashPercent === null ? compareAtPrice : Math.max(compareAtPrice ?? 0, regular),
+      bulk: tier ? { quantity, minQuantity: tier.minQuantity } : null,
+      nextBulk: next
+        ? { minQuantity: next.minQuantity, unitPrice: sale(bulkUnitPrice(productPrice, l.basePrice, tiers, next.minQuantity)), more: next.minQuantity - quantity }
+        : null,
+      lineTotal: unitPrice * l.quantity,
+    };
+  });
 }
 
 /** An item outside the cart (an order card in a chat). */

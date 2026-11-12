@@ -134,7 +134,13 @@
     },
     "depositTitle": "Deposit for cash on delivery",
     "depositPercent": "Pay {value}% of the price to the shop before ordering, and the rest on delivery.",
-    "depositAmount": "Pay {value} per item to the shop before ordering, and the rest on delivery."
+    "depositAmount": "Pay {value} per item to the shop before ordering, and the rest on delivery.",
+    "bulkTitle": "Buy more, pay less",
+    "bulkRange": "{from}–{to} items",
+    "bulkFrom": "{n}+ items",
+    "bulkExact": "{n} items",
+    "bulkEach": "{price} each",
+    "bulkNote": "All options of this product count together in your cart."
   },
   "auth": {
     "signIn": "Sign in",
@@ -573,7 +579,9 @@
     "shippingNote": "Delivery fee not included: you pay it to the courier.",
     "decrease": "Decrease quantity",
     "increase": "Increase quantity",
-    "ownShop": "Your shop's product"
+    "ownShop": "Your shop's product",
+    "bulkApplied": "Bulk price for {n} items",
+    "bulkNext": "Add {n} more for {price} each"
   },
   "checkout": {
     "secure": "Secure checkout",

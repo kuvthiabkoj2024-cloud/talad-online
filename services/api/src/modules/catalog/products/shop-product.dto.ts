@@ -3,6 +3,7 @@ import {
   GUARANTEE_RULES,
   GUARANTEE_UNITS,
   MEDIA_LIMITS,
+  PRICE_TIER_RULES,
   PRODUCT_RULES,
   PRODUCT_SAVE_INTENTS,
   PRODUCT_STATUSES,
@@ -79,6 +80,19 @@ export class ShopProductOptionDto {
   values: string[];
 }
 
+/** Bulk price: from `minQuantity` units (all options together), each costs `price`. */
+export class ShopProductPriceTierDto {
+  @IsInt()
+  @Min(PRICE_TIER_RULES.minQuantity)
+  @Max(PRICE_TIER_RULES.maxQuantity)
+  minQuantity: number;
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(1)
+  @Max(PRODUCT_RULES.maxPrice)
+  price: number;
+}
+
 export class ShopProductGuaranteeDto {
   /** The period the shop gives; customers get double. */
   @IsInt()
@@ -152,6 +166,14 @@ export class ShopProductDto {
   @Min(0)
   @Max(PRODUCT_RULES.maxPrice)
   compareAtPrice?: number | null;
+
+  /** Cheaper per unit when buying more, in quantity order; omitted or [] = one price. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(PRICE_TIER_RULES.maxTiers)
+  @ValidateNested({ each: true })
+  @Type(() => ShopProductPriceTierDto)
+  priceTiers?: ShopProductPriceTierDto[];
 
   /** Null = no guarantee. */
   @IsOptional()

@@ -1,5 +1,6 @@
 import type { DepositType, FreeDeliveryOffer, GuaranteeUnit } from "@talad/shared";
 import "server-only";
+import type { BulkPricing } from "./bulk-price";
 
 export const API_URL = process.env.API_URL ?? "http://localhost:4000/api/v1";
 
@@ -65,6 +66,8 @@ export interface ProductDetail extends Omit<ProductCard, "imageUrl" | "shop"> {
   guarantee: { duration: number; unit: GuaranteeUnit; terms: string | null } | null;
   /** Paid to the shop before ordering with cash on delivery. */
   deposit: { type: DepositType; value: number } | null;
+  /** Cheaper per unit when buying more (prices before any flash sale); null = none. */
+  bulkPricing: BulkPricing | null;
   stock: number;
   imageUrls: string[];
   /** The product's short video, shown first in the gallery; null without one. */

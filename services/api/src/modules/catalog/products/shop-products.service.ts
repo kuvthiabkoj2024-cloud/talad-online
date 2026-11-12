@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { DEPOSIT_RULES, MEDIA_LIMITS, PRODUCT_STATUSES, slugify, type DepositType, type GuaranteeUnit, type ProductStatus } from '@talad/shared';
+import { DEPOSIT_RULES, MEDIA_LIMITS, PRODUCT_STATUSES, priceTierProblem, slugify, type DepositType, type GuaranteeUnit, type PriceTier, type ProductStatus } from '@talad/shared';
 import { randomUUID } from 'node:crypto';
 import { open } from 'node:fs/promises';
 import { Prisma, type Shop } from '../../../generated/prisma/client.js';
@@ -10,6 +10,7 @@ import { filePrefix, storageFolder } from '../../media/storage-keys.js';
 import { StorageService } from '../../media/storage.service.js';
 import { discardTempFile } from '../../media/temp-file-storage.js';
 import { detectVideo } from '../../media/video-type.js';
+import { readPriceTiers } from './price-tiers.js';
 import { priceRange } from './products.service.js';
 import type { ListShopProductsQuery, ShopProductDto } from './shop-product.dto.js';
 import { ImageIndexService } from '../image-search/image-index.service.js';
@@ -59,6 +60,8 @@ export interface ShopProductDetail {
   sku: string;
   price: number;
   compareAtPrice: number | null;
+  /** Bulk prices in quantity order; [] = one price for any quantity. */
+  priceTiers: PriceTier[];
   guarantee: { duration: number; unit: GuaranteeUnit; terms: string | null } | null;
   deposit: { type: DepositType; value: number } | null;
   stock: number;
@@ -192,6 +195,7 @@ export class ShopProductsService {
       sku: p.sku,
       price: p.price.toNumber(),
       compareAtPrice: p.compareAtPrice?.toNumber() ?? null,
+      priceTiers: readPriceTiers(p.priceTiers),
       guarantee: p.guaranteeDuration && p.guaranteeUnit ? { duration: p.guaranteeDuration, unit: p.guaranteeUnit, terms: p.guaranteeTerms } : null,
       deposit: p.depositType && p.depositValue ? { type: p.depositType, value: p.depositValue.toNumber() } : null,
       stock: p.stock,
@@ -350,6 +354,7 @@ export class ShopProductsService {
       sku: dto.sku,
       price: dto.price,
       compareAtPrice: dto.compareAtPrice ?? null,
+      priceTiers: dto.priceTiers?.length ? (dto.priceTiers.map((t) => ({ minQuantity: t.minQuantity, price: t.price })) as unknown as object) : Prisma.DbNull,
       guaranteeDuration: dto.guarantee?.duration ?? null,
       guaranteeUnit: dto.guarantee?.unit ?? null,
       guaranteeTerms: dto.guarantee?.terms || null,
@@ -388,6 +393,12 @@ export class ShopProductsService {
     }
     if (dto.compareAtPrice != null && dto.compareAtPrice <= dto.price) {
       throw new BadRequestException({ code: 'INVALID_COMPARE_PRICE', message: 'Compare-at price must be higher' });
+    }
+    if (dto.priceTiers?.length && priceTierProblem(dto.price, dto.priceTiers)) {
+      throw new BadRequestException({
+        code: 'INVALID_PRICE_TIERS',
+        message: 'Each bulk price needs a bigger quantity and a lower price than the one before, below the product price',
+      });
     }
     if (dto.variants.length) {
       const options = dto.options ?? [];

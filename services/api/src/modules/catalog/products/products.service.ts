@@ -1,4 +1,4 @@
-import { customerGuarantee, freeDeliveryOffer, geoPoint, type DepositType, type FreeDeliveryOffer, type GuaranteeUnit } from '@talad/shared';
+import { customerGuarantee, freeDeliveryOffer, geoPoint, type DepositType, type FreeDeliveryOffer, type GuaranteeUnit, type PriceTier } from '@talad/shared';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../../generated/prisma/client.js';
 import { PrismaService } from '../../../prisma/prisma.service.js';
@@ -7,6 +7,7 @@ import { flashPrice, FlashSalePricingService, type FlashDiscount } from '../../p
 import { normalizeLao } from '../chat/chat-text.js';
 import { feedPostInclude, toFeedPost } from '../videos/feed-posts.service.js';
 import type { FeedQuery } from './feed.query.js';
+import { readPriceTiers } from './price-tiers.js';
 import { productOptions, variantLabel, type ProductOption } from './product-options.js';
 import type { ListProductsQuery } from './list-products.query.js';
 
@@ -73,6 +74,11 @@ export interface ProductDetail extends Omit<ProductCard, 'imageUrl'> {
   guarantee: { duration: number; unit: GuaranteeUnit; terms: string | null } | null;
   /** Paid to the shop before ordering with cash on delivery. */
   deposit: { type: DepositType; value: number } | null;
+  /**
+   * Cheaper per unit when buying more (before any flash sale), against `basePrice`, the product's
+   * own price; options priced differently get the same share off (`bulkUnitPrice`). Null = none.
+   */
+  bulkPricing: { basePrice: number; tiers: PriceTier[] } | null;
   stock: number;
   imageUrls: string[];
   /** The product's short video (§2.5), shown first in the gallery; null without one. */
@@ -438,6 +444,7 @@ export class ProductsService {
 
     const flash = (await this.flash.discounts([product.id])).get(product.id);
     const base = product.price.toNumber();
+    const tiers = readPriceTiers(product.priceTiers);
     const options = productOptions(product.options, product.variants);
     const variants = product.variants.map((v) => {
       const attributes = v.attributes as Record<string, string>;
@@ -467,6 +474,7 @@ export class ProductsService {
           : null,
       deposit: shop.codEnabled && product.depositType && product.depositValue ? { type: product.depositType, value: product.depositValue.toNumber() } : null,
       options,
+      bulkPricing: tiers.length ? { basePrice: base, tiers } : null,
       ...withFlash(
         priceRange(
           base,

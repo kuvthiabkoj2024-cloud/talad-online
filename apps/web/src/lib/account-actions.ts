@@ -1,6 +1,7 @@
 "use server";
 
 import { API_URL } from "./api";
+import { clientHeaders } from "./client-headers";
 import type { CustomerProfile } from "./customer";
 import type { ActionResult, AddressInput, ProfileErrorCode } from "./profile";
 import { getSessionToken } from "./session";
@@ -27,6 +28,7 @@ async function send<T = unknown>(
     const res = await fetch(`${API_URL}${path}`, {
       method,
       headers: {
+        ...(await clientHeaders()),
         Authorization: `Bearer ${token}`,
         ...(!isForm && body !== undefined && { "Content-Type": "application/json" }),
       },

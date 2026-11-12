@@ -1,6 +1,7 @@
 "use server";
 
 import { API_URL, type ProductCard } from "./api";
+import { clientHeaders, serverHeaders } from "./client-headers";
 
 export interface PhotoMatch extends ProductCard {
   match: { score: number; by: "visual" | "keyword" | "both"; strong: boolean };
@@ -27,7 +28,7 @@ export async function searchByPhoto(form: FormData): Promise<{ ok: true; result:
   const body = new FormData();
   body.set("file", file, file.name || "photo.jpg");
   try {
-    const res = await fetch(`${API_URL}/products/search/image`, { method: "POST", body, cache: "no-store" });
+    const res = await fetch(`${API_URL}/products/search/image`, { method: "POST", headers: await clientHeaders(), body, cache: "no-store" });
     const json = await res.json().catch(() => null);
     if (res.ok) return { ok: true, result: json as PhotoSearchResult };
     if (res.status === 429) return { ok: false, error: "THROTTLED" };
@@ -43,7 +44,7 @@ export type VoiceSearchError = "INVALID_AUDIO" | "AUDIO_TOO_LONG" | "VOICE_SEARC
 /** Whether the API understands spoken searches itself (Lao and English, without choosing). */
 export async function voiceSearchAvailable(): Promise<boolean> {
   try {
-    const res = await fetch(`${API_URL}/products/search/voice`, { next: { revalidate: 300 } });
+    const res = await fetch(`${API_URL}/products/search/voice`, { headers: serverHeaders(), next: { revalidate: 300 } });
     return res.ok && ((await res.json()) as { available?: boolean }).available === true;
   } catch {
     return false;
@@ -60,7 +61,7 @@ export async function transcribeVoice(
   const body = new FormData();
   body.set("audio", audio, "voice.wav");
   try {
-    const res = await fetch(`${API_URL}/products/search/voice?locale=${locale}`, { method: "POST", body, cache: "no-store" });
+    const res = await fetch(`${API_URL}/products/search/voice?locale=${locale}`, { method: "POST", headers: await clientHeaders(), body, cache: "no-store" });
     const json = await res.json().catch(() => null);
     if (res.ok) return { ok: true, text: String(json?.text ?? ""), language: json?.language ?? null };
     if (res.status === 429) return { ok: false, error: "THROTTLED" };

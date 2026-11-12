@@ -70,8 +70,9 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   return parse<T>(res)
 }
 
-export const send = <T>(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown) =>
-  api<T>(path, { method, body: body === undefined ? undefined : JSON.stringify(body) })
+/** `headers`: extra ones, e.g. the robot check's X-Turnstile-Token on sign-in. */
+export const send = <T>(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown, headers?: Record<string, string>) =>
+  api<T>(path, { method, body: body === undefined ? undefined : JSON.stringify(body), headers })
 
 /** Multipart upload with progress (0–1), for banner and category images. */
 export function upload<T>(path: string, file: File, onProgress?: (fraction: number) => void): Promise<T> {

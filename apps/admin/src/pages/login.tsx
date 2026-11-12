@@ -1,5 +1,6 @@
 import { Button } from '@talad/ui/components/button'
 import { AuthLayout } from '@talad/ui/components/auth-layout'
+import { useTurnstile } from '@talad/ui/components/turnstile'
 import { Input } from '@talad/ui/components/input'
 import { Label } from '@talad/ui/components/label'
 import { ArrowLeft, LayoutDashboard, LoaderCircle, ScrollText, ShieldCheck, UsersRound } from 'lucide-react'
@@ -7,24 +8,24 @@ import { useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router'
 import { useAuth } from '@/auth/context'
 import { CodeInput } from '@/components/code-input'
-import type { Dict } from '@/i18n/en'
 import { useI18n } from '@/i18n/context'
+import { errorText } from '@/lib/auth-errors'
 import { ApiError, send } from '@/lib/api'
 import { storefrontUrl } from '@/lib/format'
 import type { Admin } from '@/lib/types'
 
 type LoginResponse = { token: string; admin: Admin } | { twoFactor: { method: 'TOTP'; challenge: string } }
 
-const KNOWN = ['INVALID_CREDENTIALS', 'ACCOUNT_DISABLED', 'TWO_FACTOR_INVALID', 'CHALLENGE_EXPIRED'] as const
-function errorText(e: unknown, t: Dict): string {
-  if (e instanceof ApiError && e.status === 429) return t.auth.throttled
-  const code = e instanceof ApiError ? e.code : undefined
-  return code && (KNOWN as readonly string[]).includes(code) ? t.auth[code as (typeof KNOWN)[number]] : t.auth.generic
-}
 
 /** Staff sign-in (§2.1): email + password, then an authenticator code when 2FA is on. */
 export function LoginPage() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
+  // Robot check before the password is tried (off without a site key).
+  const captcha = useTurnstile(import.meta.env.VITE_TURNSTILE_SITE_KEY, {
+    action: 'admin-login',
+    language: locale,
+    failedText: t.auth.CAPTCHA_FAILED,
+  })
   const { admin, signIn } = useAuth()
   const navigate = useNavigate()
   const from = (useLocation().state as { from?: string } | null)?.from ?? '/'
@@ -59,7 +60,7 @@ export function LoginPage() {
     }
   }
 
-  const login = () => run(() => send('POST', '/admin/auth/login', { email: email.trim(), password }))
+  const login = () => run(() => send('POST', '/admin/auth/login', { email: email.trim(), password }, captcha.headers()))
   const verify = (value = code) =>
     value.length === 6 && challenge && run(() => send('POST', '/admin/auth/2fa/verify', { challenge, code: value }))
 
@@ -121,6 +122,7 @@ export function LoginPage() {
             <Input id="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
           {errorLine}
+          {captcha.widget}
           <Button type="submit" size="lg" disabled={pending}>
             {pending && <LoaderCircle className="animate-spin" />}
             {t.auth.signIn}

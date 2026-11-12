@@ -7,6 +7,7 @@ export type AuthErrorCode =
   | 'PHONE_REGISTERED'
   | 'PHONE_NOT_REGISTERED'
   | 'OTP_COOLDOWN'
+  | 'OTP_DAILY_LIMIT'
   | 'OTP_EXPIRED'
   | 'OTP_INVALID'
   | 'SMS_FAILED'

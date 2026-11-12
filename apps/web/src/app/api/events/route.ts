@@ -1,4 +1,5 @@
 import { API_URL } from "@/lib/api";
+import { clientHeaders } from "@/lib/client-headers";
 import { getSessionToken } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +12,7 @@ export async function GET(req: Request) {
   const token = await getSessionToken();
   if (!token) return new Response(null, { status: 401 });
   const upstream = await fetch(`${API_URL}/me/events`, {
-    headers: { Authorization: `Bearer ${token}`, Accept: "text/event-stream" },
+    headers: { ...(await clientHeaders()), Authorization: `Bearer ${token}`, Accept: "text/event-stream" },
     cache: "no-store",
     // Closing the page closes the API stream too.
     signal: req.signal,

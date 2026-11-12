@@ -2,6 +2,7 @@
 
 import type { Locale } from "@talad/shared";
 import { API_URL } from "./api";
+import { clientHeaders } from "./client-headers";
 import type { CartErrorCode } from "./cart";
 import type { ChatOrderPatch, ChatOrderView } from "./chat-orders";
 import { getSessionToken } from "./session";
@@ -22,7 +23,7 @@ async function call<T>(method: "GET" | "POST" | "PATCH", path: string, body?: un
   try {
     const res = await fetch(`${API_URL}${path}`, {
       method,
-      headers: { Authorization: `Bearer ${token}`, ...(body !== undefined && !(body instanceof FormData) && { "Content-Type": "application/json" }) },
+      headers: { ...(await clientHeaders()), Authorization: `Bearer ${token}`, ...(body !== undefined && !(body instanceof FormData) && { "Content-Type": "application/json" }) },
       body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
       cache: "no-store",
     });

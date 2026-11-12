@@ -1,6 +1,7 @@
 import type { DepositType, FreeDeliveryOffer, GuaranteeUnit } from "@talad/shared";
 import "server-only";
 import type { BulkPricing } from "./bulk-price";
+import { serverHeaders } from "./client-headers";
 
 export const API_URL = process.env.API_URL ?? "http://localhost:4000/api/v1";
 
@@ -11,7 +12,7 @@ export const API_URL = process.env.API_URL ?? "http://localhost:4000/api/v1";
  */
 export async function apiGet<T>(path: string): Promise<T | null> {
   try {
-    const res = await fetch(`${API_URL}${path}`);
+    const res = await fetch(`${API_URL}${path}`, { headers: serverHeaders() });
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {

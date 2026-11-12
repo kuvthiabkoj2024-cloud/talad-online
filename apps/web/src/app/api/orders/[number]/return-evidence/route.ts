@@ -1,4 +1,5 @@
 import { API_URL } from "@/lib/api";
+import { clientHeaders } from "@/lib/client-headers";
 import { getSessionToken } from "@/lib/session";
 
 /**
@@ -15,7 +16,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ number:
   const { number } = await params;
   const res = await fetch(`${API_URL}/me/orders/${encodeURIComponent(number)}/return/evidence`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": contentType },
+    headers: { ...(await clientHeaders()), Authorization: `Bearer ${token}`, "Content-Type": contentType },
     body: req.body,
     // Required to stream a request body with fetch.
     duplex: "half",

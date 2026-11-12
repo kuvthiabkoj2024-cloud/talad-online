@@ -2,6 +2,8 @@ import { Body, Controller, Get, HttpCode, Post, Req, UseGuards } from '@nestjs/c
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
+import { clientInfo } from '../../common/client-ip.js';
+import { HumanGuard } from '../../common/human.guard.js';
 import type { Customer } from '../../generated/prisma/client.js';
 import { CustomerAuthGuard, CurrentCustomer, SessionToken } from './customer-auth.guard.js';
 import { CustomerAuthService } from './customer-auth.service.js';
@@ -15,12 +17,6 @@ import {
   TwoFactorVerifyDto,
   VerifyOtpDto,
 } from './dto/customer-auth.dto.js';
-import type { ClientInfo } from './session.service.js';
-
-const clientInfo = (req: Request): ClientInfo => ({
-  ip: req.ip,
-  userAgent: req.headers['user-agent'],
-});
 
 @ApiTags('auth')
 @Controller('auth/customer')
@@ -31,6 +27,7 @@ export class CustomerAuthController {
   @Post('otp/request')
   @HttpCode(200)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @UseGuards(HumanGuard)
   requestOtp(@Body() dto: RequestOtpDto) {
     return this.auth.requestOtp(dto);
   }
@@ -47,6 +44,7 @@ export class CustomerAuthController {
   @Post('password/login')
   @HttpCode(200)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @UseGuards(HumanGuard)
   passwordLogin(@Body() dto: PasswordLoginDto, @Req() req: Request) {
     return this.auth.passwordLogin(dto, clientInfo(req));
   }
@@ -54,6 +52,7 @@ export class CustomerAuthController {
   @Post('password/forgot')
   @HttpCode(200)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @UseGuards(HumanGuard)
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.auth.forgotPassword(dto);
   }

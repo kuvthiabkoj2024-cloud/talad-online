@@ -9,6 +9,8 @@ import { authError } from './auth-errors.js';
 const CODE_TTL_MS = 5 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 60 * 1000;
 const MAX_ATTEMPTS = 5;
+/** SMS codes a phone number can get in 24 hours, all purposes together: caps what a bot can cost. */
+export const DAILY_CODES_PER_PHONE = 10;
 
 export type OtpPurpose = 'customer_login' | 'customer_register' | 'customer_reset' | 'customer_2fa';
 
@@ -34,6 +36,13 @@ export class OtpService {
         authError('OTP_COOLDOWN', `Wait ${retryAfter}s before requesting a new code`, { retryAfter }),
         HttpStatus.TOO_MANY_REQUESTS,
       );
+    }
+
+    const today = await this.prisma.oneTimeCode.count({
+      where: { actorType: 'CUSTOMER', actorId: phone, createdAt: { gt: new Date(Date.now() - 24 * 3_600_000) } },
+    });
+    if (today >= DAILY_CODES_PER_PHONE) {
+      throw new HttpException(authError('OTP_DAILY_LIMIT', 'Too many codes for this number today, try again tomorrow'), HttpStatus.TOO_MANY_REQUESTS);
     }
 
     const code = String(randomInt(0, 10 ** OTP_LENGTH)).padStart(OTP_LENGTH, '0');

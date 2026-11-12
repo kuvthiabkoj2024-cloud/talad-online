@@ -5,6 +5,8 @@ import { ADMIN_PERMISSIONS } from '@talad/shared';
 import { Transform, Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsBoolean, IsEmail, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Length, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
 import type { Request } from 'express';
+import { clientInfo } from '../../common/client-ip.js';
+import { HumanGuard } from '../../common/human.guard.js';
 import type { AdminUser } from '../../generated/prisma/client.js';
 import { AuditService } from '../audit/audit.service.js';
 import { AdminAuthGuard, AdminToken, CurrentAdmin, Permission, SuperAdminOnly, type AdminWithRole } from '../auth/admin-auth.guard.js';
@@ -168,7 +170,7 @@ class AuditQuery {
   pageSize: number = 30;
 }
 
-const client = (req: Request) => ({ ip: req.ip, userAgent: req.headers['user-agent'] });
+const client = (req: Request) => clientInfo(req);
 
 @ApiTags('admin')
 @Controller('admin/auth')
@@ -178,6 +180,7 @@ export class AdminAuthController {
   @Post('login')
   @HttpCode(200)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @UseGuards(HumanGuard)
   login(@Body() dto: AdminLoginDto, @Req() req: Request) {
     return this.auth.login(dto.email, dto.password, client(req));
   }
@@ -193,6 +196,7 @@ export class AdminAuthController {
   @Post('password/forgot')
   @HttpCode(200)
   @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  @UseGuards(HumanGuard)
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.auth.forgotPassword(dto.email);
   }

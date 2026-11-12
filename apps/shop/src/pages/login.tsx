@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { useAuth } from '@/auth/context'
+import { useTurnstile } from '@talad/ui/components/turnstile'
 import { useI18n } from '@/i18n/context'
 import { ApiError, send } from '@/lib/api'
 import { fill, storefrontUrl } from '@/lib/format'
@@ -50,6 +51,12 @@ type Step =
  */
 export function LoginPage() {
   const { t, locale, setLocale } = useI18n()
+  // Robot check before SMS codes and password sign-in (off without a site key).
+  const captcha = useTurnstile(import.meta.env.VITE_TURNSTILE_SITE_KEY, {
+    action: 'seller-login',
+    language: locale,
+    failedText: t.auth.errors.CAPTCHA_FAILED,
+  })
   const { account, signIn } = useAuth()
   const navigate = useNavigate()
   const from = (useLocation().state as { from?: string } | null)?.from ?? '/'
@@ -121,7 +128,7 @@ export function LoginPage() {
     run(async () => {
       if (register && name.trim().length < 2) throw new ApiError(400, { code: 'nameRequired' })
       if (!normalizePhone(phone)) throw new ApiError(400, { code: 'INVALID_PHONE' })
-      const sent = await send<OtpSent>('POST', '/auth/customer/otp/request', identity())
+      const sent = await send<OtpSent>('POST', '/auth/customer/otp/request', identity(), captcha.headers())
       go({ kind: 'code', sent })
       startCooldown(sent.resendAfterSeconds)
     })
@@ -131,7 +138,7 @@ export function LoginPage() {
     run(async () => finish(await send<SignInResponse>('POST', '/auth/customer/otp/verify', { ...identity(), code: value })))
 
   const passwordLogin = () =>
-    run(async () => finish(await send<SignInResponse>('POST', '/auth/customer/password/login', { identifier: identifier.trim(), password })))
+    run(async () => finish(await send<SignInResponse>('POST', '/auth/customer/password/login', { identifier: identifier.trim(), password }, captcha.headers())))
 
   const verifyTwoFactor = (challenge: Challenge, value = code) =>
     value.length === OTP_LENGTH &&
@@ -147,7 +154,7 @@ export function LoginPage() {
   const requestReset = () =>
     run(async () => {
       if (!normalizePhone(phone)) throw new ApiError(400, { code: 'INVALID_PHONE' })
-      const sent = await send<OtpSent>('POST', '/auth/customer/password/forgot', { phone })
+      const sent = await send<OtpSent>('POST', '/auth/customer/password/forgot', { phone }, captcha.headers())
       go({ kind: 'reset', sent })
       startCooldown(sent.resendAfterSeconds)
     })
@@ -402,6 +409,7 @@ export function LoginPage() {
       aside={<LocaleToggle locale={locale} onChange={setLocale} />}
     >
       <div className="flex flex-col gap-5">{body}</div>
+      {captcha.widget}
       {step.kind === 'start' && (
         <p className="mt-6 text-center text-sm text-muted-foreground">
           {register ? t.auth.haveAccount : t.auth.noAccount}{' '}

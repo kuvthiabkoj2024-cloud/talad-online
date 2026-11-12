@@ -1,6 +1,7 @@
 "use server";
 
 import { API_URL, apiGet, type CommentTarget, type ProductDetail, type VideoComment, type VideoCommentPage } from "./api";
+import { clientHeaders } from "./client-headers";
 import { getSessionToken } from "./session";
 
 /** Feed-video engagement (views, shares, comments, favorites) and the Buy now options. */
@@ -23,6 +24,7 @@ async function call<T>(
     const res = await fetch(`${API_URL}${path}`, {
       method,
       headers: {
+        ...(await clientHeaders()),
         ...(token && { Authorization: `Bearer ${token}` }),
         ...(body !== undefined && { "Content-Type": "application/json" }),
       },

@@ -72,6 +72,19 @@ class EnvironmentVariables {
   @IsString()
   GOOGLE_SPEECH_API_KEY?: string;
 
+  /** Cloudflare Turnstile secret: sign-in, SMS codes and password resets need a robot check. Unset = off. */
+  @IsOptional()
+  @IsString()
+  TURNSTILE_SECRET_KEY?: string;
+
+  /**
+   * Shared with the storefront (its INTERNAL_API_KEY): its server then passes on each shopper's
+   * IP, so rate limits and robot checks are per shopper rather than one for the whole site.
+   */
+  @IsOptional()
+  @IsString()
+  INTERNAL_API_KEY?: string;
+
   /**
    * Behind a reverse proxy (nginx, Docker): how many proxy hops to trust for the client's IP
    * (X-Forwarded-For), e.g. "1", or an Express value like "loopback". Unset = no proxy. Without

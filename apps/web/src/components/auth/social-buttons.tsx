@@ -52,8 +52,9 @@ function loadScript(src: string): Promise<void> {
 type Provider = "google" | "apple";
 
 /**
- * "Continue with Google / Apple". When a provider's client id is not configured
- * the button explains that instead of failing silently.
+ * "Continue with Google / Apple". Apple only shows once its client id is configured; Google
+ * then shares the row with it, otherwise it takes the full width. An unconfigured Google
+ * button explains that instead of failing silently.
  */
 export function SocialButtons({
   locale,
@@ -93,6 +94,7 @@ export function SocialButtons({
           shape: "pill",
           text: "continue_with",
           logo_alignment: "center",
+          // Google draws its button at most 400 px wide; it's centred in the slot beyond that.
           width: Math.min(slot.clientWidth, 400),
           locale,
         });
@@ -131,7 +133,7 @@ export function SocialButtons({
     "flex h-12 w-full items-center justify-center gap-3 rounded-full text-sm font-semibold transition-colors disabled:opacity-60";
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className={`grid gap-3 ${APPLE_CLIENT_ID ? "sm:grid-cols-2" : ""}`}>
       {GOOGLE_CLIENT_ID ? (
         <div ref={googleSlot} className={`flex h-12 items-center justify-center ${googleReady ? "" : "animate-pulse rounded-full bg-muted"}`} />
       ) : (
@@ -145,15 +147,17 @@ export function SocialButtons({
           Google
         </button>
       )}
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={apple}
-        className={`${base} bg-black text-white hover:bg-black/85`}
-      >
-        <AppleLogo />
-        Apple
-      </button>
+      {APPLE_CLIENT_ID && (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={apple}
+          className={`${base} bg-black text-white hover:bg-black/85`}
+        >
+          <AppleLogo />
+          Apple
+        </button>
+      )}
     </div>
   );
 }

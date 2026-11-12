@@ -2,6 +2,7 @@
 
 import { MAX_PAYMENT_SLIPS, type CheckoutPaymentMethod } from "@talad/shared";
 import { API_URL } from "./api";
+import { clientHeaders } from "./client-headers";
 import type { CartErrorCode, CartResult, CheckoutQuote, PlacedOrder } from "./cart";
 import { getSessionToken } from "./session";
 
@@ -46,6 +47,7 @@ async function send<T>(
     const res = await fetch(`${API_URL}${path}`, {
       method,
       headers: {
+        ...(await clientHeaders()),
         Authorization: `Bearer ${token}`,
         ...(body !== undefined && !(body instanceof FormData) && { "Content-Type": "application/json" }),
       },

@@ -1,4 +1,5 @@
 import { API_URL } from "@/lib/api";
+import { clientHeaders } from "@/lib/client-headers";
 import { getSessionToken } from "@/lib/session";
 
 /**
@@ -12,7 +13,7 @@ export async function GET(req: Request, { params }: RouteContext<"/api/messages/
   if (!uuid.test(conv) || !uuid.test(msg)) return new Response(null, { status: 404 });
   const token = await getSessionToken();
   if (!token) return new Response(null, { status: 401 });
-  const res = await fetch(`${API_URL}/me/conversations/${conv}/messages/${msg}/audio`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+  const res = await fetch(`${API_URL}/me/conversations/${conv}/messages/${msg}/audio`, { headers: { ...(await clientHeaders()), Authorization: `Bearer ${token}` }, cache: "no-store" });
   if (!res.ok) return new Response(null, { status: res.status === 401 ? 401 : 404 });
 
   const audio = new Uint8Array(await res.arrayBuffer());

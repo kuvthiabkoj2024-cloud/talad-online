@@ -1,4 +1,5 @@
 import { API_URL } from "@/lib/api";
+import { clientHeaders } from "@/lib/client-headers";
 import { getSessionToken } from "@/lib/session";
 
 /**
@@ -11,7 +12,7 @@ export async function GET(_req: Request, { params }: RouteContext<"/api/bank-qr/
   const { id } = await params;
 
   const res = await fetch(`${API_URL}/me/bank-accounts/${encodeURIComponent(id)}/qr`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { ...(await clientHeaders()), Authorization: `Bearer ${token}` },
     cache: "no-store",
   });
   if (!res.ok || !res.body) return new Response(null, { status: res.status === 401 ? 401 : 404 });

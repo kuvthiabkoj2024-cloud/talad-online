@@ -2,6 +2,7 @@
 
 import type { Locale } from "@talad/shared";
 import { API_URL, type ProductCard } from "./api";
+import { clientHeaders } from "./client-headers";
 import { getSessionToken } from "./session";
 
 export interface ChatProduct extends ProductCard {
@@ -37,7 +38,7 @@ export async function sendChat(form: FormData): Promise<{ ok: true; data: ChatRe
   // Signed in: the API keeps this conversation in the customer's account (private to them).
   const token = await getSessionToken();
   try {
-    const res = await fetch(`${API_URL}/chat`, { method: "POST", body, cache: "no-store", headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+    const res = await fetch(`${API_URL}/chat`, { method: "POST", body, cache: "no-store", headers: { ...(await clientHeaders()), ...(token && { Authorization: `Bearer ${token}` }) } });
     const json = await res.json().catch(() => null);
     if (res.ok) return { ok: true, data: json as ChatReply };
     if (res.status === 429) return { ok: false, error: "THROTTLED" };
@@ -63,5 +64,5 @@ export interface SavedChatMessage {
 export async function clearChatHistory(): Promise<void> {
   const token = await getSessionToken();
   if (!token) return;
-  await fetch(`${API_URL}/chat/history`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }).catch(() => {});
+  await fetch(`${API_URL}/chat/history`, { method: "DELETE", headers: { ...(await clientHeaders()), Authorization: `Bearer ${token}` }, cache: "no-store" }).catch(() => {});
 }

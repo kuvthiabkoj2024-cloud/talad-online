@@ -1,9 +1,10 @@
 import { API_URL } from "@/lib/api";
+import { serverHeaders } from "@/lib/client-headers";
 
 /** Public profile photos, proxied from the API. URLs are versioned (?v=), so cache for long. */
 export async function GET(_req: Request, { params }: RouteContext<"/api/avatars/[id]">) {
   const { id } = await params;
-  const res = await fetch(`${API_URL}/avatars/${encodeURIComponent(id)}`, { cache: "no-store" });
+  const res = await fetch(`${API_URL}/avatars/${encodeURIComponent(id)}`, { headers: serverHeaders(), cache: "no-store" });
   if (!res.ok || !res.body) return new Response(null, { status: 404 });
 
   return new Response(res.body, {

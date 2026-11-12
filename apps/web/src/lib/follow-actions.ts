@@ -1,6 +1,7 @@
 "use server";
 
 import { API_URL } from "./api";
+import { clientHeaders } from "./client-headers";
 import { getSessionToken } from "./session";
 
 /** Following shops and other customers: state, follow / unfollow, and the shops a customer follows. */
@@ -29,7 +30,7 @@ async function call<T>(method: "GET" | "PUT" | "DELETE", path: string): Promise<
   const token = await getSessionToken();
   if (!token) return { ok: false, status: 401 };
   try {
-    const res = await fetch(`${API_URL}${path}`, { method, headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+    const res = await fetch(`${API_URL}${path}`, { method, headers: { ...(await clientHeaders()), Authorization: `Bearer ${token}` }, cache: "no-store" });
     const json = await res.json().catch(() => null);
     return res.ok ? { ok: true, data: json as T } : { ok: false, status: res.status, code: json?.code };
   } catch {

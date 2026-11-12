@@ -10,6 +10,7 @@ import type { AuthErrorCode, CustomerProfile } from "@/lib/customer";
 import { interpolate } from "@/lib/format";
 import { OtpInput } from "./otp-input";
 import { SocialButtons } from "./social-buttons";
+import { Turnstile, TURNSTILE_SITE_KEY } from "./turnstile";
 
 export type AuthMode = "login" | "register";
 
@@ -43,6 +44,17 @@ export function AuthForm({
   const [errorCode, setErrorCode] = useState<AuthErrorCode | null>(null);
   const [resendAt, setResendAt] = useState(0);
   const [pending, startTransition] = useTransition();
+  // Robot check before an SMS is sent: one token per request, then a fresh one.
+  const [captcha, setCaptcha] = useState<string | null>(null);
+  const [captchaReset, setCaptchaReset] = useState(0);
+  /** Cloudflare's error code when the check can't run (shown with the message). */
+  const [captchaError, setCaptchaError] = useState<string | null>(null);
+  const waitingForCaptcha = !!TURNSTILE_SITE_KEY && !captcha;
+
+  function onCaptcha(token: string | null) {
+    setCaptcha(token);
+    if (token) setCaptchaError(null);
+  }
 
   function fail(code: AuthErrorCode) {
     setErrorCode(code);
@@ -62,8 +74,15 @@ export function AuthForm({
 
   function sendCode() {
     clearError();
+    // No pass from the robot check yet: say why instead of sending a request that will fail.
+    if (waitingForCaptcha) {
+      if (!captchaError) return fail("CAPTCHA_REQUIRED");
+      setErrorCode("CAPTCHA_FAILED");
+      return setError(`${dict.errors.CAPTCHA_FAILED} (${captchaError})`);
+    }
     startTransition(async () => {
-      const res = await requestOtp({ flow: mode, phone, name: mode === "register" ? name : undefined });
+      const res = await requestOtp({ flow: mode, phone, name: mode === "register" ? name : undefined }, captcha);
+      setCaptchaReset((n) => n + 1);
       if (!res.ok) {
         if (res.error === "OTP_COOLDOWN" && res.retryAfter) {
           setResendAt(Date.now() + res.retryAfter * 1000);
@@ -235,7 +254,10 @@ export function AuthForm({
           {dict.verify}
         </SubmitButton>
 
-        <ResendButton resendAt={resendAt} pending={pending} dict={dict} onResend={sendCode} />
+        <div className="flex flex-col">
+          <ResendButton resendAt={resendAt} pending={pending} dict={dict} onResend={sendCode} />
+          <Turnstile locale={locale} action="otp" resetKey={captchaReset} className="mt-4" onToken={onCaptcha} onError={setCaptchaError} />
+        </div>
       </div>
     );
   }
@@ -319,7 +341,10 @@ export function AuthForm({
           }
         />
 
-        <SubmitButton pending={pending}>{dict.getOtp}</SubmitButton>
+        <div className="flex flex-col">
+          <Turnstile locale={locale} action="otp" resetKey={captchaReset} className="mb-4" onToken={onCaptcha} onError={setCaptchaError} />
+          <SubmitButton pending={pending}>{dict.getOtp}</SubmitButton>
+        </div>
       </form>
 
       <div className="flex items-center gap-3 text-xs uppercase tracking-wider text-muted-foreground">

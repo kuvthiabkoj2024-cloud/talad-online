@@ -2,6 +2,7 @@
 
 import { isNotificationTab, type NotificationTab } from "@talad/shared";
 import { API_URL } from "./api";
+import { clientHeaders } from "./client-headers";
 import { getSessionToken } from "./session";
 
 async function post(path: string): Promise<boolean> {
@@ -10,7 +11,7 @@ async function post(path: string): Promise<boolean> {
   try {
     const res = await fetch(`${API_URL}${path}`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { ...(await clientHeaders()), Authorization: `Bearer ${token}` },
       cache: "no-store",
     });
     return res.ok;

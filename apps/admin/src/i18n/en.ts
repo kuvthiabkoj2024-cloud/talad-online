@@ -119,6 +119,8 @@ export const en = {
     password: 'Password',
     signIn: 'Sign in',
     INVALID_CREDENTIALS: 'Wrong email or password.',
+    CAPTCHA_REQUIRED: 'Please wait a moment while we check you’re not a robot, then try again.',
+    CAPTCHA_FAILED: 'We couldn’t confirm you’re not a robot. Please try again.',
     ACCOUNT_DISABLED: 'This admin account is disabled.',
     throttled: 'Too many attempts. Wait a minute and try again.',
     generic: 'Something went wrong. Please try again.',

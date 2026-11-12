@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Store } from "lucide-react";
 import Link from "next/link";
 import { API_URL } from "@/lib/api";
+import { clientHeaders } from "@/lib/client-headers";
 import { requireCustomer } from "@/lib/require-customer";
 import { getSessionToken } from "@/lib/session";
 import { getDictionary, getLocale } from "@/app/[lang]/dictionaries";
@@ -25,7 +26,7 @@ export default async function NewConversationPage({ searchParams }: Props) {
   try {
     const res = await fetch(`${API_URL}/me/conversations`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${await getSessionToken()}`, "Content-Type": "application/json" },
+      headers: { ...(await clientHeaders()), Authorization: `Bearer ${await getSessionToken()}`, "Content-Type": "application/json" },
       body: JSON.stringify({ shop }),
       cache: "no-store",
     });

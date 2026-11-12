@@ -3,6 +3,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import { cache } from "react";
 import { API_URL } from "./api";
+import { clientHeaders } from "./client-headers";
 import type { CustomerProfile } from "./customer";
 
 /** httpOnly cookie holding the opaque API session token. */
@@ -18,7 +19,7 @@ export async function apiGetAsCustomer<T>(path: string): Promise<T | null> {
   if (!token) return null;
   try {
     const res = await fetch(`${API_URL}${path}`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { ...(await clientHeaders()), Authorization: `Bearer ${token}` },
       cache: "no-store",
     });
     return res.ok ? ((await res.json()) as T) : null;
@@ -34,7 +35,7 @@ export async function apiPostAsCustomer<T>(path: string, body: unknown): Promise
   try {
     const res = await fetch(`${API_URL}${path}`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: { ...(await clientHeaders()), Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),
       cache: "no-store",
     });
@@ -50,7 +51,7 @@ export const getCurrentCustomer = cache(async (): Promise<CustomerProfile | null
   if (!token) return null;
   try {
     const res = await fetch(`${API_URL}/auth/customer/me`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { ...(await clientHeaders()), Authorization: `Bearer ${token}` },
       cache: "no-store",
     });
     return res.ok ? ((await res.json()) as CustomerProfile) : null;

@@ -1,6 +1,7 @@
 "use server";
 
 import { API_URL } from "./api";
+import { clientHeaders } from "./client-headers";
 import type { ChatProductRef, ShopChatMessage, ShopThread } from "./messages";
 import { getSessionToken } from "./session";
 
@@ -24,7 +25,7 @@ async function call<T>(method: string, path: string, body?: FormData): Promise<{
   const token = await getSessionToken();
   if (!token) return { ok: false, error: "UNAUTHENTICATED" };
   try {
-    const res = await fetch(`${API_URL}${path}`, { method, headers: { Authorization: `Bearer ${token}` }, body, cache: "no-store" });
+    const res = await fetch(`${API_URL}${path}`, { method, headers: { ...(await clientHeaders()), Authorization: `Bearer ${token}` }, body, cache: "no-store" });
     const json = res.status === 204 ? null : await res.json().catch(() => null);
     if (res.ok) return { ok: true, data: json as T };
     if (res.status === 401) return { ok: false, error: "UNAUTHENTICATED" };

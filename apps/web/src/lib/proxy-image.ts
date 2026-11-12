@@ -1,6 +1,7 @@
 import "server-only";
 
 import { API_URL } from "./api";
+import { clientHeaders } from "./client-headers";
 import { getSessionToken } from "./session";
 
 /**
@@ -11,7 +12,7 @@ export async function proxyPrivateImage(apiPath: string, download?: string): Pro
   const token = await getSessionToken();
   if (!token) return new Response(null, { status: 401 });
   const res = await fetch(`${API_URL}${apiPath}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { ...(await clientHeaders()), Authorization: `Bearer ${token}` },
     cache: "no-store",
   });
   if (!res.ok || !res.body) return new Response(null, { status: res.status === 401 ? 401 : 404 });

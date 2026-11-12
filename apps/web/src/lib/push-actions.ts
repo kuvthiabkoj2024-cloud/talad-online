@@ -2,12 +2,13 @@
 
 import type { PushSubscriptionBody } from "@/lib/web-push";
 import { API_URL } from "./api";
+import { clientHeaders, serverHeaders } from "./client-headers";
 import { getSessionToken } from "./session";
 
 /** The API's VAPID public key; null while Web Push is off. */
 export async function getPushPublicKey(): Promise<string | null> {
   try {
-    const res = await fetch(`${API_URL}/push/config`, { cache: "no-store" });
+    const res = await fetch(`${API_URL}/push/config`, { headers: serverHeaders(), cache: "no-store" });
     if (!res.ok) return null;
     return ((await res.json()) as { publicKey: string | null }).publicKey;
   } catch {
@@ -20,7 +21,7 @@ async function call(method: "PUT" | "DELETE", body: unknown): Promise<void> {
   if (!token) throw new Error("Not signed in");
   const res = await fetch(`${API_URL}/me/push-subscription`, {
     method,
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    headers: { ...(await clientHeaders()), Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
     cache: "no-store",
   });

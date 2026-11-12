@@ -2,6 +2,7 @@
 
 import { cookies } from "next/headers";
 import { API_URL } from "./api";
+import { clientHeaders } from "./client-headers";
 import type { AuthErrorCode, AuthResult, CustomerProfile } from "./customer";
 import { SESSION_COOKIE } from "./session";
 
@@ -39,18 +40,23 @@ const KNOWN_ERRORS = new Set<AuthErrorCode>([
   "SMS_FAILED",
   "PROVIDER_NOT_CONFIGURED",
   "PROVIDER_TOKEN_INVALID",
+  "OTP_DAILY_LIMIT",
+  "CAPTCHA_REQUIRED",
+  "CAPTCHA_FAILED",
   "ACCOUNT_DISABLED",
   "TWO_FACTOR_INVALID",
   "CHALLENGE_EXPIRED",
 ]);
 
-async function post<T>(path: string, body: unknown, token?: string): Promise<AuthResult<{ data: T }>> {
+async function post<T>(path: string, body: unknown, token?: string, captcha?: string | null): Promise<AuthResult<{ data: T }>> {
   try {
     const res = await fetch(`${API_URL}${path}`, {
       method: "POST",
       headers: {
+        ...(await clientHeaders()),
         "Content-Type": "application/json",
         ...(token && { Authorization: `Bearer ${token}` }),
+        ...(captcha && { "X-Turnstile-Token": captcha }),
       },
       body: JSON.stringify(body),
       cache: "no-store",
@@ -79,15 +85,21 @@ async function startSession({ token, expiresAt }: SignInResponse) {
 }
 
 /** Step 1: send an SMS code for sign-in or sign-up. */
-export async function requestOtp(input: {
-  flow: Flow;
-  phone: string;
-  name?: string;
-}): Promise<AuthResult<{ phone: string; resendAfterSeconds: number; devCode?: string }>> {
+export async function requestOtp(
+  input: {
+    flow: Flow;
+    phone: string;
+    name?: string;
+  },
+  /** The Turnstile token (robot check), when the site has one. */
+  captcha?: string | null,
+): Promise<AuthResult<{ phone: string; resendAfterSeconds: number; devCode?: string }>> {
   if (input.flow === "register" && !input.name?.trim()) return { ok: false, error: "nameRequired" };
   const result = await post<{ phone: string; resendAfterSeconds: number; devCode?: string }>(
     "/auth/customer/otp/request",
     input,
+    undefined,
+    captcha,
   );
   return result.ok ? { ok: true, ...result.data } : result;
 }

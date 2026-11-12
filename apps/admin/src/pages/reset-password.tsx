@@ -1,6 +1,7 @@
 import { Button } from '@talad/ui/components/button'
 import { Input } from '@talad/ui/components/input'
 import { Label } from '@talad/ui/components/label'
+import { useTurnstile } from '@talad/ui/components/turnstile'
 import { ArrowLeft, LoaderCircle, MailCheck } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
@@ -9,6 +10,7 @@ import { PASSWORD_MIN } from '@/components/account-menu'
 import { useI18n } from '@/i18n/context'
 import { ApiError, send } from '@/lib/api'
 import { fill } from '@/lib/format'
+import { errorText } from '@/lib/auth-errors'
 import { AuthShell } from './login'
 
 const back = (label: string) => (
@@ -22,7 +24,8 @@ const back = (label: string) => (
 
 /** "Forgot password?": emails a one-time reset link (§2.1). */
 export function ForgotPasswordPage() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
+  const captcha = useTurnstile(import.meta.env.VITE_TURNSTILE_SITE_KEY, { action: 'admin-reset', language: locale, failedText: t.auth.CAPTCHA_FAILED })
   const [email, setEmail] = useState((useLocation().state as { email?: string } | null)?.email ?? '')
   const [sent, setSent] = useState<{ devLink?: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -32,9 +35,9 @@ export function ForgotPasswordPage() {
     setError(null)
     setPending(true)
     try {
-      setSent(await send<{ devLink?: string }>('POST', '/admin/auth/password/forgot', { email: email.trim() }))
+      setSent(await send<{ devLink?: string }>('POST', '/admin/auth/password/forgot', { email: email.trim() }, captcha.headers()))
     } catch (e) {
-      setError(e instanceof ApiError && e.status === 429 ? t.auth.throttled : t.auth.generic)
+      setError(errorText(e, t))
     } finally {
       setPending(false)
     }
@@ -84,6 +87,7 @@ export function ForgotPasswordPage() {
             {error}
           </p>
         )}
+        {captcha.widget}
         <Button type="submit" size="lg" disabled={pending}>
           {pending && <LoaderCircle className="animate-spin" />}
           {t.auth.sendLink}

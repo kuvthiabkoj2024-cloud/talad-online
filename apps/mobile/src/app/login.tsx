@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { Turnstile, TURNSTILE_SITE_KEY } from '@/components/turnstile';
 import { Button, Card } from '@/components/ui';
 import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -22,7 +23,7 @@ type Verified = Session | { twoFactor: { method: 'TOTP' | 'SMS'; challenge: stri
 export default function LoginScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { signIn } = useAuth();
   const [phone, setPhone] = useState('');
   const [name, setName] = useState('');
@@ -31,6 +32,10 @@ export default function LoginScreen() {
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Robot check before an SMS is sent (as on the website): one token per request.
+  const [captcha, setCaptcha] = useState<string | null>(null);
+  const [captchaError, setCaptchaError] = useState<string | null>(null);
+  const [captchaReset, setCaptchaReset] = useState(0);
 
   const flow = register ? 'register' : 'login';
 
@@ -43,7 +48,10 @@ export default function LoginScreen() {
       if (e instanceof ApiError && e.code === 'PHONE_NOT_REGISTERED') {
         setRegister(true);
         setError(t.login.newAccount);
-      } else setError(e instanceof ApiError ? e.message : t.common.error);
+      } else if (e instanceof ApiError && (e.code === 'CAPTCHA_REQUIRED' || e.code === 'CAPTCHA_FAILED')) {
+        setError(e.code === 'CAPTCHA_REQUIRED' ? t.login.captchaWait : t.login.captchaFailed);
+      } else if (e instanceof ApiError && e.code === 'OTP_DAILY_LIMIT') setError(t.login.dailyLimit);
+      else setError(e instanceof ApiError ? e.message : t.common.error);
     } finally {
       setBusy(false);
     }
@@ -54,7 +62,15 @@ export default function LoginScreen() {
       const e164 = normalizePhone(phone);
       if (!e164) return setError(t.login.invalidPhone);
       if (register && !name.trim()) return setError(t.login.newAccount);
-      const res = await api<{ devCode?: string }>('/auth/customer/otp/request', { method: 'POST', body: { phone: e164, flow, ...(register && { name: name.trim() }) } });
+      if (TURNSTILE_SITE_KEY && !captcha) return setError(captchaError ? `${t.login.captchaFailed} (${captchaError})` : t.login.captchaWait);
+      const headers: Record<string, string> = captcha ? { 'X-Turnstile-Token': captcha } : {};
+      setCaptcha(null);
+      setCaptchaReset((n) => n + 1);
+      const res = await api<{ devCode?: string }>('/auth/customer/otp/request', {
+        method: 'POST',
+        body: { phone: e164, flow, ...(register && { name: name.trim() }) },
+        headers,
+      });
       setCode('');
       setStep({ kind: 'code', e164, devCode: res.devCode });
     });
@@ -122,6 +138,16 @@ export default function LoginScreen() {
                   <TextInput value={name} onChangeText={setName} autoComplete="name" textContentType="name" style={input} />
                 </>
               )}
+              <Turnstile
+                locale={locale}
+                action="app-otp"
+                resetKey={captchaReset}
+                onToken={(token) => {
+                  setCaptcha(token);
+                  if (token) setCaptchaError(null);
+                }}
+                onError={setCaptchaError}
+              />
               <Button label={t.login.sendCode} loading={busy} onPress={() => void sendCode()} />
             </>
           ) : (

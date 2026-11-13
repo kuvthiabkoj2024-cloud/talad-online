@@ -5,14 +5,16 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useVideoPlayer, VideoView, type VideoPlayer } from 'expo-video';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, View, type ViewToken } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, View, type ListViewToken } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui';
+import { VideoRail } from '@/components/video/video-rail';
 import { Radius, Spacing } from '@/constants/theme';
 import { api, productHref, type FeedEntry } from '@/lib/api';
 import { count, priceRange } from '@/lib/format';
+import { useAuth } from '@/lib/auth';
 import { fill, useI18n } from '@/lib/i18n';
 
 type FeedType = 'shop' | 'customer';
@@ -23,7 +25,9 @@ type FeedType = 'shop' | 'customer';
  */
 export default function FeedScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { t } = useI18n();
+  const { customer } = useAuth();
   const [type, setType] = useState<FeedType>('shop');
   const [height, setHeight] = useState(0);
   const [active, setActive] = useState(0);
@@ -50,7 +54,7 @@ export default function FeedScreen() {
   const items = feed.data?.pages.flatMap((p) => p.items) ?? [];
 
   // FlatList needs this callback to stay the same for the list's whole life.
-  const onViewable = useCallback(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+  const onViewable = useCallback(({ viewableItems }: { viewableItems: ListViewToken[] }) => {
     const first = viewableItems.find((v) => v.isViewable);
     if (first?.index != null) setActive(first.index);
   }, []);
@@ -90,6 +94,7 @@ export default function FeedScreen() {
               preload={Math.abs(index - active) <= 1}
               muted={muted}
               onToggleMute={() => setMuted((m) => !m)}
+              onDeleted={() => void feed.refetch()}
             />
           )}
           ListEmptyComponent={
@@ -128,6 +133,18 @@ export default function FeedScreen() {
           </Pressable>
         ))}
       </View>
+
+      {/* Post your own video (the website's "Post" button). */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t.feed.newPost}
+        onPress={() => router.push(customer ? '/feed/new' : '/login')}
+        style={[styles.newPost, { top: insets.top + Spacing.two }]}>
+        <Icon name="add" size={18} color="#ffffff" strokeWidth={3} />
+        <ThemedText type="smallBold" style={styles.white}>
+          {t.feed.newPost}
+        </ThemedText>
+      </Pressable>
     </View>
   );
 }
@@ -148,6 +165,7 @@ function Slide({
   preload,
   muted,
   onToggleMute,
+  onDeleted,
 }: {
   item: FeedEntry;
   height: number;
@@ -157,6 +175,7 @@ function Slide({
   preload: boolean;
   muted: boolean;
   onToggleMute: () => void;
+  onDeleted: () => void;
 }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -182,6 +201,7 @@ function Slide({
       )}
 
       <View style={[styles.side, { bottom: Spacing.five }]}>
+        <VideoRail item={item} active={active && !paused} onDeleted={onDeleted} />
         <Pressable accessibilityLabel={muted ? t.feed.unmute : t.feed.mute} onPress={onToggleMute} style={styles.round}>
           <Icon name={muted ? 'volume-off' : 'volume-on'} size={22} color="#ffffff" />
         </Pressable>
@@ -230,7 +250,18 @@ const styles = StyleSheet.create({
   tab: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, alignItems: 'center' },
   underline: { position: 'absolute', bottom: 4, left: Spacing.three, right: Spacing.three, height: 2, borderRadius: 1, backgroundColor: '#ffffff' },
   playIcon: { position: 'absolute', top: '45%', alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 40, padding: Spacing.three },
-  side: { position: 'absolute', right: Spacing.three, gap: Spacing.three },
+  side: { position: 'absolute', right: Spacing.two, gap: Spacing.three, alignItems: 'center' },
+  newPost: {
+    position: 'absolute',
+    right: Spacing.three,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+  },
   round: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
   info: {
     position: 'absolute',

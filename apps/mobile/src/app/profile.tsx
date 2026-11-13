@@ -89,7 +89,7 @@ export default function ProfileScreen() {
               {fill(t.acct.memberSince, { date: date(customer.createdAt, locale) })}
             </ThemedText>
             <Button label={t.acct.changePhoto} variant="outline" icon="image" loading={busy === 'photo'} onPress={() => void changePhoto()} />
-            {customer.avatarVersion && <Button label={t.acct.removePhoto} variant="outline" onPress={() => void removePhoto()} />}
+            {!!customer.avatarVersion && <Button label={t.acct.removePhoto} variant="outline" onPress={() => void removePhoto()} />}
           </View>
         </Card>
 

@@ -1263,3 +1263,55 @@ model CommissionRequest {
   @@index([status, createdAt])
   @@index([productId, createdAt])
 }
+
+/// Market Chat training (admin): an official answer to a question customers ask. Matched by
+/// meaning-ish similarity against `questions` (several phrasings, Lao and English) before anything
+/// else; Claude also gets them as official answers.
+model AssistantAnswer {
+  id           String   @id @default(uuid(7))
+  /// Ways customers ask it, e.g. ["ມີຮ້ານຢູ່ປາກເຊບໍ", "any shop in Pakse?"].
+  questions    String[]
+  answerLo     String
+  answerEn     String
+  /// Optional product search words: matching products are shown under the answer.
+  productWords String?
+  isActive     Boolean  @default(true)
+  /// How many times it has answered a customer.
+  hits         Int      @default(0)
+  lastHitAt    DateTime?
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+/// Market Chat training (admin): a word customers use and what to search for instead
+/// ("ໂສ້ງ" → pants, trousers; "airpods" → earbuds). Extends the built-in Lao/English glossary.
+model AssistantWord {
+  id          String   @id @default(uuid(7))
+  /// As customers type it (lowercase; Lao normalized).
+  word        String   @unique
+  /// Search words it means, in Lao and/or English.
+  means       String[]
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// A question Market Chat couldn't answer well (not understood, nothing found, only related
+/// products), grouped by its text for admins to teach. No customer is recorded; long digit
+/// runs (phone numbers, order numbers) are masked.
+model AssistantMiss {
+  id        String   @id @default(uuid(7))
+  /// Lowercased, trimmed, digits masked: the grouping key.
+  text      String   @unique
+  lang      String
+  /// "not_understood" | "not_found" | "related"
+  outcome   String
+  count     Int      @default(1)
+  /// Taught (or dismissed) by an admin: hidden from the inbox until asked again.
+  resolved  Boolean  @default(false)
+  firstAt   DateTime @default(now())
+  lastAt    DateTime @default(now())
+
+  @@index([resolved, lastAt])
+}

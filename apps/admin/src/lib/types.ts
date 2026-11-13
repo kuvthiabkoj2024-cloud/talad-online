@@ -522,3 +522,47 @@ export interface AdminVideoLike {
   customer: { id: string; name: string }
   createdAt: string
 }
+
+/** Market Chat training (GET /admin/assistant…). */
+export interface AssistantOverview {
+  answers: number
+  words: number
+  unanswered: number
+  answered: number
+}
+export interface AssistantAnswer {
+  id: string
+  questions: string[]
+  answerLo: string
+  answerEn: string
+  productWords: string | null
+  isActive: boolean
+  hits: number
+  lastHitAt: string | null
+  updatedAt: string
+}
+export interface AssistantWord {
+  id: string
+  word: string
+  means: string[]
+}
+export interface AssistantMiss {
+  id: string
+  text: string
+  lang: 'lo' | 'en'
+  outcome: 'not_understood' | 'not_found' | 'related'
+  count: number
+  resolved: boolean
+  firstAt: string
+  lastAt: string
+}
+/** POST /admin/assistant/test: what Market Chat would answer, and how. */
+export interface AssistantTestReply {
+  reply: string
+  products: { id: string; name: string; price: number; imageUrl: string | null }[]
+  quality: 'exact' | 'related' | 'none'
+  engine: 'ai' | 'basic'
+  lang: 'lo' | 'en'
+  via?: string
+  miss?: AssistantMiss['outcome']
+}

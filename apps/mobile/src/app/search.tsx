@@ -11,6 +11,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Button, Card, EmptyState, LoadError, Loading } from '@/components/ui';
 import { BrandGreen, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { shrinkPhoto } from '@/lib/shrink-photo';
 import { api, upload, type ProductCard } from '@/lib/api';
 import { fill, useI18n } from '@/lib/i18n';
 import { listeningLanguage, speechRecognizer } from '@/lib/voice';
@@ -42,7 +43,7 @@ export default function SearchScreen() {
     queryFn: () => api<{ items: ProductCard[]; total: number }>(`/products/search?${new URLSearchParams({ q, page: '1', pageSize: '40' })}`),
     enabled: q.length > 0 && !photo,
   });
-  const scan = useMutation({ mutationFn: (asset: ImagePicker.ImagePickerAsset) => upload<PhotoResult>('/products/search/image', 'file', asset) });
+  const scan = useMutation({ mutationFn: async (asset: ImagePicker.ImagePickerAsset) => upload<PhotoResult>('/products/search/image', 'file', await shrinkPhoto(asset)) });
 
   const search = (words: string) => {
     setPhoto(null);

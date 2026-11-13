@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { ScrollView, type ScrollViewInstance, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { Icon, type IconName } from '@/components/icon';
 import { ThemedText } from '@/components/themed-text';
@@ -24,7 +24,7 @@ export function HeroCarousel({ slides, banners }: { slides: { title: string; sub
   const width = Math.min(screen, MaxContentWidth) - Spacing.three * 2;
   const count = banners.length || slides.length;
   const [index, setIndex] = useState(0);
-  const scroller = useRef<ScrollView>(null);
+  const scroller = useRef<ScrollViewInstance>(null);
 
   useEffect(() => {
     if (count < 2) return;

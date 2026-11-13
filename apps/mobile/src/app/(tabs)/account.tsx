@@ -12,9 +12,10 @@ import { ThemedText } from '@/components/themed-text';
 import { Button, Card, type IconName } from '@/components/ui';
 import { BrandGreen, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { api, avatarSrc, SHOP_URL, SITE_URL } from '@/lib/api';
+import { api, avatarSrc, SITE_URL } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
+import { THEME_MODES, useThemeMode } from '@/lib/theme-mode';
 
 /** Profile: who's signed in and the website's account menu, then language and signing out. */
 export default function AccountScreen() {
@@ -22,6 +23,7 @@ export default function AccountScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t, locale, setLocale } = useI18n();
+  const { mode, setMode } = useThemeMode();
   const { customer, signOut } = useAuth();
   const unread = useQuery({ queryKey: ['me', 'messages-unread'], queryFn: () => api<{ count: number }>('/me/conversations/unread-count'), enabled: !!customer, refetchInterval: 30_000 });
   const orderCounts = useQuery({
@@ -54,6 +56,7 @@ export default function AccountScreen() {
   const menu: { icon: IconName; label: string; href: Href; badge?: number }[] = [
     { icon: 'user', label: t.acct.profile, href: '/profile' },
     { icon: 'package', label: t.acct.orders, href: '/orders' },
+    { icon: 'track', label: t.acct.trackOrder, href: '/track' },
     { icon: 'points', label: t.acct.points, href: '/points' },
     { icon: 'chats', label: t.acct.messages, href: '/messages', badge: unread.data?.count },
     { icon: 'shop', label: t.acct.following, href: '/following' },
@@ -101,8 +104,7 @@ export default function AccountScreen() {
                 label={t.acct.openShop}
                 sub={t.acct.openShopDescription}
                 accent
-                onPress={() => void WebBrowser.openBrowserAsync(`${SHOP_URL}/register`)}
-                right={<Icon name="external" size={16} color={theme.textSecondary} />}
+                onPress={() => router.push('/seller/register')}
               />
             </Card>
             <Button label={t.account.signIn} icon="log-in" onPress={() => router.push('/login')} />
@@ -149,15 +151,14 @@ export default function AccountScreen() {
             {menu.map((item, i) => (
               <Row key={item.label} icon={item.icon} label={item.label} badge={item.badge} divider onPress={() => router.push(item.href)} />
             ))}
-            {/* Accounts can sell too: manage the shop, or open one (Seller Center). */}
+            {/* Accounts can sell too: open a shop, or manage it (seller screens, same sign-in). */}
             <Row
               icon="shop"
               label={customer.shop ? t.acct.myShop : t.acct.openShop}
               sub={customer.shop ? customer.shop.name : t.acct.openShopDescription}
               accent
               divider
-              onPress={() => void WebBrowser.openBrowserAsync(customer.shop ? SHOP_URL : `${SHOP_URL}/register`)}
-              right={<Icon name="external" size={16} color={theme.textSecondary} />}
+              onPress={() => router.push(customer.shop ? '/seller' : '/seller/register')}
             />
           </Card>
         )}
@@ -176,6 +177,27 @@ export default function AccountScreen() {
                     style={[styles.lang, { borderColor: theme.border }, locale === l && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
                     <ThemedText type="caption" style={{ color: locale === l ? theme.onPrimary : theme.text, fontWeight: '700' }}>
                       {l === 'lo' ? 'ລາວ' : 'EN'}
+                    </ThemedText>
+                  </Pressable>
+                ))}
+              </View>
+            }
+          />
+          <Row
+            icon="theme"
+            label={t.account.theme}
+            divider
+            right={
+              <View style={styles.langs}>
+                {THEME_MODES.map((m) => (
+                  <Pressable
+                    key={m}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: mode === m }}
+                    onPress={() => setMode(m)}
+                    style={[styles.lang, styles.themeOption, { borderColor: theme.border }, mode === m && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                    <ThemedText type="caption" style={{ color: mode === m ? theme.onPrimary : theme.text, fontWeight: '700' }}>
+                      {t.account.themes[m]}
                     </ThemedText>
                   </Pressable>
                 ))}
@@ -266,6 +288,8 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
   langs: { flexDirection: 'row', gap: Spacing.one },
   lang: { borderWidth: 1, borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: 2 },
+  // Three choices share the row with the label: a little narrower than the language ones.
+  themeOption: { paddingHorizontal: Spacing.two },
   badge: { minWidth: 20, borderRadius: 10, paddingHorizontal: 5, alignItems: 'center' },
   badgeText: { color: '#ffffff', fontSize: 11, lineHeight: 20, fontWeight: '700' },
 });

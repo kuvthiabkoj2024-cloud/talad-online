@@ -12,6 +12,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Button, Card, Pill } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { shrinkPhoto } from '@/lib/shrink-photo';
 import { api, ApiError, upload, type BankAccountItem } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { BANKS_KEY } from '@/lib/query-keys';
@@ -47,7 +48,7 @@ export default function BankFormScreen() {
     setBusy(true);
     try {
       let qrImageKey: string | null | undefined;
-      if (qr && qr !== 'remove') qrImageKey = (await upload<{ qrImageKey: string }>('/me/bank-accounts/qr', 'file', qr)).qrImageKey;
+      if (qr && qr !== 'remove') qrImageKey = (await upload<{ qrImageKey: string }>('/me/bank-accounts/qr', 'file', await shrinkPhoto(qr))).qrImageKey;
       else if (qr === 'remove') qrImageKey = null;
       const body = { bankCode, accountName: accountName.trim(), accountNumber: number, isDefault, ...(qrImageKey !== undefined && { qrImageKey }) };
       await api(existing ? `/me/bank-accounts/${existing.id}` : '/me/bank-accounts', { method: existing ? 'PUT' : 'POST', body });

@@ -1,5 +1,6 @@
 import type { AdminPermission } from '@talad/shared'
 import {
+  Bot,
   Clapperboard,
   BadgePercent,
   BarChart3,
@@ -77,6 +78,8 @@ export const NAV_GROUPS: { label: NavKey; items: NavItem[] }[] = [
       { to: '/banners', label: 'banners', icon: Image, area: 'banners' },
       { to: '/pages', label: 'pages', icon: FileText, area: 'pages' },
       { to: '/announcements', label: 'announcements', icon: Megaphone, area: 'announcements' },
+      // Training Market Chat: answers, words, and the questions it couldn't answer.
+      { to: '/market-chat', label: 'assistant', icon: Bot, area: 'assistant' },
     ],
   },
   {

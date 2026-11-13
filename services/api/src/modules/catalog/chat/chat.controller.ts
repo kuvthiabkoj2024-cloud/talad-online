@@ -86,7 +86,9 @@ export class ChatController {
     const [scheme, token] = (auth ?? '').split(' ');
     const session = scheme === 'Bearer' && token ? await this.sessions.resolve(token) : null;
     const customerId = session?.actorType === 'CUSTOMER' ? session.actorId : undefined;
-    return this.chat.reply({ message: dto.message ?? '', history: parseHistory(dto.history), locale: dto.locale ?? 'lo', photo, customerId, thumb: dto.thumb });
+    // How it was answered is for admins (Market Chat → Test), not customers.
+    const { via: _via, miss: _miss, answerId: _answerId, ...reply } = await this.chat.reply({ message: dto.message ?? '', history: parseHistory(dto.history), locale: dto.locale ?? 'lo', photo, customerId, thumb: dto.thumb });
+    return reply;
   }
 
   /** Buy by chat: "Buy now" on a product card → an order card in the customer's Market Chat. */

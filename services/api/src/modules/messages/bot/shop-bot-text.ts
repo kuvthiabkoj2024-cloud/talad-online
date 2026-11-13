@@ -1,6 +1,6 @@
 import type { BusinessHours, ProvinceCode, Weekday } from '@talad/shared';
 import { WEEKDAYS } from '@talad/shared';
-import { detectIntent } from '../../catalog/chat/chat-intents.js';
+import { detectIntent, stripIntentWords } from '../../catalog/chat/chat-intents.js';
 import { extractQuery, isGreeting, takeColor, type ChatLocale, type Color } from '../../catalog/chat/chat-text.js';
 
 /**
@@ -162,6 +162,9 @@ export function matchFaq(message: string, questions: string[]): number | null {
   return best >= 0 && score >= FAQ_MIN_SCORE ? best : null;
 }
 
+/** Market Chat questions a shop's own bot doesn't answer itself (see `analyse`). */
+const MARKET_ONLY = new Set(['shops', 'more', 'recommend', 'compare', 'cheapest', 'bulk', 'warranty', 'gift', 'new']);
+
 /** Works out what the message asks, most specific first. The seller's own FAQs win. */
 export function analyse(message: string, faqQuestions: string[] = []): BotTopic {
   const text = message.trim();
@@ -182,7 +185,13 @@ export function analyse(message: string, faqQuestions: string[] = []): BotTopic 
   const intent = detectIntent(text);
   if (intent && (intent.kind === 'payment' || intent.kind === 'delivery' || intent.kind === 'discount')) return intent;
   if (color) return { kind: 'color', color, rest };
-  if (intent) return intent;
+  // Market Chat's "which shop?", "other ones?", "which is better?", "wholesale?"…: in a shop's own chat, a search when
+  // a product is named ("other coffee?"), otherwise the seller answers (never a search for "other").
+  if (intent && MARKET_ONLY.has(intent.kind)) {
+    const named = extractQuery(stripIntentWords(text));
+    return named.keywords.length ? { kind: 'search', keywords: named.keywords, maxPrice: named.maxPrice } : { kind: 'unknown' };
+  }
+  if (intent && !MARKET_ONLY.has(intent.kind)) return intent as BotTopic;
   const query = extractQuery(text);
   if (query.keywords.length) return { kind: 'search', keywords: query.keywords, maxPrice: query.maxPrice };
   return { kind: 'unknown' };

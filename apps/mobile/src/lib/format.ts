@@ -31,3 +31,9 @@ export function date(iso: string, locale: Locale): string {
   const d = new Date(iso);
   return `${d.getDate()} ${MONTHS[locale][d.getMonth()]} ${d.getFullYear()}`;
 }
+
+/** "4 ພ.ຈ. 2026 14:05" / "4 Nov 2026 14:05". */
+export function dateTime(iso: string, locale: Locale): string {
+  const d = new Date(iso);
+  return `${date(iso, locale)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}

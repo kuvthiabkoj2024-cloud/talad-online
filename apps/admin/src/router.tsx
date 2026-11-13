@@ -64,6 +64,7 @@ export const router = createBrowserRouter([
           { path: 'banners', lazy: page(() => import('@/pages/banners'), (m) => m.BannersPage, 'banners') },
           { path: 'pages', lazy: page(() => import('@/pages/pages'), (m) => m.PagesPage, 'pages') },
           { path: 'announcements', lazy: page(() => import('@/pages/announcements'), (m) => m.AnnouncementsPage, 'announcements') },
+          { path: 'market-chat', lazy: page(() => import('@/pages/assistant'), (m) => m.AssistantPage, 'assistant') },
           { path: 'delivery', lazy: page(() => import('@/pages/delivery'), (m) => m.DeliveryPage, 'delivery') },
           { path: 'settings', lazy: page(() => import('@/pages/settings'), (m) => m.SettingsPage, 'settings') },
           { path: 'admins', lazy: page(() => import('@/pages/admins'), (m) => m.AdminsPage) },

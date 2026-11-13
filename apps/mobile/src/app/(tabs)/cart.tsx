@@ -120,9 +120,26 @@ function Line({ item, first, onQuantity, onRemove, shopSlug }: { item: CartItem;
             {item.variantLabel}
           </ThemedText>
         )}
-        <ThemedText type="smallBold" themeColor={item.available ? 'primary' : 'textSecondary'}>
-          {item.available ? money(item.unitPrice) : t.cart.unavailable}
-        </ThemedText>
+        <View style={styles.priceRow}>
+          <ThemedText type="smallBold" themeColor={item.available ? 'primary' : 'textSecondary'}>
+            {item.available ? money(item.unitPrice) : t.cart.unavailable}
+          </ThemedText>
+          {item.available && Math.max(item.compareAtPrice ?? 0, item.bulk ? item.basePrice : 0) > item.unitPrice && (
+            <ThemedText type="caption" themeColor="textSecondary" style={styles.strike}>
+              {money(Math.max(item.compareAtPrice ?? 0, item.bulk ? item.basePrice : 0))}
+            </ThemedText>
+          )}
+        </View>
+        {item.available && item.bulk && (
+          <ThemedText type="caption" themeColor="sale">
+            {fill(t.cart.bulkApplied, { n: item.bulk.quantity })}
+          </ThemedText>
+        )}
+        {item.available && item.nextBulk && (
+          <ThemedText type="caption" themeColor="primary">
+            {fill(t.cart.bulkNext, { n: item.nextBulk.more, price: money(item.nextBulk.unitPrice) })}
+          </ThemedText>
+        )}
         <View style={styles.lineActions}>
           <Stepper value={item.quantity} max={Math.max(1, item.stock)} onChange={onQuantity} disabled={!item.available} />
           <Pressable accessibilityRole="button" accessibilityLabel={t.cart.remove} onPress={onRemove} hitSlop={8}>
@@ -143,6 +160,8 @@ const styles = StyleSheet.create({
   dim: { opacity: 0.6 },
   thumb: { width: 76, height: 76, borderRadius: 10, overflow: 'hidden' },
   lineBody: { gap: 2 },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.two },
+  strike: { textDecorationLine: 'line-through' },
   lineActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: Spacing.one },
   bar: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two + 2, borderTopWidth: StyleSheet.hairlineWidth },
 });

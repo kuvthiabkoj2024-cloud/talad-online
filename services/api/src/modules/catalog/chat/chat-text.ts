@@ -5,7 +5,15 @@ export type ChatLocale = 'lo' | 'en';
  * One spelling for letters Lao writes two ways: ຫມ/ໝ and ຫນ/ໜ ("ຢາສະຫມູນໄພ" = "ຢາສະໝູນໄພ").
  * Applied to what customers type and, in SQL, to product text, so either spelling finds the other.
  */
-export const normalizeLao = (text: string) => text.replace(/ຫມ/g, 'ໝ').replace(/ຫນ/g, 'ໜ');
+/**
+ * One spelling for letters Lao is typed two ways: ຫມ/ຫນ → ໝ/ໜ, and ໍ + າ (with a tone mark
+ * between, as phones often type it: "ນໍ້າ", "ແນະນໍາ") → ຳ ("ນ້ຳ", "ແນະນຳ").
+ */
+export const normalizeLao = (text: string) =>
+  text
+    .replace(/ຫມ/g, 'ໝ')
+    .replace(/ຫນ/g, 'ໜ')
+    .replace(/\u0ECD([\u0EC8-\u0ECB]?)\u0EB2/g, '$1\u0EB3');
 
 /** Lao is written without spaces: the platform's dictionary splits it into words ("ຄີມທາຜິວແດ" → ຄີມ ທາ ຜິວ ແດ). */
 const LAO_WORDS = new Intl.Segmenter('lo', { granularity: 'word' });
@@ -27,7 +35,7 @@ const LO_STOP = [
 ].sort((a, b) => b.length - a.length);
 
 const GREETINGS = /^(hi+|hello|hey|yo|good (morning|afternoon|evening)|ສະບາຍດີ|ສະບາຍດີເຈົ້າ|ສະບາຍດີຄັບ|ຫວັດດີ|ດີ|ດີເຈົ້າ|ດີຄັບ|hello there)[\s!.?😊👋]*$/iu;
-const THANKS = /^(thanks?( you)?|thx|ty|ok(ay)? thanks?|ຂອບໃຈ(ຫຼາຍ)?(ເດີ້|ເຈົ້າ|ຄັບ)?|ຂອບໃຈເດີ້)[\s!.😊🙏]*$/iu;
+const THANKS = /^(ok(ay)? )?(thanks?( you)?( (so|very) much| a lot| a bunch)?|thx|ty|tysm|many thanks|ຂອບໃຈ(ຫຼາຍ)?(ໆ)?(ເດີ້|ເຈົ້າ|ຄັບ|ນໍາ|ນຳ)?|ຂອບໃຈເດີ້|ຂອບໃຈຫຼາຍໆເດີ້)(?:[\s!.😊🙏ໆ]|❤️)*$/iu;
 
 export const isGreeting = (text: string) => GREETINGS.test(text.trim());
 export const isThanks = (text: string) => THANKS.test(text.trim());
@@ -40,16 +48,21 @@ export const isThanks = (text: string) => THANKS.test(text.trim());
 export function extractQuery(text: string): { keywords: string[]; maxPrice: number | null } {
   let rest = normalizeLao(text).toLowerCase();
   let maxPrice: number | null = null;
-  const price = /(?:under|below|less than|max|up to|<|ບໍ່ເກີນ|ຕ່ຳກວ່າ|ບໍ່ເກີນກວ່າ)\s*₭?\s*([\d][\d,.]*)\s*(k|ພັນ|000)?/i.exec(rest);
+  // "under 300k", "ບໍ່ເກີນ 100,000 ກີບ", "ງົບ 100 ພັນ", "budget 50000 kip".
+  const price = /(?:under|below|less than|max|up to|within|budget(?: of| is)?|<|ບໍ່ເກີນກວ່າ|ບໍ່ເກີນ|ຕ່ຳກວ່າ|ງົບປະມານ|ງົບ|ໃນລາຄາ)\s*₭?\s*([\d][\d,.]*)\s*(k(?![a-z])|ພັນ|ແສນ|ລ້ານ|000)?\s*(?:kip|lak|ກີບ|₭)?/i.exec(rest);
   if (price) {
     const n = Number(price[1].replace(/[,.]/g, ''));
-    maxPrice = n ? n * (price[2] === 'k' || price[2] === 'ພັນ' ? 1000 : 1) : null;
+    const unit = price[2] === 'k' || price[2] === 'ພັນ' ? 1000 : price[2] === 'ແສນ' ? 100_000 : price[2] === 'ລ້ານ' ? 1_000_000 : 1;
+    maxPrice = n ? n * unit : null;
     rest = rest.replace(price[0], ' ');
   }
+  // Currency words alone are never what's being looked for.
+  rest = rest.replace(/\b(kip|lak)\b|ກີບ|₭/gi, ' ');
   const words = rest
     .replace(/[^\p{L}\p{M}\p{N}\s-]/gu, ' ')
     .split(/\s+/)
-    .map(stripLao)
+    // A whole word that's filler ("ສະບາຍດີ") goes; otherwise peel filler off its ends.
+    .map((w) => (LO_STOP.includes(w) ? '' : stripLao(w)))
     .filter((w) => w.length > 1 && !EN_STOP.has(w) && !LO_STOP.includes(w) && !/^\d+$/.test(w));
   return { keywords: [...new Set(words)].slice(0, 8), maxPrice };
 }
@@ -95,11 +108,34 @@ export interface Concept {
 
 const GLOSSARY_LO = new Set(GLOSSARY.map(([lo]) => lo));
 
+/**
+ * Words admins taught Market Chat (Admin → Market Chat → Words): a word customers use and what
+ * to search for instead. Kept in memory by AssistantTrainingService and used like the glossary.
+ */
+let taughtLo = new Map<string, string[]>();
+let taughtEn: { word: string; means: string[] }[] = [];
+
+export function setTaughtWords(words: { word: string; means: string[] }[]): void {
+  taughtLo = new Map();
+  taughtEn = [];
+  for (const { word, means } of words) {
+    const w = normalizeLao(word).trim().toLowerCase();
+    if (!w || !means.length) continue;
+    if (isLao(w)) taughtLo.set(w, [...(taughtLo.get(w) ?? []), ...means]);
+    else taughtEn.push({ word: w, means });
+  }
+}
+
+/** A Lao word Market Chat knows (built in, or taught), and what else it may be called. */
+const knownLao = (lo: string) => GLOSSARY_LO.has(lo) || taughtLo.has(lo);
+const laoAlternatives = (lo: string) => [...GLOSSARY.filter(([l]) => l === lo).map(([, en]) => en), ...(taughtLo.get(lo) ?? [])];
+
 /** Search words for "related" results: every alternative, plus the words inside unknown Lao phrases. */
 export const relatedWords = (concepts: Concept[]) => [...new Set(concepts.flatMap((c) => [...c.alternatives, ...(c.parts ?? [])]))];
 
 const isLao = (s: string) => /[\u0E80-\u0EFF]/.test(s);
-const wholeWord = (text: string, word: string) => new RegExp(`(^|[^a-z])${word.replace(/[-]/g, '\\-')}($|[^a-z])`).test(text);
+/** `word` as a whole word in `text` (any characters in it taken literally: admins type these). */
+const wholeWord = (text: string, word: string) => new RegExp(`(^|[^a-z])${word.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&')}($|[^a-z])`).test(text);
 
 /**
  * The concepts in a question: "ອາຫານແມວ" → food + cat; "ຫູຟັງ" → earbuds/headphones;
@@ -120,21 +156,22 @@ export function toConcepts(keywords: string[]): Concept[] {
       };
       for (let i = 0; i < words.length; ) {
         let j = words.length;
-        while (j > i && !GLOSSARY_LO.has(words.slice(i, j).join(''))) j--;
+        while (j > i && !knownLao(words.slice(i, j).join(''))) j--;
         if (j === i) {
           unknown.push(words[i++]);
           continue;
         }
         flush();
         const lo = words.slice(i, j).join('');
-        out.push({ alternatives: [lo, ...GLOSSARY.filter(([l]) => l === lo).map(([, en]) => en)], known: true });
+        out.push({ alternatives: [...new Set([lo, ...laoAlternatives(lo)])], known: true });
         i = j;
       }
       flush();
     } else {
       const low = k.toLowerCase();
       const los = GLOSSARY.filter(([, en]) => wholeWord(low, en)).map(([lo]) => lo);
-      out.push({ alternatives: [k, ...new Set(los)], known: los.length > 0 });
+      const taught = taughtEn.filter((t) => wholeWord(low, t.word)).flatMap((t) => t.means);
+      out.push({ alternatives: [k, ...new Set([...los, ...taught])], known: los.length + taught.length > 0 });
     }
   }
   return out;
@@ -192,5 +229,6 @@ export function labelOf(concepts: Concept[], lang: ChatLocale): string {
   const lao = /[\u0E80-\u0EFF]/;
   return concepts
     .map((c) => c.alternatives.find((a) => (lang === 'lo' ? lao.test(a) : !lao.test(a))) ?? c.alternatives[0])
-    .join(' ');
+    // Lao writes a phrase without spaces ("ຫູຟັງໄຮ້ສາຍ").
+    .join(lang === 'lo' ? '' : ' ');
 }

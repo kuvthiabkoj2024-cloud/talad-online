@@ -14,7 +14,7 @@ import { useI18n } from '@/lib/i18n';
 const SEARCH_ROW = Spacing.three + 46 + 6;
 
 /**
- * The website's phone header: logo and name on brand green, language switch, and a search bar
+ * The website's phone header: logo and name on brand green, order tracking, language switch, and a search bar
  * that opens Search. `searchShown` (0–1, from the page's scrolling) folds the search bar away
  * while scrolling down and brings it back on the way up, like the website.
  */
@@ -31,6 +31,15 @@ export function AppHeader({ searchShown }: { searchShown?: SharedValue<number> }
       <View style={styles.row}>
         <Image source={require('@/assets/images/brand-logo.png')} style={styles.logo} contentFit="contain" />
         <ThemedText style={styles.brand}>{t.brand}</ThemedText>
+        {/* Order tracking, as in the website's header. */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t.acct.trackOrder}
+          onPress={() => router.push('/track')}
+          hitSlop={6}
+          style={({ pressed }) => [styles.round, pressed && styles.pressed]}>
+          <Icon name="track" size={20} color="#ffffff" />
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={locale === 'lo' ? 'English' : 'ລາວ'}
@@ -78,6 +87,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.one,
   },
   onGreen: { color: '#ffffff' },
+  round: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.45)', alignItems: 'center', justifyContent: 'center' },
   search: {
     shadowColor: '#000000',
     shadowOpacity: 0.12,

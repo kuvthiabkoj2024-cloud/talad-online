@@ -37,25 +37,35 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "MC Mart uses your location to pin your delivery address, so shops nearby can deliver for free."
+          "locationWhenInUsePermission": "MC Mart uses your location to pin your delivery address, so shops nearby can deliver for free, and to share where you are in a chat."
         }
       ],
       "expo-video",
       [
         "expo-image-picker",
         {
-          "photosPermission": "MC Mart uses your photos to set your profile picture, your refund QR code, and to search by photo.",
-          "cameraPermission": "MC Mart uses the camera so you can search for products by taking a photo."
+          "photosPermission": "MC Mart uses your photos to set your profile picture, your refund QR code, to search by photo and to send photos in chats.",
+          "cameraPermission": "MC Mart uses the camera so you can search for products by taking a photo and send photos in chats."
         }
       ],
       [
         "expo-speech-recognition",
         {
-          "microphonePermission": "MC Mart uses the microphone so you can search by voice.",
+          "microphonePermission": "MC Mart uses the microphone so you can send voice messages to shops and search by voice.",
           "speechRecognitionPermission": "MC Mart turns your voice into search words.",
           "androidSpeechServicePackages": [
             "com.google.android.googlequicksearchbox"
           ]
+        }
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "MC Mart uses the microphone so you can send voice messages to shops and search by voice."
         }
       ]
     ],

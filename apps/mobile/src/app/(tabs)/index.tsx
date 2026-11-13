@@ -2,7 +2,6 @@ import { useQueries } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -15,8 +14,9 @@ import { ThemedText } from '@/components/themed-text';
 import { LoadError, Loading, SectionTitle } from '@/components/ui';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { api, localized, SHOP_URL, type CategoryNode, type LocalizedText, type ProductCard as Product } from '@/lib/api';
+import { api, localized, type CategoryNode, type LocalizedText, type ProductCard as Product } from '@/lib/api';
 import { categoryIcon } from '@/lib/category-icons';
+import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 
 /** Each category gets its own colour (icon on a soft tint of it), so the row reads at a glance. */
@@ -26,6 +26,7 @@ const TINTS = ['#2e7d32', '#1e88e5', '#f57c00', '#d81b60', '#8e24aa', '#00897b',
 export default function HomeScreen() {
   const theme = useTheme();
   const { t, locale } = useI18n();
+  const { customer } = useAuth();
   const [categories, banners, sale, popular, fresh] = useQueries({
     queries: [
       { queryKey: ['categories'], queryFn: () => api<CategoryNode[]>('/categories') },
@@ -86,7 +87,8 @@ export default function HomeScreen() {
           </LinearGradient>
         )}
 
-        <SellerBanner />
+        {/* Selling invite: only for accounts without a shop yet. */}
+        {!customer?.shop && <SellerBanner />}
 
         {popular.isPending && <Loading />}
         {popular.isError && fresh.isError && <LoadError onRetry={refresh} />}
@@ -146,11 +148,12 @@ function CategoryStrip({ categories }: { categories: CategoryNode[] }) {
   );
 }
 
-/** "Start your business with MC Mart", as on the website: opens the Seller Center sign-up. */
+/** "Start your business with MC Mart", as on the website: opens the shop sign-up (in the app). */
 function SellerBanner() {
   const { t } = useI18n();
+  const router = useRouter();
   return (
-    <Pressable accessibilityRole="link" onPress={() => void WebBrowser.openBrowserAsync(`${SHOP_URL}/register`)}>
+    <Pressable accessibilityRole="link" onPress={() => router.push('/seller/register')}>
       {({ pressed }) => (
         <LinearGradient colors={['#14471a', '#2e7d32']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.seller, pressed && styles.pressed]}>
           <View style={styles.sellerIcon}>

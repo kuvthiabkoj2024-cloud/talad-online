@@ -1,18 +1,12 @@
-import type { Locale } from "@talad/shared";
+import { MC_MART_CONTACT, type Locale } from "@talad/shared";
 import { Phone } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import { OPEN_SHOP_URL } from "@/lib/customer";
 
-/** MC Mart's own contact and social accounts. */
-const CONTACT = {
-  phone: "+8562077802519",
-  phoneLabel: "020 7780 2519",
-  whatsapp: "https://wa.me/8562077802519",
-  facebook: "https://www.facebook.com/share/1VLjVhxkG2/",
-  tiktok: "https://www.tiktok.com/@talad.online",
-};
+/** MC Mart's own contact and social accounts (shared with Market Chat). */
+const CONTACT = MC_MART_CONTACT;
 
 const BANKS = [
   { src: "/images/footer/bcel-one.webp", name: "BCEL One" },

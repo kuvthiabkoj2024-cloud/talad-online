@@ -22,7 +22,7 @@ export const BOTTOM_NAV_HEIGHT = 64;
  * Cart with its count, and Profile (the customer's initials once signed in). Market Chat has its
  * own composer at the bottom, so the bar steps aside there, as on the website.
  */
-export function BottomNav({ state, navigation }: BarProps) {
+export function BottomNav({ state, navigateToTab }: BarProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { t } = useI18n();
@@ -34,8 +34,7 @@ export function BottomNav({ state, navigation }: BarProps) {
   const go = (name: string) => {
     const route = state.routes.find((r) => r.name === name);
     if (!route) return;
-    const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-    if (current !== name && !event.defaultPrevented) navigation.navigate(name);
+    if (current !== name) navigateToTab(route.key);
   };
   const initials = customer?.name
     .split(/\s+/)

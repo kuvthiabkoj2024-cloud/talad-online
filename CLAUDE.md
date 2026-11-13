@@ -15,7 +15,7 @@ marketplace-project-scope.md (code comments cite its sections as §x.y).
   `Shop` (`Shop.ownerId`). Shops have no credentials — owners sign in to the Seller Center with the
   same account. A shop can't buy its own products (`OWN_PRODUCT`, enforced in cart and checkout).
 
-- These are the latest majors (Next 16, NestJS 12, Prisma 7, Vite 8, Expo SDK 57, React Router 8,
+- These are the latest majors (Next 16, NestJS 12, Prisma 7, Vite 8, Expo SDK 58, React Router 8,
   TypeScript 6, pnpm 12). Check package docs/types before relying on older APIs.
   `apps/web/AGENTS.md` and `apps/mobile/AGENTS.md` have framework-specific rules.
 - API code is ESM: relative imports need `.js` extensions. The Prisma client is generated into

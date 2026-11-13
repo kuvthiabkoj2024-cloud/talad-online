@@ -2,14 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { isOrderTab, type OrderTab } from '@talad/shared';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Card, EmptyState, LoadError, Loading, Pill } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { api, SITE_URL, type OrderSummary } from '@/lib/api';
+import { api, type OrderSummary } from '@/lib/api';
 import { date, money } from '@/lib/format';
 import { fill, useI18n } from '@/lib/i18n';
 
@@ -17,7 +16,7 @@ const TABS = ['all', 'to-pay', 'to-ship', 'to-receive', 'completed', 'cancelled'
 
 /**
  * The customer's orders, newest first, with the website's status tabs (`?status=to-pay`…) and
- * their counts. Details (tracking, payment, returns) open on the website for now.
+ * their counts. Tapping one opens its details (tracking, payment, returns) in the app.
  */
 export default function OrdersScreen() {
   const theme = useTheme();
@@ -47,7 +46,7 @@ export default function OrdersScreen() {
         {orders.isError && <LoadError onRetry={() => void orders.refetch()} />}
         {orders.data && !orders.data.orders.length && (active === 'all' ? <EmptyState icon="package" title={t.orders.empty} body={t.orders.emptyBody} /> : <EmptyState icon="package" title={t.acct.noOrdersInTab} body={t.acct.noOrdersInTabBody} />)}
         {orders.data?.orders.map((o) => (
-          <Pressable key={o.number} onPress={() => void WebBrowser.openBrowserAsync(`${SITE_URL}/${locale}/account/orders/${o.number}`)}>
+          <Pressable key={o.number} onPress={() => router.push({ pathname: '/orders/[number]', params: { number: o.number } })}>
             {({ pressed }) => (
               <Card style={[styles.card, pressed && styles.pressed]}>
                 <View style={styles.head}>

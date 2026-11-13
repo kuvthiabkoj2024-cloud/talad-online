@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import { avatarSrc, initials, SELLER_CENTER_URL, type CustomerProfile } from "@/lib/customer";
+import { LanguageChoice, LanguageSwitcher } from "../language-switcher";
 import { accountLinks } from "../account/account-links";
 import { LogoutDialog } from "../account/logout-dialog";
 import { AuthForm } from "./auth-form";
@@ -21,8 +22,11 @@ import { useSession } from "./session-provider";
 
 type Dicts = Pick<Dictionary, "auth" | "account">;
 
-/** Header account area: "Sign in" (opens the auth modal) or the customer dropdown. */
-export function AccountMenu({ locale, dict }: { locale: Locale; dict: Dicts }) {
+/**
+ * Header account area (computers): "Sign in" (opens the auth modal) or the customer dropdown,
+ * which also holds the language choice. Before signing in, the language select stays beside it.
+ */
+export function AccountMenu({ locale, dict, languageLabel }: { locale: Locale; dict: Dicts; languageLabel: string }) {
   const { customer, status, setCustomer } = useSession();
   const router = useRouter();
   const [authOpen, setAuthOpen] = useState(false);
@@ -43,6 +47,7 @@ export function AccountMenu({ locale, dict }: { locale: Locale; dict: Dicts }) {
   if (!customer) {
     return (
       <>
+        <LanguageSwitcher locale={locale} label={languageLabel} />
         <button
           type="button"
           onClick={() => setAuthOpen(true)}
@@ -66,17 +71,19 @@ export function AccountMenu({ locale, dict }: { locale: Locale; dict: Dicts }) {
     );
   }
 
-  return <CustomerDropdown locale={locale} dict={dict} customer={customer} />;
+  return <CustomerDropdown locale={locale} dict={dict} customer={customer} languageLabel={languageLabel} />;
 }
 
 function CustomerDropdown({
   locale,
   dict,
   customer,
+  languageLabel,
 }: {
   locale: Locale;
   dict: Dicts;
   customer: CustomerProfile;
+  languageLabel: string;
 }) {
   const [open, setOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
@@ -155,6 +162,8 @@ function CustomerDropdown({
                 <ExternalLink className="size-4 text-muted-foreground" />
               </a>
             )}
+            <div className="my-1 h-px bg-border" />
+            <LanguageChoice locale={locale} label={languageLabel} />
             <div className="my-1 h-px bg-border" />
             <button
               type="button"

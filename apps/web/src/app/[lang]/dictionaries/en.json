@@ -23,7 +23,8 @@
     "voiceAuto": "Listening… speak in Lao or English",
     "voiceWorking": "Understanding…",
     "voiceFailed": "Couldn't understand that. Please try again.",
-    "voiceClose": "Stop listening"
+    "voiceClose": "Stop listening",
+    "track": "Track order"
   },
   "nav": {
     "label": "Main menu",
@@ -374,7 +375,13 @@
     "village": "Village",
     "villagePlaceholder": "e.g. Ban Haisok",
     "mapPin": "Location on the map (optional)",
-    "mapPinPicker": {"hint": "Tap the map or drag the pin to the delivery spot. Some shops deliver free nearby.", "useCurrent": "Use my current location", "remove": "Remove pin", "locating": "Finding your location…", "locateFailed": "Couldn't get your location. Allow location access, or tap the map instead."},
+    "mapPinPicker": {
+      "hint": "Tap the map or drag the pin to the delivery spot. Some shops deliver free nearby.",
+      "useCurrent": "Use my current location",
+      "remove": "Remove pin",
+      "locating": "Finding your location…",
+      "locateFailed": "Couldn't get your location. Allow location access, or tap the map instead."
+    },
     "settingsSection": "Settings",
     "setAsDefault": "Set as default",
     "defaultBadge": "Default",
@@ -1127,5 +1134,32 @@
     "view": "View",
     "close": "Close",
     "newMessage": "{name} sent you a message"
+  },
+  "track": {
+    "title": "Track your order",
+    "subtitle": "Enter the order number and the phone number on the order — yours, or the receiver's.",
+    "number": "Order number",
+    "numberPlaceholder": "e.g. TL2611130000001",
+    "numberHint": "It's in My orders and in the order messages.",
+    "phone": "Phone number",
+    "phonePlaceholder": "020 5555 1234",
+    "submit": "Track",
+    "checking": "Checking…",
+    "notFound": "No order matches this number and phone number. Check both and try again.",
+    "tooMany": "Too many tries. Please wait a minute and try again.",
+    "error": "Couldn't check right now. Please try again.",
+    "placedOn": "Ordered {date}",
+    "from": "From {shop}",
+    "deliverTo": "Delivering to",
+    "pickup": "Collect it at the shop",
+    "urgent": "Urgent delivery by the shop",
+    "carrier": "Delivery service",
+    "trackingNumber": "Tracking number",
+    "history": "Updates",
+    "viewDetails": "View full order",
+    "another": "Track another order",
+    "yourOrders": "Your orders on the way",
+    "yourOrdersEmpty": "Nothing on the way right now.",
+    "updatedLive": "This page updates by itself."
   }
 }

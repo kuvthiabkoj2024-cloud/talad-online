@@ -1,4 +1,5 @@
 import { BottomNav } from "@/components/bottom-nav";
+import { MarketChatFab } from "@/components/chat/market-chat-fab";
 import { SiteFooter } from "@/components/site-footer";
 import { HideFooterOnRoutes, HideHeaderOnPhones } from "@/components/focus-routes";
 import { InstallBanner } from "@/components/pwa/install-banner";
@@ -23,6 +24,7 @@ export default async function StoreLayout({ children }: { children: React.ReactN
         <SiteFooter locale={locale} dict={dict.footer} />
       </HideFooterOnRoutes>
       <BottomNav locale={locale} dict={dict.nav} />
+      <MarketChatFab locale={locale} label={dict.header.chat} />
       <InstallBanner dict={dict.pwa} />
       <StaleClientReload />
     </>

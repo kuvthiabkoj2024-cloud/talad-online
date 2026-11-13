@@ -163,3 +163,20 @@ export interface PointsView {
   items: { id: string; type: "EARN" | "REDEEM" | "EXPIRE" | "ADJUST"; points: number; note: string | null; orderNumber: string | null; expiresAt: string | null; createdAt: string }[];
   nextCursor: string | null;
 }
+
+/** Mirrors `TrackedOrder` (POST /orders/track): where an order is, without anything private. */
+export interface TrackedOrder {
+  number: string;
+  status: OrderStatus;
+  createdAt: string;
+  shop: { slug: string; name: string; logoUrl: string | null };
+  items: { name: string; variant: string | null; quantity: number; imageUrl: string | null }[];
+  itemCount: number;
+  destination: { province: string; district: string } | null;
+  pickup: boolean;
+  urgentDelivery: boolean;
+  deliveryProvider: string | null;
+  trackingNumber: string | null;
+  autoConfirmAt: string | null;
+  history: { status: OrderStatus; at: string }[];
+}

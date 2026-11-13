@@ -1,5 +1,5 @@
 import type { Locale } from "@talad/shared";
-import { Clapperboard, MessageCircleMore, ScanLine, Search } from "lucide-react";
+import { Clapperboard, PackageSearch, ScanLine, Search } from "lucide-react";
 import Link from "next/link";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import { AccountMenu } from "./auth/account-menu";
@@ -83,19 +83,28 @@ export function SiteHeader({
               <Clapperboard className="size-5" />
               {dict.feed}
             </Link>
-            <Link href={`/${locale}/chat`} aria-label={dict.chat} title={dict.chat} className={`${iconButton} hidden md:block`}>
-              <MessageCircleMore className="size-6" />
+            {/* Order tracking: by order number and phone, for buyers and receivers alike. */}
+            <Link href={`/${locale}/track`} aria-label={dict.track} title={dict.track} className={`${iconButton} md:hidden`}>
+              <PackageSearch className="size-6" />
+            </Link>
+            <Link
+              href={`/${locale}/track`}
+              className="hidden items-center gap-1.5 rounded-full border border-white/40 px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/15 md:flex"
+            >
+              <PackageSearch className="size-5" />
+              {dict.track}
             </Link>
             <CartButton href={`/${locale}/cart`} label={dict.cart} className={`${iconButton} hidden md:block`} />
-            <LanguageSwitcher locale={locale} label={dict.language} />
+            {/* Computers: the language is in the profile menu (AccountMenu). */}
+            <LanguageSwitcher locale={locale} label={dict.language} className="md:hidden" />
             <NotificationBell
               href={`/${locale}/notifications`}
               label={dict.notifications}
               unreadLabel={dict.notificationsUnread}
               className={iconButton}
             />
-            <div className="hidden md:block">
-              <AccountMenu locale={locale} dict={accountDict} />
+            <div className="hidden items-center gap-2 md:flex">
+              <AccountMenu locale={locale} dict={accountDict} languageLabel={dict.language} />
             </div>
           </nav>
         </div>

@@ -15,6 +15,7 @@ import { useColorScheme } from 'react-native';
 import { Colors, FontFamily } from '@/constants/theme';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { LocaleProvider } from '@/lib/i18n';
+import { ThemeModeProvider } from '@/lib/theme-mode';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -26,9 +27,11 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <LocaleProvider>
-        <AuthProvider>
-          <Navigation />
-        </AuthProvider>
+        <ThemeModeProvider>
+          <AuthProvider>
+            <Navigation />
+          </AuthProvider>
+        </ThemeModeProvider>
       </LocaleProvider>
     </QueryClientProvider>
   );
@@ -63,7 +66,15 @@ function Navigation() {
         ...base,
         colors: { ...base.colors, primary: colors.primary, background: colors.background, card: colors.card, text: colors.text, border: colors.border },
       }}>
-      <Stack screenOptions={{ headerTintColor: colors.primary, headerBackButtonDisplayMode: 'minimal', headerTitleStyle: { color: colors.text, fontFamily: FontFamily.bold } }}>
+      <Stack
+        screenOptions={{
+          headerTintColor: colors.primary,
+          headerBackButtonDisplayMode: 'minimal',
+          headerTitleStyle: { color: colors.text, fontFamily: FontFamily.bold },
+          // SDK 58 makes headers see-through (Liquid Glass) on iOS 26+; screens are laid out under a solid one.
+          headerTransparent: false,
+          headerStyle: { backgroundColor: colors.card },
+        }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ presentation: 'modal' }} />
       </Stack>

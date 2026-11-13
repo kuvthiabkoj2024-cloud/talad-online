@@ -30,6 +30,8 @@ export const ADMIN_PERMISSIONS = [
   'banners',
   'pages',
   'announcements',
+  /** Training Market Chat: its answers, words, and the questions it couldn't answer. */
+  'assistant',
   'delivery',
   'settings',
   'audit',
@@ -41,7 +43,7 @@ export const ADMIN_PERMISSION_GROUPS: { key: 'overview' | 'marketplace' | 'money
   { key: 'overview', permissions: ['dashboard', 'reports'] },
   { key: 'marketplace', permissions: ['shops', 'shops.review', 'shops.commission', 'products', 'customers', 'videos', 'orders', 'disputes'] },
   { key: 'money', permissions: ['payments', 'payouts', 'coupons'] },
-  { key: 'content', permissions: ['catalog', 'banners', 'pages', 'announcements'] },
+  { key: 'content', permissions: ['catalog', 'banners', 'pages', 'announcements', 'assistant'] },
   { key: 'system', permissions: ['delivery', 'settings', 'audit'] },
 ];
 

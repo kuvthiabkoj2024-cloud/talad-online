@@ -1,4 +1,4 @@
-import { StyleSheet, Text, type TextProps } from 'react-native';
+import { StyleSheet, Text, type TextProps, type TextStyle } from 'react-native';
 
 import { fontFamilyFor, ThemeColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -12,7 +12,7 @@ export function ThemedText({ style, type = 'default', themeColor, ...rest }: The
   const theme = useTheme();
   const merged = StyleSheet.flatten([{ color: theme[themeColor ?? (type === 'link' ? 'primary' : 'text')] }, styles[type], style]);
   // The website's font in the weight asked for (the weight picks the font file, so it isn't faked on top).
-  return <Text style={[merged, { fontFamily: fontFamilyFor(merged.fontWeight), fontWeight: 'normal' }]} {...rest} />;
+  return <Text style={[merged, { fontFamily: fontFamilyFor((merged as TextStyle | undefined)?.fontWeight), fontWeight: 'normal' }]} {...rest} />;
 }
 
 // Lao marks sit above and below the line: generous line heights keep them from clipping.

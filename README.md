@@ -731,6 +731,7 @@ docker build -f infra/docker/Dockerfile --target admin -t talad/admin .
 
 // deploay all in one.
 infra/docker/deploy.sh api web shop
+infra/docker/deploy.sh --migrate api admin web
 
 # How to build from local in spacial folder:
 

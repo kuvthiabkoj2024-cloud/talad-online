@@ -16,6 +16,8 @@ import { CommissionRequestsService } from './commission/commission-requests.serv
 import { CategoriesController } from './categories/categories.controller.js';
 import { CategoriesService } from './categories/categories.service.js';
 import { ChatController } from './chat/chat.controller.js';
+import { AdminAssistantController } from './chat/admin-assistant.controller.js';
+import { AssistantTrainingService } from './chat/assistant-training.service.js';
 import { ChatService } from './chat/chat.service.js';
 import { AnthropicService } from '../ai/anthropic.service.js';
 import { ClipService } from './image-search/clip.service.js';
@@ -39,7 +41,7 @@ import { ProfilesService } from './videos/profiles.service.js';
 /** Categories, units, products, variants and moderation (§2.5, §2.6, §3.3). */
 @Module({
   imports: [AuthModule, CmsModule, MediaModule, PromotionsModule, NotificationsModule, OrdersModule],
-  controllers: [AdminVideosController, ChatController, PhotoSearchController, CategoriesController, UnitsController, ProductsController, ShopProductsController, AdminProductsController, AdminCatalogController, VideosController, MyVideosController, ShopVideosController, FeedPostsController, MyFeedPostsController, ProfilesController, MyProfileFollowsController, MyLikedVideosController, ShopCommissionController, ShopCommissionPreviewController, AdminCommissionController],
+  controllers: [AdminVideosController, ChatController, AdminAssistantController, PhotoSearchController, CategoriesController, UnitsController, ProductsController, ShopProductsController, AdminProductsController, AdminCatalogController, VideosController, MyVideosController, ShopVideosController, FeedPostsController, MyFeedPostsController, ProfilesController, MyProfileFollowsController, MyLikedVideosController, ShopCommissionController, ShopCommissionPreviewController, AdminCommissionController],
   providers: [
     AdminVideosService,
     CommissionRequestsService,
@@ -55,6 +57,7 @@ import { ProfilesService } from './videos/profiles.service.js';
     VoiceSearchService,
     AnthropicService,
     ChatService,
+    AssistantTrainingService,
     VideoEngagementService,
     FeedPostsService,
     ProfilesService,

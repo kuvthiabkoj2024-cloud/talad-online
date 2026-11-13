@@ -1,5 +1,7 @@
 import type { Locale, OrderStatus } from '@talad/shared';
 
+import type { BulkPricing } from './bulk-price';
+
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1').replace(/\/$/, '');
 /** The Seller Center, where shops sign up. */
 export const SHOP_URL = (process.env.EXPO_PUBLIC_SHOP_URL ?? 'http://localhost:5174').replace(/\/$/, '');
@@ -33,13 +35,15 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+/** `headers`: extra ones, e.g. the robot check's X-Turnstile-Token on sign-in. */
+export async function api<T>(path: string, init: { method?: string; body?: unknown; headers?: Record<string, string> } = {}): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     method: init.method ?? 'GET',
     headers: {
       Accept: 'application/json',
       ...(init.body !== undefined && { 'Content-Type': 'application/json' }),
       ...(token && { Authorization: `Bearer ${token}` }),
+      ...init.headers,
     },
     ...(init.body !== undefined && { body: JSON.stringify(init.body) }),
   });
@@ -95,6 +99,8 @@ export interface ProductVariant {
 /** Mirrors `ProductDetail` from services/api catalog/products. */
 export interface ProductDetail extends Omit<ProductCard, 'imageUrl' | 'shop'> {
   description: string | null;
+  /** Cheaper per unit when buying more (prices before any flash sale); null = none. */
+  bulkPricing?: BulkPricing | null;
   stock: number;
   imageUrls: string[];
   videoUrl: string | null;
@@ -115,6 +121,12 @@ export interface CartItem {
   variantLabel: string | null;
   imageUrl: string | null;
   unitPrice: number;
+  /** One unit's price before bulk pricing and flash sales. */
+  basePrice: number;
+  /** The bulk price reached: units of this product in the cart (all options) and the tier. */
+  bulk: { quantity: number; minQuantity: number } | null;
+  /** The next bulk price and how many more units reach it. */
+  nextBulk: { minQuantity: number; unitPrice: number; more: number } | null;
   compareAtPrice: number | null;
   quantity: number;
   stock: number;

@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '@/components/icon';
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui';
+import { VideoRail } from '@/components/video/video-rail';
 import { Spacing } from '@/constants/theme';
 import { api, productHref, type FeedEntry, type FeedPost, type FeedProduct } from '@/lib/api';
 import { count, priceRange } from '@/lib/format';
@@ -60,6 +61,9 @@ export default function WatchScreen() {
       {item && (
         <>
           <LinearGradient pointerEvents="none" colors={['transparent', 'rgba(0,0,0,0.7)']} style={styles.shade} />
+          <View style={[styles.side, { bottom: insets.bottom + Spacing.five }]}>
+            <VideoRail item={item} active={!paused} onDeleted={() => router.back()} />
+          </View>
           <View style={[styles.info, { paddingBottom: insets.bottom + Spacing.three }]}>
             <ThemedText type="smallBold" style={styles.white} numberOfLines={1}>
               {isPost ? (item as FeedPost).author.name : (item as FeedProduct).shop.name}
@@ -92,7 +96,8 @@ const styles = StyleSheet.create({
   play: { position: 'absolute', top: '45%', alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 40, padding: Spacing.three },
   back: { position: 'absolute', left: Spacing.three, width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
   shade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 280 },
-  info: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: Spacing.three, gap: 2 },
+  info: { position: 'absolute', left: 0, right: 72, bottom: 0, paddingHorizontal: Spacing.three, gap: 2 },
+  side: { position: 'absolute', right: Spacing.two, alignItems: 'center' },
   buyRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, marginTop: Spacing.two },
   buy: { minHeight: 40, paddingHorizontal: Spacing.three },
 });

@@ -8,6 +8,7 @@ import {
   FolderTree,
   Ruler,
   Gavel,
+  HandCoins,
   Image,
   Landmark,
   LayoutDashboard,
@@ -65,6 +66,7 @@ export const NAV_GROUPS: { label: NavKey; items: NavItem[] }[] = [
     items: [
       { to: '/payments', label: 'payments', icon: Landmark, area: 'payments', badge: (a) => a.paymentsToCheck },
       { to: '/refunds', label: 'refunds', icon: Undo2, area: 'payments', badge: (a) => a.refundsDue },
+      { to: '/cod-transfers', label: 'codTransfers', icon: HandCoins, area: 'payments', badge: (a) => a.codTransfers },
       { to: '/payouts', label: 'payouts', icon: Wallet, area: 'payouts', badge: (a) => a.payoutsDue.count },
       { to: '/commissions', label: 'commissions', icon: Percent, area: 'shops.commission', badge: (a) => a.commissionRequests },
       { to: '/coupons', label: 'coupons', icon: BadgePercent, area: 'coupons' },

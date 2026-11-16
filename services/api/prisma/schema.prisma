@@ -139,6 +139,13 @@ enum PayoutStatus {
   FAILED
 }
 
+/// A shop's transfer of its COD commission to MC Mart, waiting for / after an admin's check.
+enum CodTransferStatus {
+  SUBMITTED
+  CONFIRMED
+  REJECTED
+}
+
 // ─── Identity & access (§2.1, §3.1, §4.1) ───────────────────────────────────
 
 model AdminUser {
@@ -291,6 +298,7 @@ model Shop {
   coupons            Coupon[]
   flashSales         FlashSale[]
   payouts            Payout[]
+  codTransfers       CodTransfer[]
   customerNotes      ShopCustomerNote[]
   /// Private conversations with customers (Seller Center → Messages).
   conversations      ShopConversation[]
@@ -348,6 +356,28 @@ model Payout {
   orders ShopOrder[]
 
   @@index([shopId, periodStart])
+}
+
+/// The shop's slip for the COD commission it transferred to MC Mart for one month (§6).
+model CodTransfer {
+  id           String            @id @default(uuid(7))
+  shopId       String
+  /// `YYYY-MM` (Laos time) the transfer is for.
+  month        String
+  amount       Decimal           @db.Decimal(14, 2)
+  /// Photo of the shop's transfer slip (private storage key), shown to admins and the shop.
+  slipKey      String
+  note         String?
+  status       CodTransferStatus @default(SUBMITTED)
+  rejectReason String?
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime          @default(now())
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, month])
+  @@index([status, createdAt])
 }
 
 // ─── Customers (§4.1, §4.2) ─────────────────────────────────────────────────
@@ -764,6 +794,8 @@ model Payment {
   /// A paid order that was cancelled is refunded by MC Mart; when and how (bank reference).
   refundedAt     DateTime?
   refundRef      String?
+  /// Photo of MC Mart's refund transfer slip (private storage key), shown to admins and the customer.
+  refundSlipKey  String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 

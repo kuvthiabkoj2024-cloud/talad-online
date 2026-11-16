@@ -1,4 +1,4 @@
-import { formatPhone } from "@talad/shared";
+import { formatPhone, dateFormatter } from "@talad/shared";
 import { CheckCircle2, ExternalLink, Store } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -13,14 +13,13 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: account.profileTitle, robots: { index: false } };
 }
 
-const DATE_LOCALES = { lo: "lo-LA", en: "en-GB" } as const;
 
 export default async function ProfilePage() {
   const locale = await getLocale();
   const { account: dict, auth } = await getDictionary();
   const customer = await requireCustomer(locale, `/${locale}/account/profile`);
 
-  const memberSince = new Intl.DateTimeFormat(DATE_LOCALES[locale], {
+  const memberSince = dateFormatter(locale, {
     year: "numeric",
     month: "long",
   }).format(new Date(customer.createdAt));

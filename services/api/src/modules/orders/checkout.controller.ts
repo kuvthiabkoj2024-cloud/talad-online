@@ -35,6 +35,7 @@ import { CurrentCustomer, CustomerAuthGuard } from '../auth/customer-auth.guard.
 import type { StoredObject } from '../media/storage.service.js';
 import { CheckoutService } from './checkout.service.js';
 import { OrderDepositsService } from './order-deposits.service.js';
+import { PaymentReviewService } from './payment-review.service.js';
 import { PaymentSlipsService } from './payment-slips.service.js';
 import { ShopOrdersService } from './shop-orders.service.js';
 
@@ -169,7 +170,14 @@ export class OrderPaymentController {
     private readonly slips: PaymentSlipsService,
     private readonly shopOrders: ShopOrdersService,
     private readonly deposits: OrderDepositsService,
+    private readonly payments: PaymentReviewService,
   ) {}
+
+  /** MC Mart's refund transfer slip, once the order was refunded. */
+  @Get('refund-slip')
+  async refundSlip(@CurrentCustomer() c: Customer, @Param('number') number: string) {
+    return image(await this.payments.refundSlip(number, c.id));
+  }
 
   @Get('deposit-slip')
   async depositSlip(@CurrentCustomer() c: Customer, @Param('number') number: string) {

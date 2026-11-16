@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { freeDeliveryOffer, geoPoint, type FreeDeliveryOffer, type ProductStatus } from '@talad/shared';
+import { freeDeliveryOffer, geoPoint, type BusinessHours, type FreeDeliveryOffer, type ProductStatus } from '@talad/shared';
 import type { OrderStatus, Shop } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { ProductsService, type ShopProductSort } from '../catalog/products/products.service.js';
@@ -21,6 +21,8 @@ export interface PublicShop {
   joinedAt: Date;
   /** Free urgent delivery within this distance of the shop (null: not offered). */
   freeDelivery: FreeDeliveryOffer | null;
+  /** Opening hours per weekday (days left out are closed); empty when the shop hasn't set any. */
+  businessHours: BusinessHours;
 }
 
 export interface ShopSummary {
@@ -59,6 +61,7 @@ export class ShopsService {
         urgentDelivery: true,
         latitude: true,
         longitude: true,
+        businessHours: true,
         _count: { select: { products: { where: { status: 'PUBLISHED' } } } },
       },
     });
@@ -77,6 +80,7 @@ export class ShopsService {
       followerCount: shop.followerCount,
       joinedAt: shop.createdAt,
       freeDelivery: freeDeliveryOffer(shop.urgentDelivery, geoPoint(shop.latitude, shop.longitude)),
+      businessHours: (shop.businessHours ?? {}) as BusinessHours,
     };
   }
 

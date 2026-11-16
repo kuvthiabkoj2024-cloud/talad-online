@@ -1,8 +1,11 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { formatMoney } from '@talad/shared';
+import { formatMoney, SHOP_PROFILE_RULES } from '@talad/shared';
+import { randomUUID } from 'node:crypto';
 import type { AdminUser, Prisma, SlipStatus } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { detectImage } from '../media/image-type.js';
+import { filePrefix, storageFolder } from '../media/storage-keys.js';
 import { StorageService } from '../media/storage.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { moveOrder } from './order-transitions.js';
@@ -190,27 +193,47 @@ export class PaymentReviewService {
     };
   }
 
-  /** The admin sent the money back to the customer (e.g. to their saved refund account). */
-  async markRefunded(admin: AdminUser, shopOrderNumber: string, reference: string | null, ip?: string) {
+  /**
+   * The admin sent the money back to the customer (e.g. to their saved refund account), with a
+   * photo of the transfer slip (multipart `file`, required) the customer can open.
+   */
+  async markRefunded(admin: AdminUser, shopOrderNumber: string, reference: string | null, file: Express.Multer.File | undefined, ip?: string) {
+    if (!file) throw new BadRequestException({ code: 'SLIP_REQUIRED', message: 'Add a photo of the refund transfer slip' });
+    if (file.size > SHOP_PROFILE_RULES.imageMaxBytes) throw new BadRequestException({ code: 'FILE_TOO_LARGE', message: 'Image must be 5 MB or smaller' });
+    const kind = detectImage(file.buffer);
+    if (!kind) throw new BadRequestException({ code: 'INVALID_IMAGE', message: 'Upload a PNG, JPG or WebP image' });
     const so = await this.prisma.shopOrder.findFirst({ where: { number: shopOrderNumber, ...this.refundWhere('due') }, select: this.refundSelect });
     if (!so) throw new NotFoundException('No refund to make for this order');
     const payment = so.payments[0];
     const now = new Date();
+    const key = `${filePrefix(storageFolder.customerPayments(so.order.customer.id), 'refund-slip')}${randomUUID()}.${kind.ext}`;
+    await this.storage.put(key, file.buffer, kind.type);
     await this.prisma.$transaction(async (tx) => {
-      await tx.payment.update({ where: { id: payment.id }, data: { status: 'REFUNDED', refundedAt: now, refundRef: reference } });
+      await tx.payment.update({ where: { id: payment.id }, data: { status: 'REFUNDED', refundedAt: now, refundRef: reference, refundSlipKey: key } });
       await this.notifications.send(
         tx,
         so.order.customer.id,
         'ORDER',
         {
-          lo: { title: `ຄືນເງິນແລ້ວ ${so.number}`, body: `MC Mart ໂອນຄືນ ${formatMoney(num(payment.amount), 'lo')} ໃຫ້ທ່ານແລ້ວ.` },
-          en: { title: `Refunded ${so.number}`, body: `MC Mart sent ${formatMoney(num(payment.amount), 'en')} back to you.` },
+          lo: { title: `ຄືນເງິນແລ້ວ ${so.number}`, body: `MC Mart ໂອນຄືນ ${formatMoney(num(payment.amount), 'lo')} ໃຫ້ທ່ານແລ້ວ. ເບິ່ງສະລິບໄດ້ໃນຄຳສັ່ງຊື້.` },
+          en: { title: `Refunded ${so.number}`, body: `MC Mart sent ${formatMoney(num(payment.amount), 'en')} back to you. See the slip in your order.` },
         },
         { link: `/account/orders/${so.number}` },
       );
       await this.audit.log({ adminId: admin.id, action: 'refund.paid', entityType: 'ShopOrder', entityId: so.id, changes: { number: so.number, reference }, ip }, tx);
     });
     return { ok: true };
+  }
+
+  /** MC Mart's refund slip for a shop order: any admin, or that order's customer. */
+  async refundSlip(shopOrderNumber: string, customerId: string | null) {
+    const so = await this.prisma.shopOrder.findFirst({
+      where: { number: shopOrderNumber, ...(customerId && { order: { customerId } }) },
+      select: { payments: { where: { refundSlipKey: { not: null } }, orderBy: { createdAt: 'desc' }, take: 1, select: { refundSlipKey: true } } },
+    });
+    const key = so?.payments[0]?.refundSlipKey;
+    if (!key) throw new NotFoundException('No refund slip');
+    return this.storage.get(key);
   }
 
   /** The QR of the customer's refund account, if they saved one. */
@@ -234,7 +257,7 @@ export class PaymentReviewService {
     updatedAt: true,
     shop: { select: { name: true } },
     order: { select: { number: true, customer: { select: { id: true, name: true, phone: true } } } },
-    payments: { orderBy: { createdAt: 'desc' }, take: 1, select: { id: true, amount: true, status: true, refundedAt: true, refundRef: true } },
+    payments: { orderBy: { createdAt: 'desc' }, take: 1, select: { id: true, amount: true, status: true, refundedAt: true, refundRef: true, refundSlipKey: true } },
   } satisfies Prisma.ShopOrderSelect;
 
   private async refundView(r: Prisma.ShopOrderGetPayload<{ select: PaymentReviewService['refundSelect'] }>) {
@@ -254,6 +277,7 @@ export class PaymentReviewService {
       amount: num(p?.amount),
       refundedAt: p?.refundedAt ?? null,
       reference: p?.refundRef ?? null,
+      hasSlip: !!p?.refundSlipKey,
       refundAccount: account && { id: account.id, bankCode: account.bankCode, accountName: account.accountName, accountNumber: account.accountNumber, hasQr: !!account.qrImageKey },
     };
   }

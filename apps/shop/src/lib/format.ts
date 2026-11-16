@@ -1,9 +1,7 @@
-import { formatMoney, type Locale } from '@talad/shared'
+import { formatMoney, type Locale, dateFormatter } from '@talad/shared'
 import type { LocalizedText } from './types'
 
 export { formatMoney }
-
-const TAGS: Record<Locale, string> = { lo: 'lo-LA', en: 'en-GB' }
 
 export function priceRange(price: number, priceMax: number | null, locale: Locale): string {
   const min = formatMoney(price, locale)
@@ -11,7 +9,7 @@ export function priceRange(price: number, priceMax: number | null, locale: Local
 }
 
 export function formatDate(iso: string, locale: Locale, withTime = false): string {
-  return new Intl.DateTimeFormat(TAGS[locale], {
+  return dateFormatter(locale, {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -48,6 +46,8 @@ export const storefrontUrl = {
   shop: (locale: Locale, slug: string) => `${STOREFRONT}/${locale}/s/${slug}`,
   product: (locale: Locale, shop: string, slug: string) => `${STOREFRONT}/${locale}/p/${shop}/${slug}`,
   terms: (locale: Locale) => `${STOREFRONT}/${locale}/pages/terms`,
+  /** Root-relative assets (e.g. courier logos in the web app's public/) resolve against the storefront. */
+  asset: (url: string) => (url.startsWith('/') ? `${STOREFRONT}${url}` : url),
 }
 
 /** `<input type="datetime-local">` value in the browser's timezone. */

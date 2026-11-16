@@ -1,4 +1,4 @@
-import type { Locale } from "@talad/shared";
+import { type Locale, dateFormatter } from "@talad/shared";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ChevronDown, CircleHelp, FileText, ShieldCheck, Store, type LucideIcon } from "lucide-react";
@@ -139,7 +139,7 @@ export default async function CmsPageView({ params }: Props) {
   const locale = await getLocale();
   const { pages, catalog } = await getDictionary();
   const page = await getPage(slug, locale);
-  const updated = new Intl.DateTimeFormat(locale === "lo" ? "lo-LA" : "en-GB", { dateStyle: "long" }).format(new Date(page.updatedAt));
+  const updated = dateFormatter(locale, { dateStyle: "long" }).format(new Date(page.updatedAt));
   const doc = parseCmsBody(page.body);
   const Icon = ICONS[slug] ?? FileText;
 

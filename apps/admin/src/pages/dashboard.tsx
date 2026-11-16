@@ -1,4 +1,4 @@
-import type { AdminPermission } from '@talad/shared'
+import { type AdminPermission, dateFormatter } from '@talad/shared'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@talad/ui/components/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@talad/ui/components/table'
 import { cn } from '@talad/ui/lib/utils'
@@ -17,7 +17,6 @@ import { compactNumber, fill, formatMoney, formatNumber } from '@/lib/format'
 import type { Dashboard, TopRow } from '@/lib/types'
 
 const RANGES = ['7', '30', '90'] as const
-const TAGS = { lo: 'lo-LA', en: 'en-GB' } as const
 
 /** Marketplace KPIs, trends and what needs attention (§2.2). */
 export function DashboardPage() {
@@ -31,7 +30,7 @@ export function DashboardPage() {
     placeholderData: keepPreviousData,
   })
   const dayLabel = (key: string) =>
-    new Intl.DateTimeFormat(TAGS[locale], { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${key}T00:00:00Z`))
+    dateFormatter(locale, { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${key}T00:00:00Z`))
 
   return (
     <>

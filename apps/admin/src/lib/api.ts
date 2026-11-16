@@ -74,8 +74,8 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 export const send = <T>(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown, headers?: Record<string, string>) =>
   api<T>(path, { method, body: body === undefined ? undefined : JSON.stringify(body), headers })
 
-/** Multipart upload with progress (0–1), for banner and category images. */
-export function upload<T>(path: string, file: File, onProgress?: (fraction: number) => void): Promise<T> {
+/** Multipart upload with progress (0–1), for banner and category images; `fields` go along as text. */
+export function upload<T>(path: string, file: File, onProgress?: (fraction: number) => void, fields?: Record<string, string>): Promise<T> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open('POST', `${BASE_URL}${path}`)
@@ -95,6 +95,7 @@ export function upload<T>(path: string, file: File, onProgress?: (fraction: numb
     }
     const form = new FormData()
     form.append('file', file)
+    for (const [k, v] of Object.entries(fields ?? {})) form.append(k, v)
     xhr.send(form)
   })
 }

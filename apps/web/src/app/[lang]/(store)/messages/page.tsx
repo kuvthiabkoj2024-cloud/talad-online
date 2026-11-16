@@ -7,6 +7,7 @@ import { interpolate } from "@/lib/format";
 import { requireCustomer } from "@/lib/require-customer";
 import { apiGetAsCustomer } from "@/lib/session";
 import { getDictionary, getLocale } from "@/app/[lang]/dictionaries";
+import { dateFormatter } from "@talad/shared";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { messages } = await getDictionary();
@@ -19,7 +20,7 @@ export default async function MessagesPage() {
   await requireCustomer(locale, `/${locale}/messages`);
   const { messages: dict, catalog } = await getDictionary();
   const list = (await apiGetAsCustomer<ConversationSummary[]>("/me/conversations")) ?? [];
-  const time = new Intl.DateTimeFormat(locale === "lo" ? "lo-LA" : "en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const time = dateFormatter(locale, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-6 sm:py-8">

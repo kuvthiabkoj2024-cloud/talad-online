@@ -205,6 +205,16 @@ export default async function OrderDetailPage({ params }: Props) {
                 : interpolate(checkoutDict.refundPending, { amount: formatMoney(payment.amount, locale) })}
             </span>
           )}
+          {payment?.refundedAt && payment.hasRefundSlip && (
+            <a
+              href={`/api/orders/${encodeURIComponent(order.number)}/refund-slip`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-1 block font-semibold text-primary underline-offset-2 hover:underline"
+            >
+              {checkoutDict.refundSlip}
+            </a>
+          )}
         </Notice>
       )}
       {order.status === "RETURN_REQUESTED" && (

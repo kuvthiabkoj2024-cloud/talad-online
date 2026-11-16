@@ -56,6 +56,7 @@ export interface Alerts {
   refundsDue: number
   /** Shops' product commission requests waiting for a decision. */
   commissionRequests: number
+  codTransfers: number
 }
 
 export type PaymentQueue = 'review' | 'rejected' | 'approved'
@@ -89,6 +90,8 @@ export interface RefundRow {
   amount: number
   refundedAt: string | null
   reference: string | null
+  /** MC Mart's refund slip can be opened (GET /admin/refunds/:number/slip). */
+  hasSlip: boolean
   refundAccount: { id: string; bankCode: string; accountName: string; accountNumber: string; hasQr: boolean } | null
 }
 
@@ -419,6 +422,8 @@ export interface Coupon {
   endsAt: string
   isActive: boolean
   state: CouponState
+  /** Codes made together (single-use batch); null for a single code. */
+  batchId: string | null
 }
 
 export interface CmsPage {

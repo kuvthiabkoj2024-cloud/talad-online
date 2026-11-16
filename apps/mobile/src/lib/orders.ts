@@ -61,7 +61,7 @@ export interface OrderDetail {
   cancelReason: string | null;
   shippingAddress: { recipientName: string; phone: string; province: string; district: string; village?: string; line: string };
   shop: { slug: string; name: string; logoUrl: string | null };
-  payment: { method: PaymentMethod; status: PaymentStatus; amount: number; paidAt: string | null; refundedAt: string | null } | null;
+  payment: { method: PaymentMethod; status: PaymentStatus; amount: number; paidAt: string | null; refundedAt: string | null; hasRefundSlip?: boolean } | null;
   transfer: TransferAccount | null;
   orderTotal: number;
   slips: PaymentSlip[];

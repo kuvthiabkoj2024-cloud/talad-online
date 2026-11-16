@@ -1,4 +1,4 @@
-import type { FreeDeliveryOffer } from "@talad/shared";
+import type { BusinessHours, FreeDeliveryOffer } from "@talad/shared";
 import type { ProductCard } from "./api";
 
 /** Mirrors the public shop profile (services/api shops module). */
@@ -18,6 +18,8 @@ export interface PublicShop {
   joinedAt: string;
   /** Free urgent delivery within this distance of the shop (null: not offered). */
   freeDelivery: FreeDeliveryOffer | null;
+  /** Opening hours per weekday (days left out are closed); empty when not set. */
+  businessHours: BusinessHours;
 }
 
 export const SHOP_SORTS = ["popular", "new", "price_asc", "price_desc"] as const;

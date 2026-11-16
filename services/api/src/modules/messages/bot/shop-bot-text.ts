@@ -39,7 +39,7 @@ export const INFO_TOPICS = new Set<BotTopic['kind']>(['faq', 'greeting', 'thanks
 const ORDER = /\b(my order|order status|order number|tracking|track|refund|return(ed|ing)?|cancel(led|ling)?|exchange|warranty|broken|damaged|wrong item|not (yet )?(arrived|received))\b|ຄຳສັ່ງຊື້|ອໍເດີ|ຕິດຕາມ|ສົ່ງຄືນ|ຄືນເງິນ|ຄືນສິນຄ້າ|ຍົກເລີກ|ຮັບປະກັນ|ເຄື່ອງເພ|ເປ່ເພ|ຍັງບໍ່ໄດ້ຮັບ|\bTL\d{6,}/i;
 const BUY =
   /\b(i('ll| will) take|i('d| would) like (to (buy|order)|it|this|one)|i want (to (buy|order)|it|this|one)|buy (it|this|that|one|now|\d)|order (it|this|that|one|now|\d)|add to cart|place an order|check ?out|i('ll| will) buy)\b|^(buy|order)\b|ເອົາ|ສັ່ງຊື້|ຂໍສັ່ງ|ຢາກສັ່ງ|ສັ່ງ|ຊື້/i;
-const UNITS = 'pcs|pieces?|units?|ອັນ|ຜືນ|ໂຕ|ຖົງ|ກ່ອງ|ຊຸດ|ແກ້ວ|ຄູ່|ໜ່ວຍ|ເມັດ|ກະປ໋ອງ|ຂວດ|ແພັກ';
+const UNITS = 'pcs|pieces?|units?|jars?|bottles?|bags?|boxes|box|packs?|ອັນ|ຜືນ|ໂຕ|ຖົງ|ກ່ອງ|ຊຸດ|ແກ້ວ|ຄູ່|ໜ່ວຍ|ເມັດ|ກະປຸກ|ກະປ໋ອງ|ກະປອງ|ຂວດ|ແພັກ|ແພັຄ|ລັງ|ມັດ|ແຜ່ນ|ເສັ້ນ';
 const LAO_NUMBERS: Record<string, number> = { ໜຶ່ງ: 1, ສອງ: 2, ສາມ: 3, ສີ່: 4, ຫ້າ: 5, ຫົກ: 6, ເຈັດ: 7, ແປດ: 8, ເກົ້າ: 9, ສິບ: 10 };
 const EN_NUMBERS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, a: 1 };
 

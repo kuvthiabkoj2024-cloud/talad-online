@@ -81,7 +81,7 @@ export function MarketingPage() {
         ) : (
           <ul className="grid gap-3 lg:grid-cols-2">
             {sales.data.map((s) => (
-              <li key={s.id}>
+              <li key={s.id} className="min-w-0">
                 <SaleCard sale={s} onEdit={() => setEditing(s)} onDelete={() => setDeleting(s)} />
               </li>
             ))}

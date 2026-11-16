@@ -1,3 +1,4 @@
+import { formatDateTime, relativeTime } from '@talad/shared'
 import { Button } from '@talad/ui/components/button'
 import { cn } from '@talad/ui/lib/utils'
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -38,14 +39,14 @@ function compact(n: number, _locale: 'lo' | 'en') {
 
 function useTimeAgo() {
   const { t, locale } = useI18n()
-  const rtf = new Intl.RelativeTimeFormat(locale === 'lo' ? 'lo-LA' : 'en-GB', { numeric: 'auto', style: 'short' })
+  const rtf = { format: (v: number, u: Intl.RelativeTimeFormatUnit) => relativeTime(v, u, locale, 'short') }
   return (iso: string) => {
     const s = (Date.now() - new Date(iso).getTime()) / 1000
     if (s < 60) return t.videos.viewer.justNow
     if (s < 3600) return rtf.format(-Math.floor(s / 60), 'minute')
     if (s < 86_400) return rtf.format(-Math.floor(s / 3600), 'hour')
     if (s < 30 * 86_400) return rtf.format(-Math.floor(s / 86_400), 'day')
-    return new Date(iso).toLocaleDateString(locale === 'lo' ? 'lo-LA' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    return formatDateTime(iso, locale)
   }
 }
 

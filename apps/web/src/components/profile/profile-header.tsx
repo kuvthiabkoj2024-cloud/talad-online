@@ -1,6 +1,6 @@
 "use client";
 
-import type { Locale } from "@talad/shared";
+import { type Locale, dateFormatter } from "@talad/shared";
 import { ArrowLeft, CalendarDays, Check, LoaderCircle, Plus, Share2, Video } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -13,7 +13,6 @@ import { useSession } from "../auth/session-provider";
 import { ShareSheet, type ShareSheetDict } from "../feed/share-sheet";
 
 type Dict = Dictionary["profile"];
-const DATE_LOCALES = { lo: "lo-LA", en: "en-GB" } as const;
 
 export const initialsOf = (name: string) =>
   name
@@ -90,7 +89,7 @@ export function ProfileHeader({
     });
   }
 
-  const joined = new Intl.DateTimeFormat(DATE_LOCALES[locale], { month: "long", year: "numeric" }).format(new Date(profile.joinedAt));
+  const joined = dateFormatter(locale, { month: "long", year: "numeric" }).format(new Date(profile.joinedAt));
   const stats = [
     { label: dict.following, value: profile.following, tab: "following" },
     { label: dict.followers, value: followers, tab: "followers" },

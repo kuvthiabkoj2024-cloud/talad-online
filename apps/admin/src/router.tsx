@@ -54,6 +54,7 @@ export const router = createBrowserRouter([
           { path: 'payments', lazy: page(() => import('@/pages/payments'), (m) => m.PaymentsPage, 'payments') },
           { path: 'payments/:number', lazy: page(() => import('@/pages/payments'), (m) => m.PaymentDetailPage, 'payments') },
           { path: 'commissions', lazy: page(() => import('@/pages/commissions'), (m) => m.CommissionsPage, 'shops.commission') },
+          { path: 'cod-transfers', lazy: page(() => import('@/pages/cod-transfers'), (m) => m.CodTransfersPage, 'payments') },
           { path: 'refunds', lazy: page(() => import('@/pages/payments'), (m) => m.RefundsPage, 'payments') },
           { path: 'payouts', lazy: page(() => import('@/pages/money'), (m) => m.PayoutsPage, 'payouts') },
           { path: 'coupons', lazy: page(() => import('@/pages/coupons'), (m) => m.CouponsPage, 'coupons') },

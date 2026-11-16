@@ -5,9 +5,10 @@ import { AuditService } from '../audit/audit.service.js';
 import { AdminAuthGuard, CurrentAdmin, Permission } from '../auth/admin-auth.guard.js';
 import { BannerDto } from './banner.dto.js';
 import { BannersService } from './banners.service.js';
-import { CouponActiveDto, ShopCouponDto } from './shop-coupon.dto.js';
+import { CouponActiveDto, CouponBatchDto, ShopCouponDto } from './shop-coupon.dto.js';
 import { ShopCouponsService } from './shop-coupons.service.js';
 
+const batch = new ParseUUIDPipe({ version: '4' });
 const id = new ParseUUIDPipe({ version: '7' });
 
 /** Public: the landing-page banners running now. */
@@ -79,6 +80,31 @@ export class AdminPromotionsController {
     const c = await this.coupons.update(null, couponId, dto);
     await this.audit.log({ adminId: a.id, action: 'coupon.update', entityType: 'Coupon', entityId: couponId, changes: { code: c.code } });
     return c;
+  }
+
+  /** Single-use codes with the same rules (e.g. one per customer for a campaign). */
+  @Permission('coupons')
+  @Post('coupons/batch')
+  async createCouponBatch(@CurrentAdmin() a: AdminUser, @Body() dto: CouponBatchDto) {
+    const codes = await this.coupons.createBatch(null, dto);
+    await this.audit.log({ adminId: a.id, action: 'coupon.batch', entityType: 'Coupon', entityId: codes[0]?.batchId ?? '', changes: { quantity: codes.length, prefix: dto.prefix ?? null } });
+    return codes;
+  }
+
+  @Permission('coupons')
+  @Patch('coupons/batch/:batchId')
+  async setCouponBatchActive(@CurrentAdmin() a: AdminUser, @Param('batchId', batch) batchId: string, @Body() dto: CouponActiveDto) {
+    const r = await this.coupons.setBatchActive(null, batchId, dto.isActive);
+    await this.audit.log({ adminId: a.id, action: 'coupon.batchActive', entityType: 'Coupon', entityId: batchId, changes: { isActive: dto.isActive } });
+    return r;
+  }
+
+  @Permission('coupons')
+  @Delete('coupons/batch/:batchId')
+  async deleteCouponBatch(@CurrentAdmin() a: AdminUser, @Param('batchId', batch) batchId: string) {
+    const r = await this.coupons.removeBatch(null, batchId);
+    await this.audit.log({ adminId: a.id, action: 'coupon.batchDelete', entityType: 'Coupon', entityId: batchId, changes: r });
+    return r;
   }
 
   @Permission('coupons')

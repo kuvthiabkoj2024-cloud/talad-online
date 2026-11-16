@@ -11,7 +11,40 @@ import { api } from '@/lib/api'
 import { formatDate } from '@/lib/format'
 import type { AuditEntry, Paged } from '@/lib/types'
 
-const TYPES = ['Shop', 'Product', 'Customer', 'ShopOrder', 'Payout', 'Category', 'Setting', 'AdminUser'] as const
+const TYPES = ['Shop', 'Product', 'Customer', 'ShopOrder', 'Payout', 'CodTransfer', 'Dispute', 'Coupon', 'Category', 'Setting', 'AdminUser'] as const
+
+type AuditDict = ReturnType<typeof useI18n>['t']['audit']
+
+/** "dispute.refund" → "Refunded · Dispute" (the code stays in the tooltip). */
+function actionLabel(action: string, entityType: string, a: AuditDict): string {
+  const verb = action.split('.').pop() ?? action
+  const entity = a.entities[entityType] ?? entityType
+  return `${a.verbs[verb] ?? humanize(verb)} · ${entity}`
+}
+
+const humanize = (key: string) => key.replace(/[_-]/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase())
+
+/** One change value as short text: lists joined, nested objects summarised. */
+function valueText(v: unknown, a: AuditDict): string {
+  if (v === null || v === undefined || v === '') return '—'
+  if (typeof v === 'boolean') return v ? a.yes : a.no
+  if (typeof v === 'string' || typeof v === 'number') return String(v)
+  if (Array.isArray(v)) return v.every((x) => typeof x !== 'object' || x === null) ? v.join(', ') : `${v.length} ×`
+  return Object.entries(v as Record<string, unknown>)
+    .filter(([, x]) => typeof x !== 'object' || x === null || Array.isArray(x))
+    .map(([k, x]) => `${a.fields[k] ?? humanize(k)}: ${valueText(x, a)}`)
+    .join(' · ')
+}
+
+/** The change as readable lines; a settings update shows what it became. */
+function changeLines(changes: Record<string, unknown>, a: AuditDict): { label: string; value: string }[] {
+  const source = changes.after && typeof changes.after === 'object' ? (changes.after as Record<string, unknown>) : changes
+  return Object.entries(source)
+    .filter(([k]) => k !== 'before')
+    .map(([k, v]) => ({ label: a.fields[k] ?? humanize(k), value: valueText(v, a) }))
+    .filter((l) => l.value)
+    .slice(0, 6)
+}
 
 /** Where an audited entity lives in the console, if it has a page. */
 function targetHref(e: AuditEntry): string | null {
@@ -40,7 +73,7 @@ export function AuditPage() {
       <PageBody>
         <PageIntro title={t.audit.title} description={t.audit.description} />
         <FilterTabs
-          tabs={[{ key: '', label: t.common.all }, ...TYPES.map((k) => ({ key: k, label: k }))]}
+          tabs={[{ key: '', label: t.common.all }, ...TYPES.map((k) => ({ key: k, label: t.audit.entities[k] ?? k }))]}
           active={type}
           onSelect={(k) => set({ type: k || undefined, page: undefined })}
         />
@@ -73,9 +106,11 @@ export function AuditPage() {
                           <span className="block">{e.admin?.name ?? t.audit.system}</span>
                           {e.ipAddress && <span className="block font-mono text-xs text-muted-foreground">{e.ipAddress}</span>}
                         </TableCell>
-                        <TableCell className="font-mono text-xs">{e.action}</TableCell>
+                        <TableCell className="text-sm font-medium" title={e.action}>
+                          {actionLabel(e.action, e.entityType, t.audit)}
+                        </TableCell>
                         <TableCell className="text-xs">
-                          <span className="block">{e.entityType}</span>
+                          <span className="block">{t.audit.entities[e.entityType] ?? e.entityType}</span>
                           {href ? (
                             <Link to={href} className="font-mono text-primary hover:underline">
                               {e.entityId.slice(0, 8)}
@@ -85,7 +120,16 @@ export function AuditPage() {
                           )}
                         </TableCell>
                         <TableCell className="max-w-md pr-4">
-                          {e.changes && <code className="line-clamp-3 text-xs break-all whitespace-pre-wrap text-muted-foreground">{JSON.stringify(e.changes)}</code>}
+                          {e.changes && (
+                            <dl className="grid grid-cols-[auto_1fr] gap-x-2 text-xs" title={JSON.stringify(e.changes)}>
+                              {changeLines(e.changes as Record<string, unknown>, t.audit).map((l) => (
+                                <div key={l.label} className="contents">
+                                  <dt className="text-muted-foreground">{l.label}</dt>
+                                  <dd className="line-clamp-2 break-words">{l.value}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          )}
                         </TableCell>
                       </TableRow>
                     )

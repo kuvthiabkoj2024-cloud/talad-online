@@ -1,4 +1,4 @@
-import { isNotificationTab, type Locale, type NotificationTab } from "@talad/shared";
+import { isNotificationTab, relativeTime, type Locale, type NotificationTab } from "@talad/shared";
 import {
   BellOff,
   BellRing,
@@ -44,7 +44,6 @@ const TYPE_STYLE: Record<string, { icon: LucideIcon; tone: string }> = {
   SYSTEM: { icon: Info, tone: "bg-sky-50 text-sky-600" },
 };
 
-const LOCALE_TAGS: Record<Locale, string> = { lo: "lo-LA", en: "en-GB" };
 /** Day boundaries for "Today" / "Yesterday" follow the marketplace's timezone. */
 const dayKey = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "Asia/Vientiane" });
 
@@ -52,7 +51,7 @@ const dayKey = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "Asia/Vien
 function timeAgo(iso: string, now: number, locale: Locale, dict: Dict): string {
   const seconds = (now - new Date(iso).getTime()) / 1000;
   if (seconds < 60) return dict.justNow;
-  const rtf = new Intl.RelativeTimeFormat(LOCALE_TAGS[locale], { numeric: "auto", style: "short" });
+  const rtf = { format: (v: number, u: Intl.RelativeTimeFormatUnit) => relativeTime(v, u, locale, "short") };
   if (seconds < 3600) return rtf.format(-Math.floor(seconds / 60), "minute");
   if (seconds < 86_400) return rtf.format(-Math.floor(seconds / 3600), "hour");
   if (seconds < 7 * 86_400) return rtf.format(-Math.floor(seconds / 86_400), "day");

@@ -1,4 +1,4 @@
-import type { DepositStatus, GuaranteeUnit, OrderStatus, OrderTab, PaymentMethod, PointTier } from "@talad/shared";
+import { type DepositStatus, type GuaranteeUnit, type OrderStatus, type OrderTab, type PaymentMethod, type PointTier, dateFormatter } from "@talad/shared";
 import type { TransferAccount } from "./cart";
 
 /** Mirrors the customer orders API (services/api orders module). */
@@ -96,6 +96,7 @@ export interface OrderDetail extends Omit<OrderSummary, "shop"> {
     paidAt: string | null;
     /** A paid order that was cancelled: when MC Mart sent the money back. */
     refundedAt: string | null;
+    hasRefundSlip?: boolean;
   } | null;
   /** MC Mart's account to transfer to (while the order waits for payment). */
   transfer: TransferAccount | null;
@@ -140,10 +141,8 @@ export const STATUS_TONE: Record<OrderStatus, string> = {
   RETURN_REQUESTED: "bg-orange-50 text-orange-700 ring-orange-200",
 };
 
-const DATE_LOCALES = { lo: "lo-LA", en: "en-GB" } as const;
-
-export function formatDate(iso: string, locale: keyof typeof DATE_LOCALES, withTime = false): string {
-  return new Intl.DateTimeFormat(DATE_LOCALES[locale], {
+export function formatDate(iso: string, locale: "lo" | "en", withTime = false): string {
+  return dateFormatter(locale, {
     day: "numeric",
     month: "short",
     year: "numeric",

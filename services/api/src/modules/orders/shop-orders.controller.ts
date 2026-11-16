@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, Post, Put, Query, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Put, Query, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { RETURN_RULES, SHOP_PROFILE_RULES } from '@talad/shared';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { IsOptional, Matches } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsNumber, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
 import type { Shop } from '../../generated/prisma/client.js';
 import { CurrentShop, ShopOwnerGuard } from '../auth/shop-owner.guard.js';
 import { tempFileStorage } from '../media/temp-file-storage.js';
@@ -121,6 +122,21 @@ class CodMonthQuery {
   month?: string;
 }
 
+class CodTransferDto {
+  @Matches(/^\d{4}-(0[1-9]|1[0-2])$/)
+  month!: string;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(1)
+  amount!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  note?: string;
+}
+
 /** Cash on delivery: the month's COD sales and the commission the shop transfers to MC Mart. */
 @ApiTags('seller')
 @ApiBearerAuth()
@@ -138,6 +154,19 @@ export class ShopCodController {
   @Get('payment-qr')
   async qr() {
     const file = await this.cod.platformQr();
+    return new StreamableFile(file.body, { type: file.contentType, length: file.contentLength, disposition: 'inline' });
+  }
+
+  /** The slip of the commission transfer (multipart `file`, plus `month`, `amount`, `note`). */
+  @Post('transfers')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: SHOP_PROFILE_RULES.imageMaxBytes, files: 1 } }))
+  submit(@CurrentShop() shop: Shop, @Body() dto: CodTransferDto, @UploadedFile() file?: Express.Multer.File) {
+    return this.cod.submit(shop, dto, file);
+  }
+
+  @Get('transfers/:id/slip')
+  async slip(@CurrentShop() shop: Shop, @Param('id', new ParseUUIDPipe({ version: '7' })) id: string) {
+    const file = await this.cod.slip(id, shop.id);
     return new StreamableFile(file.body, { type: file.contentType, length: file.contentLength, disposition: 'inline' });
   }
 }

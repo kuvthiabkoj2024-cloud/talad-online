@@ -1,0 +1,9 @@
+{
+  "name": "mcmart-test-scripts",
+  "private": true,
+  "type": "module",
+  "description": "Helpers for the mcmart-test skill (browser checks). Install once: npm install --prefix .claude/skills/mcmart-test/scripts",
+  "dependencies": {
+    "puppeteer-core": "24.43.1"
+  }
+}

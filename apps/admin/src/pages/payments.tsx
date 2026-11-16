@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@talad/ui/components/c
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@talad/ui/components/dialog'
 import { cn } from '@talad/ui/lib/utils'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Check, ChevronRight, ImageOff, Landmark, LoaderCircle, QrCode, Undo2, X } from 'lucide-react'
+import { ArrowLeft, Check, ChevronRight, Landmark, LoaderCircle, QrCode, Undo2, X } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
@@ -15,9 +15,10 @@ import { PageBody, PageIntro, TopBar } from '@/components/page-header'
 import { EmptyState, ErrorState, LoadingState } from '@/components/states'
 import { useUrlParams } from '@/hooks/use-url-params'
 import { useI18n } from '@/i18n/context'
-import { api, send } from '@/lib/api'
+import { api, send, upload } from '@/lib/api'
+import { SlipConfirmDialog, type SlipConfirmOptions } from '@/components/slip-confirm-dialog'
 import { fill, formatDate, formatMoney } from '@/lib/format'
-import { usePrivateImage } from '@/lib/private-file'
+import { PrivateImage } from '@/components/private-image'
 import type { PaymentAccount, PaymentQueue, PaymentQueuePage, PaymentReview, Paged, RefundQueue, RefundRow, SlipStatus } from '@/lib/types'
 import { ALERTS_KEY } from '@/nav'
 
@@ -251,12 +252,6 @@ function SlipImage({ id, className }: { id: string; className?: string }) {
   return <PrivateImage path={`/admin/payments/slips/${id}`} className={className} />
 }
 
-function PrivateImage({ path, className }: { path: string; className?: string }) {
-  const img = usePrivateImage(path)
-  if (img.isPending) return <span className={cn('flex items-center justify-center', className)}><LoaderCircle className="size-5 animate-spin text-muted-foreground" /></span>
-  if (!img.data) return <span className={cn('flex items-center justify-center', className)}><ImageOff className="size-6 text-muted-foreground" /></span>
-  return <img src={img.data} alt="" className={cn('bg-white', className)} />
-}
 
 const REFUND_QUEUES: RefundQueue[] = ['due', 'done']
 
@@ -274,14 +269,16 @@ export function RefundsPage() {
   const [confirm, setConfirm] = useState<ConfirmOptions | null>(null)
   const [qr, setQr] = useState<string | null>(null)
 
+  const [slipFor, setSlipFor] = useState<SlipConfirmOptions | null>(null)
+  const [viewSlip, setViewSlip] = useState<string | null>(null)
   const markDone = (r: RefundRow) =>
-    setConfirm({
+    setSlipFor({
       title: fill(t.refunds.doneTitle, { number: r.number }),
       description: fill(t.refunds.doneBody, { amount: formatMoney(r.amount, locale) }),
       confirmLabel: t.refunds.markDone,
-      field: { label: t.refunds.reference },
-      onConfirm: async ({ field }) => {
-        await send('POST', `/admin/refunds/${encodeURIComponent(r.number)}/done`, { reference: field })
+      referenceLabel: t.refunds.reference,
+      onSubmit: async (slip, reference) => {
+        await upload(`/admin/refunds/${encodeURIComponent(r.number)}/done`, slip, undefined, reference ? { reference } : undefined)
         void queryClient.invalidateQueries({ queryKey: ['admin', 'refunds'] })
         void queryClient.invalidateQueries({ queryKey: ALERTS_KEY })
         toast.success(t.refunds.done)
@@ -348,6 +345,11 @@ export function RefundsPage() {
                               {r.reference && ` · ${r.reference}`}
                             </p>
                           )}
+                          {r.refundedAt && r.hasSlip && (
+                            <Button variant="link" size="sm" className="h-auto self-start px-0" onClick={() => setViewSlip(r.number)}>
+                              {t.orders.viewSlip}
+                            </Button>
+                          )}
                         </div>
                         <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
                           <span className="text-lg font-bold tabular-nums">{formatMoney(r.amount, locale)}</span>
@@ -375,6 +377,15 @@ export function RefundsPage() {
         )}
       </PageBody>
       <ConfirmDialog options={confirm} onClose={() => setConfirm(null)} />
+      <SlipConfirmDialog options={slipFor} onClose={() => setSlipFor(null)} />
+      <Dialog open={viewSlip !== null} onOpenChange={(open) => !open && setViewSlip(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t.payouts.slip}</DialogTitle>
+          </DialogHeader>
+          {viewSlip && <PrivateImage path={`/admin/refunds/${encodeURIComponent(viewSlip)}/slip`} className="max-h-[70svh] w-full rounded-lg object-contain" />}
+        </DialogContent>
+      </Dialog>
       <Dialog open={qr !== null} onOpenChange={(open) => !open && setQr(null)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>

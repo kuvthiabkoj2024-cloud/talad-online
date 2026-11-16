@@ -12,3 +12,4 @@ export * from './guarantee-deposit.js';
 export * from './order.js';
 export * from './phone.js';
 export * from './roles.js';
+export * from './date.js';

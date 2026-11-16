@@ -9,6 +9,7 @@ import { AdminAuthGuard, ClientIp, CurrentAdmin, Permission } from '../auth/admi
 import { AdminOrdersService, type DisputeDecision, type PayoutAction } from './admin-orders.service.js';
 import { PAYMENT_QUEUES, PaymentReviewService, REFUND_QUEUES, type PaymentQueue, type RefundQueue } from './payment-review.service.js';
 import { PlatformAccountService } from './platform-account.service.js';
+import { ShopCodService } from './shop-cod.service.js';
 import { ShopOrdersService } from './shop-orders.service.js';
 
 class AdminOrdersQuery extends AdminPageQuery {
@@ -229,9 +230,17 @@ export class AdminRefundsController {
     return new StreamableFile(file.body, { type: file.contentType, length: file.contentLength, disposition: 'inline' });
   }
 
+  /** Marks it refunded: multipart `file` (the transfer slip, required) and optional `reference`. */
   @Post(':number/done')
-  done(@CurrentAdmin() admin: AdminUser, @Param('number') number: string, @Body() dto: ReferenceDto, @ClientIp() ip: string) {
-    return this.payments.markRefunded(admin, number, dto.reference?.trim() || null, ip);
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024, files: 1 } }))
+  done(@CurrentAdmin() admin: AdminUser, @Param('number') number: string, @Body() dto: ReferenceDto, @ClientIp() ip: string, @UploadedFile() file?: Express.Multer.File) {
+    return this.payments.markRefunded(admin, number, dto.reference?.trim() || null, file, ip);
+  }
+
+  @Get(':number/slip')
+  async slip(@Param('number') number: string) {
+    const file = await this.payments.refundSlip(number, null);
+    return new StreamableFile(file.body, { type: file.contentType, length: file.contentLength, disposition: 'inline' });
   }
 }
 
@@ -291,5 +300,33 @@ export class AdminPaymentAccountController {
   @Delete('qr')
   removeQr(@CurrentAdmin() admin: AdminUser) {
     return this.account.removeQr(admin);
+  }
+}
+
+/** Shops' COD commission transfers to MC Mart (§6): check the slip, confirm or reject. */
+@ApiTags('admin')
+@ApiBearerAuth()
+@UseGuards(AdminAuthGuard)
+@Permission('payments')
+@Controller('admin/cod-transfers')
+export class AdminCodTransfersController {
+  constructor(private readonly cod: ShopCodService) {}
+
+  /** `?status=SUBMITTED|CONFIRMED|REJECTED|all&q=<shop name>&page=` */
+  @Get()
+  list(@Query() q: AdminPageQuery) {
+    return this.cod.adminList(q);
+  }
+
+  @Get(':id/slip')
+  async slip(@Param('id', id) transferId: string) {
+    const file = await this.cod.slip(transferId, null);
+    return new StreamableFile(file.body, { type: file.contentType, length: file.contentLength, disposition: 'inline' });
+  }
+
+  @Post(':id/:decision')
+  decide(@CurrentAdmin() a: AdminUser, @Param('id', id) transferId: string, @Param('decision') decision: string, @Body() dto: ReasonDto, @ClientIp() ip: string) {
+    if (decision !== 'confirm' && decision !== 'reject') throw new BadRequestException('Unknown decision');
+    return this.cod.decide(a, transferId, decision, dto.reason?.trim() || null, ip);
   }
 }

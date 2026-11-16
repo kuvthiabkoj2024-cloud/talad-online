@@ -595,6 +595,21 @@ export interface CodMonth {
   inProgress: { orders: number; sales: number }
   items: { number: string; completedAt: string; customer: string; sales: number; commission: number }[]
   account: { bankCode: string | null; accountName: string | null; accountNumber: string | null; hasQr: boolean } | null
+  /** The shop's transfer slips for this month, newest first. */
+  transfers: CodTransfer[]
+  /** What's still to transfer after confirmed and pending slips. */
+  remaining: number
+}
+
+export interface CodTransfer {
+  id: string
+  month: string
+  amount: number
+  note: string | null
+  status: 'SUBMITTED' | 'CONFIRMED' | 'REJECTED'
+  rejectReason: string | null
+  createdAt: string
+  reviewedAt: string | null
 }
 
 /** MC Mart's commission on one product and the shop's latest request for its own (§2.3). */

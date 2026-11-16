@@ -1,6 +1,6 @@
 "use client";
 
-import type { Locale } from "@talad/shared";
+import { type Locale, dateFormatter } from "@talad/shared";
 import { ArrowLeft, Bot, Camera, CheckCheck, CircleAlert, LoaderCircle, Lock, MapPin, Mic, Package, Pause, Play, Plus, SendHorizontal, ShieldCheck, ShoppingBag, Store, X } from "lucide-react";
 import { LocationCard } from "./location-card";
 import Link from "next/link";
@@ -156,8 +156,8 @@ export function ShopChat({
   const fast = useRef(0);
   const [typing, setTyping] = useState(false);
 
-  const time = new Intl.DateTimeFormat(locale === "lo" ? "lo-LA" : "en-GB", { hour: "2-digit", minute: "2-digit" });
-  const day = new Intl.DateTimeFormat(locale === "lo" ? "lo-LA" : "en-GB", { weekday: "short", day: "numeric", month: "short" });
+  const time = dateFormatter(locale, { hour: "2-digit", minute: "2-digit" });
+  const day = dateFormatter(locale, { weekday: "short", day: "numeric", month: "short" });
 
   // The product the customer tapped "Chat with shop" on, as a chip above the composer.
   useEffect(() => {

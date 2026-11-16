@@ -1,0 +1,29 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "base": {
+      "node": "24.21.0",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.mcmart.app/api/v1",
+        "EXPO_PUBLIC_SITE_URL": "https://mcmart.app",
+        "EXPO_PUBLIC_SHOP_URL": "https://shop.mcmart.app",
+        "EXPO_PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAAF93lFZhWE9UFlKc"
+      }
+    },
+    "preview": {
+      "extends": "base",
+      "distribution": "internal",
+      "android": { "buildType": "apk" }
+    },
+    "production": {
+      "extends": "base",
+      "android": { "buildType": "app-bundle" }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

@@ -98,7 +98,7 @@ export function InstallBanner({ dict }: { dict: InstallDict }) {
     <div
       role="dialog"
       aria-labelledby="install-title"
-      className="fixed inset-x-3 bottom-[calc(var(--bottom-nav-h)+0.75rem)] z-40 mx-auto max-w-md animate-[modal-in_220ms_ease-out] rounded-2xl border border-border bg-card p-4 shadow-2xl shadow-black/15 sm:inset-x-auto sm:right-6 sm:bottom-6"
+      className="fixed inset-x-3 bottom-[calc(var(--bottom-nav-h)+0.75rem)] z-40 mx-auto max-w-md animate-[modal-in_220ms_ease-out] rounded-2xl border border-border bg-card p-4 shadow-2xl shadow-black/15 sm:inset-x-auto sm:right-6 sm:bottom-6 md:bottom-24"
     >
       <div className="flex items-start gap-3">
         {/* eslint-disable-next-line @next/next/no-img-element -- tiny static app icon */}

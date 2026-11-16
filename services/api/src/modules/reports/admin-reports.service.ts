@@ -73,7 +73,7 @@ export class AdminReportsService {
 
   /** What needs staff attention right now (§2.2 alerts). */
   async alerts() {
-    const [pendingShops, pendingProducts, openDisputes, lowStock, scheduled, unsettled, paymentsToCheck, refundsDue, commissionRequests] = await Promise.all([
+    const [pendingShops, pendingProducts, openDisputes, lowStock, scheduled, unsettled, paymentsToCheck, refundsDue, commissionRequests, codTransfers] = await Promise.all([
       this.prisma.shop.count({ where: { status: 'PENDING' } }),
       this.prisma.product.count({ where: { status: 'PENDING' } }),
       this.prisma.dispute.count({ where: { status: { in: ['OPEN', 'IN_REVIEW'] } } }),
@@ -87,6 +87,7 @@ export class AdminReportsService {
       this.prisma.order.count({ where: { shopOrders: { some: { status: 'PENDING' } }, slips: { some: { status: 'PENDING' } } } }),
       this.prisma.shopOrder.count({ where: { status: 'CANCELLED', payments: { some: { method: { not: 'COD' }, status: 'PAID', amount: { gt: 0 } } } } }),
       this.prisma.commissionRequest.count({ where: { status: 'PENDING' } }),
+      this.prisma.codTransfer.count({ where: { status: 'SUBMITTED' } }),
     ]);
     return {
       pendingShops,
@@ -99,6 +100,8 @@ export class AdminReportsService {
       refundsDue,
       /** Shops' product commission requests waiting for a decision. */
       commissionRequests,
+      /** Shops' COD commission slips waiting for a check. */
+      codTransfers,
     };
   }
 

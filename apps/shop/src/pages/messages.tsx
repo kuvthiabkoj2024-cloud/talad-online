@@ -17,6 +17,7 @@ import { compressImage } from '@/lib/compress-image'
 import { fill, formatMoney, storefrontUrl } from '@/lib/format'
 import { MESSAGE_EVENT } from '@/lib/realtime'
 import type { ChatMessage, ChatProductRef, ChatThread, ConversationSummary } from '@/lib/types'
+import { dateFormatter } from '@talad/shared'
 
 const BASE = '/me/shop/conversations'
 /** How often an open chat checks for new messages; the list refreshes less often. */
@@ -98,8 +99,8 @@ function ConversationList({ activeId, className }: { activeId?: string; classNam
     refetchInterval: LIST_POLL_MS,
     placeholderData: keepPreviousData,
   })
-  const time = new Intl.DateTimeFormat(locale === 'lo' ? 'lo-LA' : 'en-GB', { hour: '2-digit', minute: '2-digit' })
-  const date = new Intl.DateTimeFormat(locale === 'lo' ? 'lo-LA' : 'en-GB', { day: 'numeric', month: 'short' })
+  const time = dateFormatter(locale, { hour: '2-digit', minute: '2-digit' })
+  const date = dateFormatter(locale, { day: 'numeric', month: 'short' })
   const today = new Date().toDateString()
   const unreadChats = list.data?.filter((c) => c.unread > 0).length ?? 0
   const shown = onlyUnread ? list.data?.filter((c) => c.unread > 0) : list.data
@@ -387,8 +388,8 @@ function Thread({ id }: { id: string }) {
   const data = thread.data
   // A card sent again (the bot brings back the same order) shows once, at its latest message.
   const lastOfOrder = new Map(data.messages.flatMap((m) => (m.order ? [[m.order.id, m.id] as const] : [])))
-  const time = new Intl.DateTimeFormat(locale === 'lo' ? 'lo-LA' : 'en-GB', { hour: '2-digit', minute: '2-digit' })
-  const day = new Intl.DateTimeFormat(locale === 'lo' ? 'lo-LA' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+  const time = dateFormatter(locale, { hour: '2-digit', minute: '2-digit' })
+  const day = dateFormatter(locale, { weekday: 'short', day: 'numeric', month: 'short' })
 
   return (
     <>

@@ -73,6 +73,8 @@ export interface OrderDetail extends Omit<OrderSummary, 'items'> {
     paidAt: Date | null;
     /** A paid order that was cancelled: when MC Mart sent the money back. */
     refundedAt: Date | null;
+    /** MC Mart's refund slip can be opened (GET /me/orders/:number/refund-slip). */
+    hasRefundSlip: boolean;
   } | null;
   /** MC Mart's account to transfer to (null when transfers aren't set up). */
   transfer: PlatformAccount | null;
@@ -399,6 +401,7 @@ export class CustomerOrdersService {
             amount: payment.amount.toNumber(),
             paidAt: payment.paidAt,
             refundedAt: payment.refundedAt,
+            hasRefundSlip: !!payment.refundSlipKey,
           }
         : null,
       transfer: o.status === 'PENDING' ? await this.account.available() : null,

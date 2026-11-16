@@ -334,7 +334,7 @@ function ProfileForm({ profile: p }: { profile: ShopProfile }) {
                 return (
                   <label key={c.id} className="flex items-center gap-3 rounded-xl border p-3">
                     {c.logoUrl ? (
-                      <img src={c.logoUrl} alt="" className="size-10 shrink-0 rounded-lg object-cover ring-1 ring-black/5" />
+                      <img src={storefrontUrl.asset(c.logoUrl)} alt="" className="size-10 shrink-0 rounded-lg object-cover ring-1 ring-black/5" />
                     ) : (
                       <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
                         <Truck className="size-5" />

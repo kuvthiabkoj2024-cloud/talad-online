@@ -82,7 +82,7 @@
     "contactUs": "ຕິດຕໍ່ MC Mart",
     "aboutVreview": "ກ່ຽວກັບ MC Mart",
     "banks": "ທະນາຄານ",
-    "wallets": "E-Wallet",
+    "wallets": "ກະເປົາເງິນອອນລາຍ",
     "appSoon": "ແອັບມືຖືຈະມາໄວໆນີ້"
   },
   "freeDelivery": {
@@ -692,6 +692,7 @@
     "paymentConfirmed": "MC Mart ຢືນຢັນການຊຳລະແລ້ວ",
     "refundPending": "MC Mart ຈະຄືນເງິນ {amount} ໃຫ້ທ່ານ.",
     "refundDone": "ຄືນເງິນ {amount} ແລ້ວເມື່ອ {date}.",
+    "refundSlip": "ເບິ່ງສະລິບການຄືນເງິນ",
     "pointsTitle": "ຄະແນນສະສົມ",
     "pointsUse": "ໃຊ້ {n} ຄະແນນ (−{amount})",
     "pointsBalance": "ທ່ານມີ {n} ຄະແນນ · 1 ຄະແນນ = {value}",
@@ -764,7 +765,14 @@
     "readMore": "ອ່ານເພີ່ມ",
     "readLess": "ຫຍໍ້ລົງ",
     "sortPricePrefix": "ລາຄາ:",
-    "filter": "ຕົວກອງ"
+    "filter": "ຕົວກອງ",
+    "hours": "ເວລາເປີດ",
+    "openNow": "ເປີດຢູ່",
+    "closedNow": "ປິດຢູ່",
+    "closesAt": "ປິດເວລາ {time}",
+    "opensToday": "ເປີດມື້ນີ້ເວລາ {time}",
+    "opensOn": "ເປີດ{day} ເວລາ {time}",
+    "closedDay": "ປິດ"
   },
   "common": {
     "loading": "ກຳລັງໂຫຼດ…"
@@ -996,7 +1004,7 @@
       "ມີກາເຟລາວບໍ່?",
       "ຫູຟັງໄຮ້ສາຍ ບໍ່ເກີນ 300 ພັນ",
       "ຂອງຂວັນໃຫ້ແມ່",
-      "Sticky rice"
+      "ເຂົ້າໜຽວ"
     ],
     "disclaimer": "ແຊັດຕະຫຼາດ ອາດຜິດພາດໄດ້ — ກວດລາຍລະອຽດສິນຄ້າກ່ອນຊື້.",
     "errors": {

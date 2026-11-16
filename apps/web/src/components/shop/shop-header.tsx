@@ -1,4 +1,4 @@
-import type { Locale } from "@talad/shared";
+import { dateFormatter, type Locale } from "@talad/shared";
 import { BadgeCheck, CalendarDays, MessageCircleMore, Package, Star, Store, Users } from "lucide-react";
 import Link from "next/link";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
@@ -8,8 +8,7 @@ import { ShareButton } from "../product/share-button";
 import type { ShareSheetDict } from "../feed/share-sheet";
 import { FollowButton, FollowerCount } from "./follow-button";
 import { ShopDescription } from "./shop-description";
-
-const DATE_LOCALES = { lo: "lo-LA", en: "en-GB" } as const;
+import { ShopHours } from "./shop-hours";
 
 /** Shop hero: cover, logo, name, trust signals and description (§3.2). */
 export function ShopHeader({
@@ -23,7 +22,7 @@ export function ShopHeader({
   dict: Dictionary["shop"];
   shareDict: ShareSheetDict;
 }) {
-  const joined = new Intl.DateTimeFormat(DATE_LOCALES[locale], { month: "long", year: "numeric" }).format(
+  const joined = dateFormatter(locale, { month: "long", year: "numeric" }).format(
     new Date(shop.joinedAt),
   );
   const initials = shop.name
@@ -113,6 +112,7 @@ export function ShopHeader({
           <ShopDescription text={shop.description} labels={{ more: dict.readMore, less: dict.readLess }} />
         </div>
       )}
+      {shop.businessHours && <ShopHours hours={shop.businessHours} locale={locale} dict={dict} />}
     </section>
   );
 }

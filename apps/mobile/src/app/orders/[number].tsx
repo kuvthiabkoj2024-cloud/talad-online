@@ -241,6 +241,9 @@ function Order({ order }: { order: OrderDetail }) {
             .join('\n')}
         </Notice>
       )}
+      {order.status === 'CANCELLED' && payment?.refundedAt && payment.hasRefundSlip && (
+        <Button label={c.refundSlip} icon="receipt" variant="outline" onPress={() => setViewing(`${orderPath(order.number)}/refund-slip`)} />
+      )}
       {order.status === 'RETURN_REQUESTED' && (
         <Notice tone="orange" icon="swap" title={returned?.raisedBy === 'SHOP' ? a.returns.notCollectedTitle : a.refundTitle}>
           {returned?.raisedBy === 'SHOP'

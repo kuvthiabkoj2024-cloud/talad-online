@@ -692,6 +692,7 @@
     "paymentConfirmed": "Payment confirmed by MC Mart",
     "refundPending": "MC Mart will refund {amount} to you.",
     "refundDone": "Refunded {amount} on {date}.",
+    "refundSlip": "View refund slip",
     "pointsTitle": "Loyalty points",
     "pointsUse": "Use {n} points (−{amount})",
     "pointsBalance": "You have {n} points · 1 point = {value}",
@@ -764,7 +765,14 @@
     "readMore": "Read more",
     "readLess": "Show less",
     "sortPricePrefix": "Price:",
-    "filter": "Filter"
+    "filter": "Filter",
+    "hours": "Opening hours",
+    "openNow": "Open now",
+    "closedNow": "Closed now",
+    "closesAt": "Closes at {time}",
+    "opensToday": "Opens today at {time}",
+    "opensOn": "Opens {day} at {time}",
+    "closedDay": "Closed"
   },
   "common": {
     "loading": "Loading…"

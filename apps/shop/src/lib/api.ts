@@ -75,7 +75,7 @@ export const send = <T>(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: strin
   api<T>(path, { method, body: body === undefined ? undefined : JSON.stringify(body), headers })
 
 /** Multipart upload with progress (0–1), for product photos and videos. */
-export function upload<T>(path: string, file: File, onProgress?: (fraction: number) => void): Promise<T> {
+export function upload<T>(path: string, file: File, onProgress?: (fraction: number) => void, fields?: Record<string, string>): Promise<T> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open('POST', `${BASE_URL}${path}`)
@@ -95,6 +95,7 @@ export function upload<T>(path: string, file: File, onProgress?: (fraction: numb
     }
     const form = new FormData()
     form.append('file', file)
+    for (const [key, value] of Object.entries(fields ?? {})) form.append(key, value)
     xhr.send(form)
   })
 }

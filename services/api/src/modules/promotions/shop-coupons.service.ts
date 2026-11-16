@@ -67,7 +67,7 @@ export class ShopCouponsService {
    * `quantity` distinct codes with the same rules, each usable `usesPerCode` times — for
    * handing one code to each customer (printed vouchers, a giveaway list).
    */
-  async createBatch(shopId: string, dto: CouponBatchDto): Promise<ShopCoupon[]> {
+  async createBatch(shopId: string | null, dto: CouponBatchDto): Promise<ShopCoupon[]> {
     this.assertDates(dto, null);
     const rules = this.rules(dto);
     const prefix = dto.prefix ?? '';
@@ -97,14 +97,14 @@ export class ShopCouponsService {
   }
 
   /** Turns every code of a batch on or off. */
-  async setBatchActive(shopId: string, batchId: string, isActive: boolean): Promise<{ count: number }> {
+  async setBatchActive(shopId: string | null, batchId: string, isActive: boolean): Promise<{ count: number }> {
     const { count } = await this.prisma.coupon.updateMany({ where: { shopId, batchId }, data: { isActive } });
     if (count === 0) throw new NotFoundException('Coupon batch not found');
     return { count };
   }
 
   /** Deletes a batch's unused codes; used ones stay (orders refer to them) but are turned off. */
-  async removeBatch(shopId: string, batchId: string): Promise<{ deleted: number; kept: number }> {
+  async removeBatch(shopId: string | null, batchId: string): Promise<{ deleted: number; kept: number }> {
     return this.prisma.$transaction(async (tx) => {
       const { count: deleted } = await tx.coupon.deleteMany({ where: { shopId, batchId, usedCount: 0 } });
       const { count: kept } = await tx.coupon.updateMany({ where: { shopId, batchId }, data: { isActive: false } });

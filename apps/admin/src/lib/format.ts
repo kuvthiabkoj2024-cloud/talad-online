@@ -1,12 +1,10 @@
-import { formatMoney, type Locale } from '@talad/shared'
+import { formatMoney, type Locale, dateFormatter } from '@talad/shared'
 import type { LocalizedText } from './types'
 
 export { formatMoney }
 
-const TAGS: Record<Locale, string> = { lo: 'lo-LA', en: 'en-GB' }
-
 export function formatDate(iso: string, locale: Locale, withTime = false): string {
-  return new Intl.DateTimeFormat(TAGS[locale], {
+  return dateFormatter(locale, {
     day: 'numeric',
     month: 'short',
     year: 'numeric',

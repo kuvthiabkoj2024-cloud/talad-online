@@ -4,7 +4,7 @@ import { Prisma } from '../../../generated/prisma/client.js';
 import { PrismaService } from '../../../prisma/prisma.service.js';
 import { MediaService } from '../../media/media.service.js';
 import { flashPrice, FlashSalePricingService, type FlashDiscount } from '../../promotions/flash-sale-pricing.service.js';
-import { normalizeLao } from '../chat/chat-text.js';
+import { normalizeLao, toConcepts } from '../chat/chat-text.js';
 import { feedPostInclude, toFeedPost } from '../videos/feed-posts.service.js';
 import type { FeedQuery } from './feed.query.js';
 import { readPriceTiers } from './price-tiers.js';
@@ -326,12 +326,20 @@ export class ProductsService {
     return { items, page, pageSize, total, hasMore: page * pageSize < total };
   }
 
-  /** Storefront search (§5): every word must match the name, description, SKU, shop or category (Lao or English). */
+  /**
+   * Storefront search (§5): every word must match the name, description, SKU, shop or category.
+   * A word also matches its translations (Market Chat's glossary and the words admins taught),
+   * so "ກາເຟ" finds "Bolaven Arabica coffee" and "coffee" finds Lao-named products.
+   */
   async search(q: string, page: number, pageSize: number) {
     const words = q.trim().split(/\s+/).filter(Boolean).slice(0, 8);
     if (!words.length) return { items: [], page, pageSize, total: 0, hasMore: false };
+    const groups = words.flatMap((w) => {
+      const concepts = toConcepts([w]);
+      return concepts.length ? concepts.map((c) => [...new Set([w, ...c.alternatives])].filter((a) => concepts.length === 1 || a !== w)) : [[w]];
+    });
     const where = Prisma.sql`p.status = 'PUBLISHED' AND s.status = 'APPROVED' AND ${Prisma.join(
-      words.map((w) => Prisma.sql`(${SEARCHABLE}) ILIKE ${like(w)}`),
+      groups.map((g) => Prisma.sql`(${Prisma.join(g.map((w) => Prisma.sql`(${SEARCHABLE}) ILIKE ${like(w)}`), ' OR ')})`),
       ' AND ',
     )}`;
     const [ids, [{ total }]] = await Promise.all([

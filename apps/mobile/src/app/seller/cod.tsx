@@ -1,17 +1,21 @@
 import { LAO_BANKS, type BankCode } from '@talad/shared';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Image } from 'expo-image';
 
+import { Field, Input } from '@/components/form';
 import { Icon } from '@/components/icon';
+import { useAskPhoto } from '@/components/order/payment';
 import { PrivateImage } from '@/components/seller/private-image';
 import { KeyValue, SellerScroll, sellerStyles } from '@/components/seller/ui';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { api } from '@/lib/api';
+import { api, ApiError, upload } from '@/lib/api';
+import type { LocalFile } from '@/lib/orders';
 import { date, money } from '@/lib/format';
 import { fill } from '@/lib/i18n';
 import { useSellerI18n } from '@/lib/seller-i18n';
@@ -27,6 +31,8 @@ interface CodMonth {
   inProgress: { orders: number; sales: number };
   items: { number: string; completedAt: string; customer: string; sales: number; commission: number }[];
   account: { bankCode: string | null; accountName: string | null; accountNumber: string | null; hasQr: boolean } | null;
+  transfers: { id: string; amount: number; status: 'SUBMITTED' | 'CONFIRMED' | 'REJECTED'; rejectReason: string | null; createdAt: string }[];
+  remaining: number;
 }
 
 const MONTHS: Record<'lo' | 'en', string[]> = {
@@ -51,6 +57,7 @@ export default function SellerCodScreen() {
   const c = s.codOrders;
   const [back, setBack] = useState(0);
   const [qr, setQr] = useState(false);
+  const [slipView, setSlipView] = useState<string | null>(null);
   const month = monthKey(back);
   const data = useQuery({ queryKey: ['seller', 'cod', month], queryFn: () => api<CodMonth>(`/me/shop/cod?month=${month}`) });
   const d = data.data;
@@ -119,6 +126,8 @@ export default function SellerCodScreen() {
               </Card>
             )}
 
+            {(d.toTransfer > 0 || d.transfers.length > 0) && <Transfers key={`${d.month}-${d.remaining}`} data={d} onView={setSlipView} />}
+
             <Card style={sellerStyles.card}>
               <ThemedText type="smallBold">{c.orders}</ThemedText>
               {d.items.length ? (
@@ -147,8 +156,92 @@ export default function SellerCodScreen() {
           </>
         )}
       </SellerScroll>
-      <PrivateImage path={qr ? '/me/shop/cod/payment-qr' : null} onClose={() => setQr(false)} />
+      <PrivateImage path={qr ? '/me/shop/cod/payment-qr' : slipView ? `/me/shop/cod/transfers/${slipView}/slip` : null} onClose={() => (setQr(false), setSlipView(null))} />
     </>
+  );
+}
+
+/** The month's commission transfer slips, and sending a new one (§6). */
+function Transfers({ data: d, onView }: { data: CodMonth; onView: (id: string) => void }) {
+  const theme = useTheme();
+  const { s, locale } = useSellerI18n();
+  const c = s.codOrders;
+  const queryClient = useQueryClient();
+  const askPhoto = useAskPhoto();
+  const [amount, setAmount] = useState(d.remaining > 0 ? String(d.remaining) : '');
+  const [note, setNote] = useState('');
+  const [slip, setSlip] = useState<LocalFile | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  const send = async () => {
+    const n = Number(amount.replace(/[,\s]/g, ''));
+    if (!(n > 0)) return setError(c.amountRequired);
+    if (!slip) return setError(c.slipRequired);
+    setPending(true);
+    setError(null);
+    try {
+      await upload('/me/shop/cod/transfers', 'file', slip, { month: d.month, amount: String(n), ...(note.trim() && { note: note.trim() }) });
+      setSlip(null);
+      setNote('');
+      Alert.alert(c.sent);
+      void queryClient.invalidateQueries({ queryKey: ['seller', 'cod', d.month] });
+    } catch (e) {
+      const code = e instanceof ApiError ? e.code : undefined;
+      setError(code === 'INVALID_IMAGE' || code === 'FILE_TOO_LARGE' ? c.slipInvalid : c.sendError);
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <Card style={sellerStyles.card}>
+      <ThemedText type="smallBold">{c.transfers}</ThemedText>
+      <ThemedText type="caption" themeColor="textSecondary">
+        {c.transfersHint}
+      </ThemedText>
+      {d.transfers.map((tr) => (
+        <Pressable key={tr.id} accessibilityRole="button" onPress={() => onView(tr.id)} style={[styles.order, { borderTopColor: theme.border }]}>
+          <View style={styles.flex}>
+            <ThemedText type="smallBold">{money(tr.amount)}</ThemedText>
+            <ThemedText type="caption" themeColor="textSecondary">
+              {c.statuses[tr.status]} · {date(tr.createdAt, locale)}
+            </ThemedText>
+            {tr.rejectReason && (
+              <ThemedText type="caption" style={{ color: theme.sale }}>
+                {fill(c.rejected, { reason: tr.rejectReason })}
+              </ThemedText>
+            )}
+          </View>
+          <ThemedText type="caption" style={{ color: theme.primary }}>
+            {c.viewSlip}
+          </ThemedText>
+        </Pressable>
+      ))}
+      {d.toTransfer > 0 && (
+        <>
+          <ThemedText type="small">{d.remaining > 0 ? fill(c.remaining, { amount: money(d.remaining) }) : c.allSent}</ThemedText>
+        </>
+      )}
+      {d.remaining > 0 && (
+        <>
+          <Field label={c.amount}>
+            <Input value={amount} onChangeText={(v) => (setAmount(v), setError(null))} keyboardType="number-pad" />
+          </Field>
+          <Field label={c.slipNote}>
+            <Input value={note} onChangeText={setNote} maxLength={300} />
+          </Field>
+          {slip && <Image source={{ uri: slip.uri }} style={styles.preview} contentFit="contain" />}
+          <Button label={slip ? c.changeSlip : c.addSlip} icon="camera" variant="outline" onPress={() => void askPhoto().then((f) => f && (setSlip(f), setError(null)))} />
+          {error && (
+            <ThemedText type="caption" style={{ color: theme.sale }}>
+              {error}
+            </ThemedText>
+          )}
+          <Button label={c.submit} icon="send" loading={pending} onPress={() => void send()} />
+        </>
+      )}
+    </Card>
   );
 }
 
@@ -158,4 +251,5 @@ const styles = StyleSheet.create({
   months: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.two + 2 },
   order: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: Spacing.two },
   right: { alignItems: 'flex-end' },
+  preview: { width: '100%', height: 220, borderRadius: 12 },
 });

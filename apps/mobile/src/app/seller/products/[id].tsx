@@ -1,4 +1,5 @@
 import {
+  BRAND_RULES,
   customerGuarantee,
   DEPOSIT_RULES,
   DEPOSIT_TYPES,
@@ -19,10 +20,11 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { useDeferredValue, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { Field, Input, Select } from '@/components/form';
 import { Icon } from '@/components/icon';
 import { sellerStyles } from '@/components/seller/ui';
@@ -46,6 +48,7 @@ interface ShopProductDetail {
   description: string | null;
   categoryId: string;
   unitId: string;
+  brand?: string | null;
   sku: string;
   price: number;
   compareAtPrice: number | null;
@@ -105,6 +108,7 @@ function Editor({ product }: { product?: ShopProductDetail }) {
   const [description, setDescription] = useState(product?.description ?? '');
   const [categoryId, setCategoryId] = useState(product?.categoryId ?? '');
   const [unitId, setUnitId] = useState(product?.unitId ?? '');
+  const [brand, setBrand] = useState(product?.brand ?? '');
   const [sku, setSku] = useState(product?.sku ?? '');
   const [price, setPrice] = useState(product ? String(product.price) : '');
   const [compareAt, setCompareAt] = useState(product?.compareAtPrice != null ? String(product.compareAtPrice) : '');
@@ -256,6 +260,7 @@ function Editor({ product }: { product?: ShopProductDetail }) {
       description: description.trim() || undefined,
       categoryId,
       unitId,
+      brand: brand.trim() || null,
       sku: sku.trim(),
       price: num(price),
       compareAtPrice: compareAt.trim() ? num(compareAt) : null,
@@ -329,7 +334,7 @@ function Editor({ product }: { product?: ShopProductDetail }) {
   );
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex} keyboardVerticalOffset={90}>
+    <KeyboardAvoid style={styles.flex}>
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 120 + insets.bottom }]} keyboardShouldPersistTaps="handled">
         {product?.status === 'REJECTED' && product.rejectionReason && (
           <Notice tone="danger">{fill(e.rejectedNote, { reason: product.rejectionReason })}</Notice>
@@ -401,6 +406,9 @@ function Editor({ product }: { product?: ShopProductDetail }) {
           </Field>
           <Field label={e.unit}>
             <Select value={unitId} placeholder={e.chooseUnit} options={(units.data ?? []).map((u) => ({ value: u.id, label: localized(u.name, locale) }))} onChange={setUnitId} />
+          </Field>
+          <Field label={e.brand} hint={e.brandHint}>
+            <BrandField value={brand} placeholder={e.brandPlaceholder} onChange={setBrand} />
           </Field>
         </Card>
 
@@ -629,7 +637,7 @@ function Editor({ product }: { product?: ShopProductDetail }) {
           style={styles.flex}
         />
       </View>
-    </KeyboardAvoidingView>
+    </KeyboardAvoid>
   );
 }
 
@@ -659,7 +667,40 @@ function swap<T>(list: T[], a: number, b: number): T[] {
   return next;
 }
 
+/**
+ * The brand as free text, with the platform's matching brands as tap-to-fill chips (GET /brands?q=),
+ * so shops pick "Samsung" instead of a new spelling. The API reuses a brand whatever the case.
+ */
+function BrandField({ value, placeholder, onChange }: { value: string; placeholder: string; onChange: (v: string) => void }) {
+  const theme = useTheme();
+  const term = useDeferredValue(value.trim());
+  const suggestions = useQuery({
+    queryKey: ['brands', 'suggest', term],
+    queryFn: () => api<{ slug: string; name: string }[]>(`/brands?${new URLSearchParams({ limit: '8', ...(term && { q: term }) })}`),
+    staleTime: 60_000,
+    placeholderData: (previous) => previous,
+  });
+  const chips = (suggestions.data ?? []).filter((b) => b.name.toLowerCase() !== term.toLowerCase());
+  return (
+    <View style={styles.brand}>
+      <Input value={value} onChangeText={onChange} placeholder={placeholder} maxLength={BRAND_RULES.nameMax} autoCorrect={false} />
+      {chips.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.brandChips}>
+          {chips.map((b) => (
+            <Pressable key={b.slug} accessibilityRole="button" onPress={() => onChange(b.name)} style={[styles.brandChip, { borderColor: theme.border, backgroundColor: theme.backgroundElement }]}>
+              <ThemedText type="caption">{b.name}</ThemedText>
+            </Pressable>
+          ))}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  brand: { gap: Spacing.two },
+  brandChips: { gap: Spacing.two },
+  brandChip: { borderWidth: StyleSheet.hairlineWidth, borderRadius: Radius.full, paddingHorizontal: Spacing.three, paddingVertical: 6 },
   flex: { flex: 1 },
   pad: { padding: Spacing.three },
   content: { padding: Spacing.three, gap: Spacing.three },

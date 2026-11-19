@@ -120,11 +120,23 @@ export const sellerKeys = {
 
 export const useMyShop = (enabled = true) => useQuery({ queryKey: sellerKeys.shop, queryFn: () => api<MyShop>('/me/shop'), enabled });
 export const useShopSummary = () => useQuery({ queryKey: sellerKeys.summary, queryFn: () => api<ShopSummary>('/me/shop/summary') });
-/** "New" counts on the Orders and Videos tiles. */
-export const useShopBadges = () =>
-  useQuery({ queryKey: sellerKeys.badges, queryFn: () => api<{ orders: number; videos: number }>('/me/shop/notifications/badges') });
-export const useShopUnread = () =>
-  useQuery({ queryKey: sellerKeys.unread, queryFn: () => api<{ count: number }>('/me/shop/conversations/unread-count').then((r) => r.count) });
+/** "New" counts on the Orders and Videos tiles (`enabled`: only for an approved shop). */
+export const useShopBadges = (enabled = true) =>
+  useQuery({ queryKey: sellerKeys.badges, queryFn: () => api<{ orders: number; videos: number }>('/me/shop/notifications/badges'), enabled, refetchInterval: 30_000 });
+export const useShopUnread = (enabled = true) =>
+  useQuery({ queryKey: sellerKeys.unread, queryFn: () => api<{ count: number }>('/me/shop/conversations/unread-count').then((r) => r.count), enabled, refetchInterval: 30_000 });
+
+/**
+ * Everything new in the shop, for the profile's "My shop" row: new orders + video updates +
+ * unread customer chats (a new order and a new chat = 2). The same counts as the seller tiles,
+ * so opening a section there lowers this too.
+ */
+export function useShopAttention(enabled: boolean): number {
+  const badges = useShopBadges(enabled);
+  const unread = useShopUnread(enabled);
+  if (!enabled) return 0;
+  return (badges.data?.orders ?? 0) + (badges.data?.videos ?? 0) + (unread.data ?? 0);
+}
 export const useDeliveryProviders = () =>
   useQuery({ queryKey: sellerKeys.providers, queryFn: () => api<DeliveryProvider[]>('/me/shop/orders/delivery-providers'), staleTime: 5 * 60_000 });
 

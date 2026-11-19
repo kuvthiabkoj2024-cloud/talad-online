@@ -70,7 +70,9 @@
           "microphonePermission": "MC Mart uses the microphone so you can send voice messages to shops and search by voice.",
           "speechRecognitionPermission": "MC Mart turns your voice into search words.",
           "androidSpeechServicePackages": [
-            "com.google.android.googlequicksearchbox"
+            "com.google.android.googlequicksearchbox",
+            "com.google.android.as",
+            "com.google.android.tts"
           ]
         }
       ],
@@ -84,7 +86,17 @@
           "microphonePermission": "MC Mart uses the microphone so you can send voice messages to shops and search by voice."
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "MC Mart uses your photos to set your profile picture, your refund QR code, to search by photo and to send photos in chats.",
+          "savePhotosPermission": "MC Mart saves payment QR codes to your photos so you can pay from your bank app.",
+          "granularPermissions": [
+            "photo"
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

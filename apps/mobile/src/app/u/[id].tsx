@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -10,7 +10,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Button, EmptyState, LoadError, Loading, Pill } from '@/components/ui';
 import { BrandGreen, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { api, ApiError, type FeedPost, type LikedVideo, type PublicProfile } from '@/lib/api';
+import { api, ApiError, avatarSrc, type FeedPost, type LikedVideo, type PublicProfile } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { count, date } from '@/lib/format';
 import { fill, useI18n } from '@/lib/i18n';
@@ -25,9 +25,20 @@ interface Tile {
   views: number;
 }
 
+/** Someone on a followers / following list (GET /profiles/:id/followers|following). */
+interface Person {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  avatarVersion?: string | null;
+}
+
+type Tab = 'videos' | 'liked' | 'followers' | 'following';
+
 /**
- * A customer's video profile, as on the website: photo, name, counts, and their videos in a
- * grid. On your own profile, a private "Liked" tab lists the videos you liked or saved.
+ * A customer's video profile, as on the website: photo, name, counts, Follow (or, on your own,
+ * Post a video and Edit profile), and their videos in a grid. Tapping Followers / Following lists
+ * those people. On your own profile, a private "Liked" tab lists the videos you liked or saved.
  */
 export default function VideoProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -35,8 +46,9 @@ export default function VideoProfileScreen() {
   const router = useRouter();
   const { t, locale } = useI18n();
   const { customer } = useAuth();
+  const queryClient = useQueryClient();
   const mine = customer?.id === id;
-  const [tab, setTab] = useState<'videos' | 'liked'>('videos');
+  const [tab, setTab] = useState<Tab>('videos');
 
   const profile = useQuery({ queryKey: ['profile', id], queryFn: () => api<PublicProfile>(`/profiles/${id}`) });
   const videos = useInfiniteQuery({
@@ -53,7 +65,38 @@ export default function VideoProfileScreen() {
     enabled: mine && tab === 'liked',
   });
 
-  const list = tab === 'videos' ? videos : liked;
+  const people = useInfiniteQuery({
+    queryKey: ['profile', id, tab],
+    queryFn: ({ pageParam }) => api<{ items: Person[]; nextCursor: string | null }>(`/profiles/${id}/${tab}?limit=20${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ''}`),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.nextCursor,
+    enabled: tab === 'followers' || tab === 'following',
+  });
+  const followKey = ['follow', 'profile', id] as const;
+  const following = useQuery({
+    queryKey: followKey,
+    enabled: !!customer && !mine,
+    queryFn: async () => (await api<{ customerIds: string[] }>(`/me/profile-follows/status?ids=${id}`)).customerIds.includes(id),
+  });
+
+  async function toggleFollow() {
+    if (!customer) return router.push('/login');
+    const on = !following.data;
+    queryClient.setQueryData(followKey, on);
+    queryClient.setQueryData<PublicProfile>(['profile', id], (old) => old && { ...old, followers: Math.max(0, old.followers + (on ? 1 : -1)) });
+    try {
+      const res = await api<{ following: boolean; followers: number }>(`/me/profile-follows/${id}`, { method: on ? 'PUT' : 'DELETE' });
+      queryClient.setQueryData(followKey, res.following);
+      queryClient.setQueryData<PublicProfile>(['profile', id], (old) => old && { ...old, followers: res.followers });
+      void queryClient.invalidateQueries({ queryKey: ['profile', id, 'followers'] });
+    } catch {
+      queryClient.setQueryData(followKey, !on);
+      void profile.refetch();
+    }
+  }
+
+  const list = tab === 'videos' ? videos : tab === 'liked' ? liked : people;
+  const persons = tab === 'followers' || tab === 'following' ? (people.data?.pages.flatMap((pg) => pg.items) ?? []) : [];
   const tiles: Tile[] =
     tab === 'videos'
       ? (videos.data?.pages.flatMap((p) => p.items) ?? []).map((v) => ({ key: v.id, kind: 'post', id: v.id, posterUrl: null, title: v.caption, views: v.stats.views }))
@@ -80,7 +123,7 @@ export default function VideoProfileScreen() {
         ) : (
           <LinearGradient colors={['#43a047', BrandGreen, '#1b5e20']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
             <View style={styles.avatar}>
-              {p.avatarUrl ? <Image source={p.avatarUrl} style={StyleSheet.absoluteFill} contentFit="cover" /> : <ThemedText style={styles.initials}>{initialsOf(p.name)}</ThemedText>}
+              {avatarSrc(p) ? <Image source={avatarSrc(p)} style={StyleSheet.absoluteFill} contentFit="cover" /> : <ThemedText style={styles.initials}>{initialsOf(p.name)}</ThemedText>}
             </View>
             <ThemedText type="subtitle" style={styles.white} numberOfLines={1}>
               {p.name}
@@ -91,31 +134,66 @@ export default function VideoProfileScreen() {
             <View style={styles.stats}>
               {(
                 [
-                  [p.videos, t.vp.videos],
-                  [p.followers, t.vp.followers],
-                  [p.following, t.vp.following],
-                  [p.likes, t.vp.likes],
+                  [p.videos, t.vp.videos, 'videos'],
+                  [p.followers, t.vp.followers, 'followers'],
+                  [p.following, t.vp.following, 'following'],
+                  [p.likes, t.vp.likes, null],
                 ] as const
-              ).map(([n, label]) => (
-                <View key={label} style={styles.stat}>
+              ).map(([n, label, to]) => (
+                <Pressable
+                  key={label}
+                  accessibilityRole={to ? 'tab' : undefined}
+                  accessibilityState={to ? { selected: tab === to } : undefined}
+                  disabled={!to}
+                  onPress={() => to && setTab(to)}
+                  style={[styles.stat, to && tab === to && styles.statOn]}>
                   <ThemedText type="subtitle" style={styles.white}>
                     {count(n, locale)}
                   </ThemedText>
                   <ThemedText type="caption" style={styles.soft}>
                     {label}
                   </ThemedText>
-                </View>
+                </Pressable>
               ))}
+            </View>
+            <View style={styles.actions}>
+              {mine ? (
+                <>
+                  <Pressable accessibilityRole="button" onPress={() => router.push('/feed/new')} style={({ pressed }) => [styles.action, styles.actionWhite, pressed && styles.pressed]}>
+                    <Icon name="add" size={18} color={BrandGreen} strokeWidth={2.5} />
+                    <ThemedText type="smallBold" style={{ color: BrandGreen }}>
+                      {t.vp.postVideo}
+                    </ThemedText>
+                  </Pressable>
+                  <Pressable accessibilityRole="button" onPress={() => router.push('/profile')} style={({ pressed }) => [styles.action, styles.actionGhost, pressed && styles.pressed]}>
+                    <Icon name="edit" size={16} color="#ffffff" />
+                    <ThemedText type="smallBold" style={styles.white}>
+                      {t.vp.editProfile}
+                    </ThemedText>
+                  </Pressable>
+                </>
+              ) : (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: !!following.data }}
+                  onPress={() => void toggleFollow()}
+                  style={({ pressed }) => [styles.action, following.data ? styles.actionGhost : styles.actionFollow, pressed && styles.pressed]}>
+                  <Icon name={following.data ? 'check' : 'add'} size={18} color="#ffffff" strokeWidth={2.5} />
+                  <ThemedText type="smallBold" style={styles.white}>
+                    {following.data ? t.vp.followingButton : t.vp.follow}
+                  </ThemedText>
+                </Pressable>
+              )}
             </View>
           </LinearGradient>
         )}
 
-        {mine && (
-          <View style={styles.tabs}>
-            <Pill label={t.vp.videos} selected={tab === 'videos'} onPress={() => setTab('videos')} />
-            <Pill label={t.vp.liked} selected={tab === 'liked'} onPress={() => setTab('liked')} />
-          </View>
-        )}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
+          <Pill label={t.vp.videos} selected={tab === 'videos'} onPress={() => setTab('videos')} />
+          {mine && <Pill label={t.vp.liked} selected={tab === 'liked'} onPress={() => setTab('liked')} />}
+          <Pill label={t.vp.followers} selected={tab === 'followers'} onPress={() => setTab('followers')} />
+          <Pill label={t.vp.following} selected={tab === 'following'} onPress={() => setTab('following')} />
+        </ScrollView>
         {tab === 'liked' && (
           <ThemedText type="caption" themeColor="textSecondary">
             🔒 {t.vp.likedPrivate}
@@ -123,12 +201,41 @@ export default function VideoProfileScreen() {
         )}
 
         {list.isPending && list.fetchStatus !== 'idle' && <Loading />}
-        {list.data && !tiles.length && (
+        {(tab === 'followers' || tab === 'following') && people.data && (
+          persons.length ? (
+            <View style={[styles.people, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              {persons.map((f, i) => (
+                <Pressable
+                  key={f.id}
+                  accessibilityRole="link"
+                  onPress={() => router.push(`/u/${f.id}`)}
+                  style={({ pressed }) => [styles.person, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border }, pressed && styles.pressed]}>
+                  <View style={[styles.personAvatar, { backgroundColor: theme.primarySoft }]}>
+                    {avatarSrc(f) ? (
+                      <Image source={avatarSrc(f)} style={StyleSheet.absoluteFill} contentFit="cover" />
+                    ) : (
+                      <ThemedText type="smallBold" themeColor="primary">
+                        {initialsOf(f.name)}
+                      </ThemedText>
+                    )}
+                  </View>
+                  <ThemedText type="smallBold" numberOfLines={1} style={styles.flex}>
+                    {f.name}
+                  </ThemedText>
+                  <Icon name="chevron-right" size={18} color={theme.textSecondary} />
+                </Pressable>
+              ))}
+            </View>
+          ) : (
+            <EmptyState icon="users" title={tab === 'following' ? t.vp.noFollowing : t.vp.noFollowers} />
+          )
+        )}
+        {(tab === 'videos' || tab === 'liked') && list.data && !tiles.length && (
           <EmptyState icon="video" title={tab === 'videos' ? t.vp.noVideos : t.vp.noLiked} body={tab === 'videos' ? (mine ? t.vp.noVideosMine : undefined) : t.vp.noLikedHint} />
         )}
         <View style={styles.grid}>
-          {tiles.map((v) => (
-            <Pressable key={v.key} onPress={() => router.push(`/watch/${v.kind}/${v.id}`)} style={styles.cell}>
+          {(tab === 'videos' || tab === 'liked') && tiles.map((v) => (
+            <Pressable key={v.key} accessibilityRole="link" onPress={() => router.push(`/watch/${v.kind}/${v.id}`)} style={styles.cell}>
               {({ pressed }) => (
                 <View style={[styles.tile, { backgroundColor: theme.primarySoft }, pressed && styles.pressed]}>
                   {v.posterUrl ? (
@@ -179,7 +286,17 @@ const styles = StyleSheet.create({
   white: { color: '#ffffff' },
   soft: { color: 'rgba(255,255,255,0.8)' },
   stats: { flexDirection: 'row', alignSelf: 'stretch', marginTop: Spacing.three, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: Radius.md, paddingVertical: Spacing.two },
-  stat: { flex: 1, alignItems: 'center' },
+  stat: { flex: 1, alignItems: 'center', borderRadius: Radius.sm, paddingVertical: 2 },
+  statOn: { backgroundColor: 'rgba(255,255,255,0.18)' },
+  actions: { flexDirection: 'row', alignSelf: 'stretch', gap: Spacing.two, marginTop: Spacing.three },
+  action: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.one, height: 42, borderRadius: Radius.full },
+  actionWhite: { backgroundColor: '#ffffff' },
+  actionGhost: { backgroundColor: 'rgba(255,255,255,0.18)' },
+  actionFollow: { backgroundColor: '#ff3b5c' },
+  flex: { flex: 1 },
+  people: { borderRadius: Radius.lg, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
+  person: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two + 2 },
+  personAvatar: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   tabs: { flexDirection: 'row', gap: Spacing.two },
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -3 },
   cell: { width: '33.333%', padding: 3 },

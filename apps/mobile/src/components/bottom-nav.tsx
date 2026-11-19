@@ -3,8 +3,10 @@ import type { Tabs } from 'expo-router';
 import type { ComponentProps } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Pressable, StyleSheet, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CartBadge, useWiggle } from '@/components/cart-badge';
 import { ThemedText } from '@/components/themed-text';
 import type { IconName } from '@/components/ui';
 import { useCartCount } from '@/hooks/use-cart';
@@ -28,6 +30,7 @@ export function BottomNav({ state, navigateToTab }: BarProps) {
   const { t } = useI18n();
   const { customer } = useAuth();
   const cartCount = useCartCount();
+  const wiggle = useWiggle();
   const current = state.routes[state.index]?.name;
   if (current === 'chat') return null;
 
@@ -49,7 +52,7 @@ export function BottomNav({ state, navigateToTab }: BarProps) {
     return (
       <Pressable key={name} accessibilityRole="tab" accessibilityState={{ selected: active }} accessibilityLabel={label} onPress={() => go(name)} style={styles.tab}>
         {active && <View style={[styles.indicator, { backgroundColor: theme.primary }]} />}
-        <View>
+        <Animated.View style={extra?.badge !== undefined ? wiggle.style : undefined}>
           {extra?.avatar && initials ? (
             <View style={[styles.avatar, { backgroundColor: theme.primary }, active && { borderColor: theme.primary, borderWidth: 2 }]}>
               <ThemedText style={styles.initials}>{initials}</ThemedText>
@@ -57,12 +60,8 @@ export function BottomNav({ state, navigateToTab }: BarProps) {
           ) : (
             <Icon name={active ? activeIcon : icon} size={24} color={color} strokeWidth={active ? 2.5 : 2} />
           )}
-          {!!extra?.badge && (
-            <View style={[styles.badge, { backgroundColor: theme.sale }]}>
-              <ThemedText style={styles.badgeText}>{extra.badge > 99 ? '99+' : extra.badge}</ThemedText>
-            </View>
-          )}
-        </View>
+          {extra?.badge !== undefined && <CartBadge count={extra.badge} onBump={wiggle.bump} />}
+        </Animated.View>
         <ThemedText numberOfLines={1} style={[styles.label, { color }]}>
           {label}
         </ThemedText>
@@ -122,6 +121,4 @@ const styles = StyleSheet.create({
   indicator: { position: 'absolute', top: 0, width: 28, height: 3, borderBottomLeftRadius: 3, borderBottomRightRadius: 3 },
   avatar: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   initials: { color: '#ffffff', fontSize: 10, lineHeight: 14, fontWeight: '800' },
-  badge: { position: 'absolute', top: -5, right: -11, minWidth: 18, borderRadius: 9, paddingHorizontal: 4, alignItems: 'center' },
-  badgeText: { color: '#ffffff', fontSize: 10, lineHeight: 17, fontWeight: '700' },
 });

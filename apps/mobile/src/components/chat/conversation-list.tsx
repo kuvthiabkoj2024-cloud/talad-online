@@ -1,12 +1,13 @@
 import { Icon } from '@/components/icon';
 import { useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useRouter } from 'expo-router';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Card, EmptyState, LoadError, Loading } from '@/components/ui';
-import { Spacing } from '@/constants/theme';
+import { BrandGreen, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { chatBase, chatKeys, type ChatSide } from '@/components/chat/conversation';
 import { api, type ConversationSummary } from '@/lib/api';
@@ -42,6 +43,8 @@ export function ConversationList({ side }: { side: ChatSide }) {
         refreshControl={<RefreshControl refreshing={chats.isRefetching} onRefresh={() => void chats.refetch()} tintColor={theme.primary} />}>
         {chats.isPending && <Loading />}
         {chats.isError && <LoadError onRetry={() => void chats.refetch()} />}
+        {/* Customers: Market Chat (MC Mart's assistant) always first, even before any chat with it. */}
+        {side === 'customer' && <MarketChatRow />}
         {chats.data && !chats.data.length && <EmptyState icon="chats" title={t.msg.empty} body={t.msg.emptyHint} />}
         {!!chats.data?.length && (
           <Card>
@@ -90,12 +93,73 @@ export function ConversationList({ side }: { side: ChatSide }) {
   );
 }
 
+/**
+ * Market Chat, pinned above the shop chats: green, with MC Mart's logo, an "AI" tag and a pin, so
+ * it reads as the platform's own assistant rather than a shop. Shows the last saved message, if any.
+ */
+function MarketChatRow() {
+  const theme = useTheme();
+  const router = useRouter();
+  const { t, locale } = useI18n();
+  const history = useQuery({
+    queryKey: ['me', 'market-chat'],
+    queryFn: () => api<{ role: 'user' | 'assistant'; text: string; image?: string; createdAt?: string }[]>('/chat/history'),
+    staleTime: 30_000,
+  });
+  const last = history.data?.at(-1);
+  const preview = last ? `${last.role === 'user' ? `${t.msg.you}: ` : ''}${last.text || (last.image ? t.msg.photo : '')}` : t.chat.pinnedHint;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={t.chat.title}
+      onPress={() => router.navigate('/chat')}
+      style={({ pressed }) => [styles.pinned, { borderColor: BrandGreen, backgroundColor: theme.primarySoft }, pressed && styles.pressed]}>
+      <LinearGradient colors={['#43a047', '#1b5e20']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.logo}>
+        <Image source={require('@/assets/images/brand-logo.png')} style={styles.brand} contentFit="contain" />
+      </LinearGradient>
+      <View style={styles.flex}>
+        <View style={styles.inline}>
+          <ThemedText type="smallBold" numberOfLines={1} style={styles.shrink}>
+            {t.chat.title}
+          </ThemedText>
+          <View style={[styles.aiTag, { backgroundColor: BrandGreen }]}>
+            <ThemedText style={styles.aiText}>AI</ThemedText>
+          </View>
+          <View style={styles.flex} />
+          {last?.createdAt ? (
+            <ThemedText type="caption" themeColor="textSecondary">
+              {date(last.createdAt, locale)}
+            </ThemedText>
+          ) : (
+            <View style={styles.inline}>
+              <Icon name="pin" size={13} color={theme.primary} />
+              <ThemedText type="caption" themeColor="primary">
+                {t.chat.pinned}
+              </ThemedText>
+            </View>
+          )}
+        </View>
+        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+          {preview}
+        </ThemedText>
+      </View>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
+  shrink: { flexShrink: 1 },
+  pressed: { opacity: 0.8 },
+  pinned: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingHorizontal: Spacing.three, paddingVertical: 10, borderWidth: 1.5, borderRadius: Radius.lg },
+  brand: { width: 28, height: 28 },
+  aiTag: { borderRadius: Radius.full, paddingHorizontal: 6 },
+  aiText: { color: '#ffffff', fontSize: 10, lineHeight: 16, fontWeight: '800' },
   flex: { flex: 1 },
   bold: { fontWeight: '700' },
-  content: { padding: Spacing.three, gap: Spacing.three, paddingBottom: Spacing.six },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, padding: Spacing.three },
-  logo: { width: 48, height: 48, borderRadius: 24, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  content: { padding: Spacing.three, gap: Spacing.two, paddingBottom: Spacing.six },
+  // Compact rows (about 64 pt), like other chat apps.
+  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingHorizontal: Spacing.three, paddingVertical: 10 },
+  logo: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   inline: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   badge: { minWidth: 20, borderRadius: 10, paddingHorizontal: 5, alignItems: 'center' },
   badgeText: { color: '#ffffff', fontSize: 11, lineHeight: 20, fontWeight: '700' },

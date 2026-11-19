@@ -31,6 +31,8 @@ import { ProductsService } from './products/products.service.js';
 import { ShopProductsController } from './products/shop-products.controller.js';
 import { ShopProductsService } from './products/shop-products.service.js';
 import { UnitsController } from './units.controller.js';
+import { BrandsController } from './brands/brands.controller.js';
+import { BrandsService } from './brands/brands.service.js';
 import { FeedPostsController, MyFeedPostsController } from './videos/feed-posts.controller.js';
 import { FeedPostsService } from './videos/feed-posts.service.js';
 import { VideoEngagementService } from './videos/video-engagement.service.js';
@@ -41,8 +43,9 @@ import { ProfilesService } from './videos/profiles.service.js';
 /** Categories, units, products, variants and moderation (§2.5, §2.6, §3.3). */
 @Module({
   imports: [AuthModule, CmsModule, MediaModule, PromotionsModule, NotificationsModule, OrdersModule],
-  controllers: [AdminVideosController, ChatController, AdminAssistantController, PhotoSearchController, CategoriesController, UnitsController, ProductsController, ShopProductsController, AdminProductsController, AdminCatalogController, VideosController, MyVideosController, ShopVideosController, FeedPostsController, MyFeedPostsController, ProfilesController, MyProfileFollowsController, MyLikedVideosController, ShopCommissionController, ShopCommissionPreviewController, AdminCommissionController],
+  controllers: [BrandsController, AdminVideosController, ChatController, AdminAssistantController, PhotoSearchController, CategoriesController, UnitsController, ProductsController, ShopProductsController, AdminProductsController, AdminCatalogController, VideosController, MyVideosController, ShopVideosController, FeedPostsController, MyFeedPostsController, ProfilesController, MyProfileFollowsController, MyLikedVideosController, ShopCommissionController, ShopCommissionPreviewController, AdminCommissionController],
   providers: [
+    BrandsService,
     AdminVideosService,
     CommissionRequestsService,
     CategoriesService,

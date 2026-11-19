@@ -126,3 +126,16 @@ export type BusinessHours = Partial<Record<Weekday, { open: string; close: strin
 
 export const SOCIAL_LINKS = ['facebook', 'tiktok', 'whatsapp', 'line', 'instagram', 'website'] as const;
 export type SocialLink = (typeof SOCIAL_LINKS)[number];
+
+/** Product brands (filters: category → brand). */
+export const BRAND_RULES = { nameMax: 60 } as const;
+
+/** What makes two brand names the same brand: "  SAMSUNG " and "Samsung" → "samsung". */
+export function brandKey(name: string): string {
+  return name.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/** A brand name as stored: trimmed, single spaces, at most BRAND_RULES.nameMax. */
+export function cleanBrandName(name: string): string {
+  return name.normalize('NFKC').trim().replace(/\s+/g, ' ').slice(0, BRAND_RULES.nameMax).trim();
+}

@@ -1,24 +1,24 @@
 import { Icon } from '@/components/icon';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
-import { Stack } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
+import { Stack, useRouter } from 'expo-router';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Card, EmptyState, LoadError, Loading, Pill } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { api, SITE_URL, type FollowedShop } from '@/lib/api';
+import { api, type FollowedShop } from '@/lib/api';
 import { fill, useI18n } from '@/lib/i18n';
 
 const KEY = ['me', 'follows'];
 
-/** Shops I follow, as on the website. Opening a shop shows its page on the website for now. */
+/** Shops I follow, as on the website. Opening a shop shows its page. */
 export default function FollowingScreen() {
   const theme = useTheme();
   const queryClient = useQueryClient();
-  const { t, locale } = useI18n();
+  const router = useRouter();
+  const { t } = useI18n();
   const shops = useQuery({ queryKey: KEY, queryFn: () => api<FollowedShop[]>('/me/follows') });
 
   async function unfollow(id: string) {
@@ -39,7 +39,7 @@ export default function FollowingScreen() {
         {shops.data && !shops.data.length && <EmptyState icon="shop" title={t.acct.followedEmpty} body={t.acct.followedEmptyBody} />}
         {shops.data?.map((s) => (
           <Card key={s.id}>
-            <Pressable onPress={() => void WebBrowser.openBrowserAsync(`${SITE_URL}/${locale}/s/${s.slug}`)} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
+            <Pressable onPress={() => router.push(`/shop/${s.slug}`)} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
               <View style={[styles.logo, { backgroundColor: theme.primarySoft }]}>
                 {s.logoUrl ? <Image source={s.logoUrl} style={StyleSheet.absoluteFill} contentFit="cover" /> : <Icon name="shop" size={22} color={theme.primary} />}
               </View>

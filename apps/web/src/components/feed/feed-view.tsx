@@ -10,16 +10,19 @@ import {
   MessageCircle,
   Play,
   Plus,
+  Search,
   Share2,
   ShoppingBag,
   Store,
   Trash2,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import type { FeedEntry, FeedItem, FeedPostItem, FeedType, PostStats, VideoStats } from "@/lib/api";
+import { avatarSrc } from "@/lib/customer";
 import { loadFeed } from "@/lib/feed-actions";
 import { followedProfiles, followedShops, setFollow, setProfileFollow } from "@/lib/follow-actions";
 import { formatCount, formatPriceRange, interpolate, productPath } from "@/lib/format";
@@ -70,6 +73,7 @@ const EMPTY = new Set<string>();
 export function FeedView({
   locale,
   type,
+  q = "",
   dict,
   cartErrors,
   initialItems,
@@ -79,6 +83,8 @@ export function FeedView({
 }: {
   locale: Locale;
   type: FeedType;
+  /** The search (`?q=`); "" = the whole feed. */
+  q?: string;
   dict: Dict;
   cartErrors: Dictionary["cartErrors"];
   initialItems: FeedEntry[];
@@ -355,7 +361,7 @@ export function FeedView({
   useEffect(() => {
     if (!cursor || loading || loadFailed || active < items.length - 2) return;
     startLoading(async () => {
-      const page = await loadFeed(type, cursor);
+      const page = await loadFeed(type, cursor, q || undefined);
       if (!page) {
         setLoadFailed(true);
         return;
@@ -366,12 +372,33 @@ export function FeedView({
       });
       setCursor(page.nextCursor);
     });
-  }, [active, cursor, items.length, loading, loadFailed, type]);
+  }, [active, cursor, items.length, loading, loadFailed, type, q]);
+
+  if (items.length === 0 && q) {
+    return (
+      <div className={`${FEED_HEIGHT} flex flex-col items-center justify-center gap-3 px-6 text-center`}>
+        <FeedTabs locale={locale} type={type} q={q} dict={dict} />
+        <FeedSearch locale={locale} type={type} q={q} dict={dict} light />
+        <span className="flex size-16 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+          <Search className="size-8" />
+        </span>
+        <h1 className="text-lg font-bold">{interpolate(dict.searchEmpty, { q })}</h1>
+        <p className="max-w-xs text-sm text-muted-foreground">{dict.searchEmptyBody}</p>
+        <Link
+          href={`/${locale}/feed${type === "customer" ? "?type=customer" : ""}`}
+          className="mt-2 rounded-full border border-border px-5 py-2.5 text-sm font-semibold transition hover:bg-muted"
+        >
+          {dict.searchClear}
+        </Link>
+      </div>
+    );
+  }
 
   if (items.length === 0) {
     return (
       <div className={`${FEED_HEIGHT} flex flex-col items-center justify-center gap-3 px-6 text-center`}>
         <FeedTabs locale={locale} type={type} dict={dict} />
+        <FeedSearch locale={locale} type={type} q={q} dict={dict} light />
         <span className="flex size-16 items-center justify-center rounded-2xl bg-primary-soft text-primary">
           <Clapperboard className="size-8" />
         </span>
@@ -459,7 +486,9 @@ export function FeedView({
         )}
       </div>
 
-      <FeedTabs locale={locale} type={type} dict={dict} />
+      <FeedTabs locale={locale} type={type} q={q} dict={dict} />
+      {/* Search the videos (left, unless "back to profile" is there). */}
+      {!backHref && <FeedSearch locale={locale} type={type} q={q} dict={dict} />}
       {/* Post your own video (no product needed). */}
       <NewPostButton locale={locale} label={dict.newPost} signedIn={!!customer} />
       {backHref && (
@@ -823,10 +852,12 @@ function RailAvatar({
 }
 
 /** Customers | Shops at the top centre, over the video. Each tab has its own link, so back and sharing work. */
-function FeedTabs({ locale, type, dict }: { locale: Locale; type: FeedType; dict: Dict }) {
+function FeedTabs({ locale, type, q = "", dict }: { locale: Locale; type: FeedType; q?: string; dict: Dict }) {
+  // A search stays on when switching tabs.
+  const search = q ? `q=${encodeURIComponent(q)}` : "";
   const tabs = [
-    { type: "customer", label: dict.tabCustomers, href: `/${locale}/feed?type=customer` },
-    { type: "shop", label: dict.tabShops, href: `/${locale}/feed` },
+    { type: "customer", label: dict.tabCustomers, href: `/${locale}/feed?type=customer${search && `&${search}`}` },
+    { type: "shop", label: dict.tabShops, href: `/${locale}/feed${search && `?${search}`}` },
   ] as const;
   return (
     <nav
@@ -849,6 +880,89 @@ function FeedTabs({ locale, type, dict }: { locale: Locale; type: FeedType; dict
         );
       })}
     </nav>
+  );
+}
+
+/**
+ * Search over the feed (top left): a round button that opens a field; the search goes in the URL
+ * (`?q=`), so it can be shared and survives a refresh. With a search on, it shows as a chip to clear.
+ */
+function FeedSearch({ locale, type, q, dict, light }: { locale: Locale; type: FeedType; q: string; dict: Dict; light?: boolean }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState(q);
+  const base = `/${locale}/feed${type === "customer" ? "?type=customer" : ""}`;
+  const go = (term: string) => {
+    const clean = term.trim().slice(0, 100);
+    setOpen(false);
+    router.replace(clean ? `${base}${base.includes("?") ? "&" : "?"}q=${encodeURIComponent(clean)}` : base);
+  };
+  const place = "fixed left-3 top-[max(0.75rem,env(safe-area-inset-top))] z-30 md:left-[max(0.75rem,calc(50%-14rem))] md:top-[calc(var(--header-h,4rem)+0.75rem)]";
+  const glass = light ? "bg-muted text-foreground" : "bg-black/40 text-white backdrop-blur-sm";
+
+  if (open)
+    return (
+      <form
+        role="search"
+        onSubmit={(e) => {
+          e.preventDefault();
+          go(text);
+        }}
+        className={`${place} right-3 flex h-10 items-center gap-2 rounded-full bg-card pl-3.5 pr-1.5 text-foreground shadow-lg ring-1 ring-border md:right-[max(0.75rem,calc(50%-14rem))]`}
+      >
+        <Search className="size-4 shrink-0 text-muted-foreground" />
+        <input
+          autoFocus
+          type="search"
+          value={text}
+          maxLength={100}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
+          placeholder={dict.searchPlaceholder}
+          aria-label={dict.search}
+          className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+        />
+        <button type="button" onClick={() => setOpen(false)} aria-label={dict.searchClear} className="flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted">
+          <X className="size-4" />
+        </button>
+      </form>
+    );
+
+  if (q)
+    return (
+      <div className={`${place} flex h-10 max-w-[28vw] items-center gap-1 rounded-full pl-3 sm:max-w-[40vw] md:max-w-[12rem] pr-1 text-sm font-semibold ${glass}`}>
+        <button type="button" onClick={() => setOpen(true)} className="flex min-w-0 items-center gap-1.5" aria-label={dict.search}>
+          <Search className="size-4 shrink-0" />
+          <span className="truncate">{q}</span>
+        </button>
+        <button type="button" onClick={() => go("")} aria-label={dict.searchClear} title={dict.searchClear} className="flex size-7 shrink-0 items-center justify-center rounded-full hover:bg-white/20">
+          <X className="size-4" />
+        </button>
+      </div>
+    );
+
+  return (
+    <button type="button" onClick={() => setOpen(true)} aria-label={dict.search} title={dict.search} className={`${place} flex size-10 items-center justify-center rounded-full transition hover:brightness-110 ${glass}`}>
+      <Search className="size-5" />
+    </button>
+  );
+}
+
+/** A caption with its #hashtags as links that search the customers' videos for them. */
+function Caption({ text, locale }: { text: string; locale: Locale }) {
+  const parts = text.split(/(#[\p{L}\p{N}\p{M}_]+)/u);
+  return (
+    <p className="line-clamp-3 whitespace-pre-line text-sm text-white/90">
+      {parts.map((part, i) =>
+        i % 2 === 1 ? (
+          <Link key={i} href={`/${locale}/feed?type=customer&q=${encodeURIComponent(part)}`} className="pointer-events-auto font-semibold text-white hover:underline">
+            {part}
+          </Link>
+        ) : (
+          part
+        ),
+      )}
+    </p>
   );
 }
 
@@ -977,7 +1091,7 @@ function PostSlide({
             <Link href={`/${locale}/u/${post.author.id}`} className="pointer-events-auto block truncate text-[15px] font-bold">
               {post.author.name}
             </Link>
-            {post.caption && <p className="line-clamp-3 whitespace-pre-line text-sm text-white/90">{post.caption}</p>}
+            {post.caption && <Caption text={post.caption} locale={locale} />}
             <p className="flex items-center gap-1.5 text-xs text-white/75">
               <Eye className="size-3.5" />
               {interpolate(dict.views, { n: formatCount(stats.views, locale) })}
@@ -986,9 +1100,9 @@ function PostSlide({
 
           <div className="pointer-events-auto flex shrink-0 flex-col items-center gap-4 pb-1">
             <RailAvatar href={`/${locale}/u/${post.author.id}`} name={post.author.name} following={following || mine} dict={dict} onFollow={onFollow}>
-              {post.author.avatarUrl ? (
+              {avatarSrc(post.author) ? (
                 // eslint-disable-next-line @next/next/no-img-element -- social profile picture
-                <img src={post.author.avatarUrl} alt="" referrerPolicy="no-referrer" className="size-full object-cover" />
+                <img src={avatarSrc(post.author)!} alt="" referrerPolicy="no-referrer" className="size-full object-cover" />
               ) : (
                 <span className="text-sm font-bold">{initials}</span>
               )}

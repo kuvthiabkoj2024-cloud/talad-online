@@ -1,4 +1,5 @@
 import type { Locale, OrderStatus } from '@talad/shared';
+import { Platform } from 'react-native';
 
 import type { BulkPricing } from './bulk-price';
 
@@ -108,6 +109,8 @@ export interface ProductDetail extends Omit<ProductCard, 'imageUrl' | 'shop'> {
   options: { name: string; values: string[] }[];
   variants: ProductVariant[];
   unit: { code: string; name: LocalizedText };
+  /** Null when the shop didn't give one. */
+  brand?: { slug: string; name: string } | null;
   category: { slug: string; name: LocalizedText; parent: { slug: string; name: LocalizedText } | null };
   shop: { id: string; slug: string; name: string; logoUrl: string | null; verified: boolean; productCount: number };
 }
@@ -160,6 +163,8 @@ export interface PublicProfile {
   id: string;
   name: string;
   avatarUrl: string | null;
+  /** An uploaded photo (see avatarSrc). */
+  avatarVersion?: string | null;
   joinedAt: string;
   followers: number;
   following: number;
@@ -177,20 +182,64 @@ export interface LikedVideo {
   stats: { views: number; likes: number; comments: number; shares: number };
 }
 
-/** The customer's photo: their upload, else their Google/Apple picture. */
-export const avatarSrc = (c: Pick<CustomerProfile, 'id' | 'avatarUrl' | 'avatarVersion'>) =>
+/** A customer's photo: their upload, else their Google/Apple picture (own profile and public pages alike). */
+export const avatarSrc = (c: { id: string; avatarUrl: string | null; avatarVersion?: string | null }) =>
   c.avatarVersion ? `${API_URL}/avatars/${c.id}?v=${c.avatarVersion}` : c.avatarUrl;
 
-/** Multipart upload (photos, QR images); `file` is a picked image. */
-export async function upload<T>(path: string, field: string, file: { uri: string; mimeType?: string | null; fileName?: string | null }, extra: Record<string, string> = {}): Promise<T> {
+export type LocalFile = { uri: string; mimeType?: string | null; fileName?: string | null };
+
+/**
+ * A picked file as a FormData part. Native: React Native's `{ uri, name, type }`, which its
+ * XMLHttpRequest streams from disk. Web: the file's bytes as a Blob.
+ */
+export async function filePart(file: LocalFile, fallbackName = 'photo.jpg'): Promise<Blob> {
+  const name = file.fileName ?? fallbackName;
+  const type = file.mimeType ?? 'image/jpeg';
+  if (Platform.OS === 'web') {
+    const blob = await (await fetch(file.uri)).blob();
+    return new File([blob], name, { type: blob.type || type });
+  }
+  return { uri: file.uri, name, type } as unknown as Blob;
+}
+
+/**
+ * POSTs a multipart form with the sign-in token, reporting upload progress (0–1).
+ *
+ * Uses XMLHttpRequest, not `fetch`: since SDK 52 Expo replaces the global `fetch` with
+ * `expo/fetch`, which can't send React Native's `{ uri }` file parts (it throws "Unsupported
+ * FormDataPart implementation", so every photo/voice upload failed in the app). React Native's
+ * own XMLHttpRequest still sends them.
+ */
+export function postForm<T>(path: string, form: FormData, onProgress?: (fraction: number) => void): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${API_URL}${path}`);
+    xhr.setRequestHeader('Accept', 'application/json');
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    if (onProgress) xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
+    xhr.onerror = () => reject(new ApiError(0, { code: 'NETWORK', message: 'Network error' }));
+    xhr.ontimeout = xhr.onerror;
+    xhr.onload = () => {
+      let body: Record<string, unknown> = {};
+      try {
+        body = JSON.parse(xhr.responseText || '{}');
+      } catch {
+        // Not JSON (e.g. a proxy's 413 page).
+      }
+      if (xhr.status >= 200 && xhr.status < 300) return resolve(body as T);
+      if (xhr.status === 401 && token) onUnauthorized();
+      reject(new ApiError(xhr.status, xhr.status === 413 ? { code: 'FILE_TOO_LARGE', ...body } : body));
+    };
+    xhr.send(form);
+  });
+}
+
+/** Multipart upload of one file (photos, QR images, voice), plus any text fields. */
+export async function upload<T>(path: string, field: string, file: LocalFile, extra: Record<string, string> = {}): Promise<T> {
   const form = new FormData();
-  // React Native's FormData takes { uri, name, type } for files.
-  form.append(field, { uri: file.uri, name: file.fileName ?? 'photo.jpg', type: file.mimeType ?? 'image/jpeg' } as unknown as Blob);
+  form.append(field, await filePart(file));
   for (const [k, v] of Object.entries(extra)) form.append(k, v);
-  const res = await fetch(`${API_URL}${path}`, { method: 'POST', body: form, headers: token ? { Authorization: `Bearer ${token}` } : {} });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, body);
-  return body as T;
+  return postForm<T>(path, form);
 }
 
 export interface AddressItem {
@@ -302,7 +351,7 @@ export interface FeedPost {
   id: string;
   videoUrl: string;
   caption: string;
-  author: { id: string; name: string; avatarUrl: string | null };
+  author: { id: string; name: string; avatarUrl: string | null; avatarVersion?: string | null };
   stats: { views: number; likes: number; comments: number; shares: number };
 }
 

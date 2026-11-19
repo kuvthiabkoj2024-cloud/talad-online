@@ -141,7 +141,8 @@
     "bulkFrom": "{n} ຊິ້ນຂຶ້ນໄປ",
     "bulkExact": "{n} ຊິ້ນ",
     "bulkEach": "ຊິ້ນລະ {price}",
-    "bulkNote": "ທຸກຕົວເລືອກຂອງສິນຄ້ານີ້ ນັບລວມກັນໃນກະຕ່າ."
+    "bulkNote": "ທຸກຕົວເລືອກຂອງສິນຄ້ານີ້ ນັບລວມກັນໃນກະຕ່າ.",
+    "brand": "ແບຣນ: {brand}"
   },
   "auth": {
     "signIn": "ເຂົ້າສູ່ລະບົບ",
@@ -841,7 +842,13 @@
     "close": "ປິດ",
     "shopBadge": "ຮ້ານ",
     "follow": "ຕິດຕາມ {name}",
-    "backToProfile": "ກັບໄປໂປຣໄຟລ໌"
+    "backToProfile": "ກັບໄປໂປຣໄຟລ໌",
+    "search": "ຄົ້ນຫາວິດີໂອ",
+    "searchPlaceholder": "ຄົ້ນຫາຕາມຊື່, #ແທັກ ຫຼື ຂໍ້ຄວາມ",
+    "searchClear": "ລ້າງການຄົ້ນຫາ",
+    "searchEmpty": "ບໍ່ພົບວິດີໂອສຳລັບ \"{q}\"",
+    "searchEmptyBody": "ລອງໃຊ້ຄຳອື່ນ ຫຼື #ແທັກອື່ນ.",
+    "searchResults": "ຜົນການຄົ້ນຫາ: {q}"
   },
   "profile": {
     "videos": "ວິດີໂອ",
@@ -926,7 +933,9 @@
     "popular": "ນິຍົມ",
     "new": "ໃໝ່ລ່າສຸດ",
     "sortBy": "ຮຽງຕາມ",
-    "productCount": "{n} ສິນຄ້າ"
+    "productCount": "{n} ສິນຄ້າ",
+    "brand": "ແບຣນ",
+    "allBrands": "ທຸກແບຣນ"
   },
   "pages": {
     "updated": "ອັບເດດລ່າສຸດ {date}",

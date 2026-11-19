@@ -3,8 +3,9 @@ import { normalizePhone, PROVINCE_CODES, provinceName } from '@talad/shared';
 import * as Location from 'expo-location';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Linking, ScrollView, StyleSheet, View } from 'react-native';
 
+import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { Field, Input, Select, Toggle } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card } from '@/components/ui';
@@ -67,7 +68,7 @@ export default function AddressFormScreen() {
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.flex, { backgroundColor: theme.background }]}>
+    <KeyboardAvoid style={[styles.flex, { backgroundColor: theme.background }]}>
       <Stack.Screen options={{ title: existing ? t.acct.editAddress : t.acct.addAddress }} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Card style={styles.card}>
@@ -115,7 +116,7 @@ export default function AddressFormScreen() {
         </Card>
         <Button label={t.acct.save} loading={busy} onPress={() => void save()} />
       </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAvoid>
   );
 }
 

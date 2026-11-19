@@ -1,15 +1,16 @@
+import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { Icon } from '@/components/icon';
 import { formatPhone } from '@talad/shared';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Stack } from 'expo-router';
 import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Field, Input } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card } from '@/components/ui';
-import { BrandGreen, Spacing } from '@/constants/theme';
+import { BrandGreen, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { api, ApiError, avatarSrc, upload, type CustomerProfile } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -74,7 +75,7 @@ export default function ProfileScreen() {
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.flex, { backgroundColor: theme.background }]}>
+    <KeyboardAvoid style={[styles.flex, { backgroundColor: theme.background }]}>
       <Stack.Screen options={{ title: t.acct.profile }} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Card style={styles.photoCard}>
@@ -88,8 +89,31 @@ export default function ProfileScreen() {
             <ThemedText type="caption" themeColor="textSecondary">
               {fill(t.acct.memberSince, { date: date(customer.createdAt, locale) })}
             </ThemedText>
-            <Button label={t.acct.changePhoto} variant="outline" icon="image" loading={busy === 'photo'} onPress={() => void changePhoto()} />
-            {!!customer.avatarVersion && <Button label={t.acct.removePhoto} variant="outline" onPress={() => void removePhoto()} />}
+            {/* Small, side by side: change, and remove when a photo was uploaded. */}
+            <View style={styles.photoButtons}>
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy === 'photo'}
+                onPress={() => void changePhoto()}
+                style={({ pressed }) => [styles.smallButton, { borderColor: theme.primary }, (pressed || busy === 'photo') && styles.pressed]}>
+                {busy === 'photo' ? <ActivityIndicator size="small" color={theme.primary} /> : <Icon name="image" size={15} color={theme.primary} />}
+                <ThemedText type="caption" themeColor="primary" style={styles.bold}>
+                  {t.acct.changePhoto}
+                </ThemedText>
+              </Pressable>
+              {!!customer.avatarVersion && (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={busy === 'photo'}
+                  onPress={() => void removePhoto()}
+                  style={({ pressed }) => [styles.smallButton, { borderColor: theme.sale }, (pressed || busy === 'photo') && styles.pressed]}>
+                  <Icon name="trash" size={15} color={theme.sale} />
+                  <ThemedText type="caption" themeColor="sale" style={styles.bold}>
+                    {t.acct.removePhoto}
+                  </ThemedText>
+                </Pressable>
+              )}
+            </View>
           </View>
         </Card>
 
@@ -140,7 +164,7 @@ export default function ProfileScreen() {
           ))}
         </Card>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAvoid>
   );
 }
 
@@ -152,6 +176,10 @@ const styles = StyleSheet.create({
   initials: { color: '#ffffff', fontSize: 28, lineHeight: 36, fontWeight: '800' },
   camera: { position: 'absolute', right: -2, bottom: -2, width: 30, height: 30, borderRadius: 15, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   photoActions: { flex: 1, gap: Spacing.two },
+  photoButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  smallButton: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1.5, borderRadius: Radius.full, paddingHorizontal: Spacing.two + 2, paddingVertical: 6 },
+  bold: { fontWeight: '700' },
+  pressed: { opacity: 0.7 },
   card: { padding: Spacing.three, gap: Spacing.three },
   methodsTitle: { padding: Spacing.three, paddingBottom: Spacing.two },
   method: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two + 2, borderTopWidth: StyleSheet.hairlineWidth },

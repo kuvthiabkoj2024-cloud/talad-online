@@ -2,14 +2,15 @@ import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-q
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { Icon } from '@/components/icon';
 import { ThemedText } from '@/components/themed-text';
 import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, avatarSrc } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { count, date } from '@/lib/format';
 import { fill, useI18n } from '@/lib/i18n';
@@ -87,7 +88,7 @@ export function CommentsSheet({
 
   return (
     <Modal visible={!!target} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.fill}>
+      <KeyboardAvoid style={styles.fill}>
         <Pressable style={styles.backdrop} onPress={onClose} />
         <View style={[styles.sheet, { backgroundColor: theme.card, paddingBottom: insets.bottom + Spacing.two }]}>
           <View style={styles.head}>
@@ -169,7 +170,7 @@ export function CommentsSheet({
             </Pressable>
           )}
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAvoid>
     </Modal>
   );
 }
@@ -208,8 +209,8 @@ function CommentRow({
   return (
     <View style={[styles.comment, reply && styles.reply]}>
       <View style={[styles.avatar, { backgroundColor: theme.primarySoft }]}>
-        {c.author.avatarUrl ? (
-          <Image source={c.author.avatarUrl} style={StyleSheet.absoluteFill} contentFit="cover" />
+        {avatarSrc(c.author) ? (
+          <Image source={avatarSrc(c.author)} style={StyleSheet.absoluteFill} contentFit="cover" />
         ) : (
           <ThemedText type="smallBold" themeColor="primary">
             {c.author.name.slice(0, 1).toUpperCase()}

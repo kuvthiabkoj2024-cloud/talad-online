@@ -6,10 +6,11 @@ import * as Location from 'expo-location';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, type ScrollViewInstance, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Platform, Pressable, ScrollView, type ScrollViewInstance, StyleSheet, TextInput, View } from 'react-native';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { Icon, type IconName } from '@/components/icon';
 import { ThemedText } from '@/components/themed-text';
 import { LoadError, Loading } from '@/components/ui';
@@ -206,7 +207,7 @@ export function Conversation({ side }: { side: ChatSide }) {
   // The other side: the shop (for the customer) or the customer (for the shop).
   const other = side === 'shop' ? thread.data?.customer?.name : thread.data?.shop?.name;
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0} style={[styles.flex, { backgroundColor: theme.background }]}>
+    <KeyboardAvoid style={[styles.flex, { backgroundColor: theme.background }]}>
       <Stack.Screen options={{ title: other ?? t.msg.title }} />
       {thread.isPending && <Loading />}
       {thread.isError && (
@@ -307,7 +308,7 @@ export function Conversation({ side }: { side: ChatSide }) {
           </>
         )}
       </View>
-    </KeyboardAvoidingView>
+    </KeyboardAvoid>
   );
 }
 

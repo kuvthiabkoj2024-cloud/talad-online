@@ -65,7 +65,7 @@ export default function WatchScreen() {
             <VideoRail item={item} active={!paused} onDeleted={() => router.back()} />
           </View>
           <View style={[styles.info, { paddingBottom: insets.bottom + Spacing.three }]}>
-            <ThemedText type="smallBold" style={styles.white} numberOfLines={1}>
+            <ThemedText type="smallBold" style={styles.white} numberOfLines={1} onPress={() => router.push(isPost ? `/u/${(item as FeedPost).author.id}` : `/shop/${(item as FeedProduct).shop.slug}`)}>
               {isPost ? (item as FeedPost).author.name : (item as FeedProduct).shop.name}
             </ThemedText>
             <ThemedText type="small" style={styles.white} numberOfLines={3}>

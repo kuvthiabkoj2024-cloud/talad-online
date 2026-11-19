@@ -167,6 +167,8 @@ export interface ShopProductDetail {
   description: string | null
   categoryId: string
   unitId: string
+  /** The brand's name, or null. */
+  brand: string | null
   sku: string
   price: number
   compareAtPrice: number | null

@@ -10,17 +10,22 @@
         "EXPO_PUBLIC_API_URL": "https://api.mcmart.app/api/v1",
         "EXPO_PUBLIC_SITE_URL": "https://mcmart.app",
         "EXPO_PUBLIC_SHOP_URL": "https://shop.mcmart.app",
-        "EXPO_PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAAF93lFZhWE9UFlKc"
+        "EXPO_PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAAF93lFZhWE9UFlKc",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "118238164275-3birgsge94n24ggf3rs9jdmd68db6h1b.apps.googleusercontent.com"
       }
     },
     "preview": {
       "extends": "base",
       "distribution": "internal",
-      "android": { "buildType": "apk" }
+      "android": {
+        "buildType": "apk"
+      }
     },
     "production": {
       "extends": "base",
-      "android": { "buildType": "app-bundle" }
+      "android": {
+        "buildType": "app-bundle"
+      }
     }
   },
   "submit": {

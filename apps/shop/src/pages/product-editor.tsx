@@ -1,4 +1,4 @@
-import { MEDIA_LIMITS, PRICE_TIER_RULES, PRODUCT_RULES, formatMoney, type ProductSaveIntent, DEPOSIT_RULES, DEPOSIT_TYPES, GUARANTEE_RULES, GUARANTEE_UNITS, customerGuarantee, type DepositType, type GuaranteeUnit } from '@talad/shared'
+import { BRAND_RULES, MEDIA_LIMITS, PRICE_TIER_RULES, PRODUCT_RULES, formatMoney, type ProductSaveIntent, DEPOSIT_RULES, DEPOSIT_TYPES, GUARANTEE_RULES, GUARANTEE_UNITS, customerGuarantee, type DepositType, type GuaranteeUnit } from '@talad/shared'
 import { Button } from '@talad/ui/components/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@talad/ui/components/card'
 import { Input } from '@talad/ui/components/input'
@@ -10,7 +10,7 @@ import { Textarea } from '@talad/ui/components/textarea'
 import { cn } from '@talad/ui/lib/utils'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, ImagePlus, Info, LoaderCircle, Plus, Shuffle, Trash2, TriangleAlert, Video, X } from 'lucide-react'
-import { useId, useRef, useState } from 'react'
+import { useDeferredValue, useId, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { Link } from 'react-router'
 import { toast } from 'sonner'
@@ -48,6 +48,7 @@ interface FormState {
   description: string
   categoryId: string
   unitId: string
+  brand: string
   sku: string
   price: string
   compareAtPrice: string
@@ -88,6 +89,7 @@ function fromProduct(p?: ShopProductDetail): FormState {
     description: p?.description ?? '',
     categoryId: p?.categoryId ?? '',
     unitId: p?.unitId ?? '',
+    brand: p?.brand ?? '',
     sku: p?.sku ?? '',
     price: p ? String(p.price) : '',
     compareAtPrice: p?.compareAtPrice != null ? String(p.compareAtPrice) : '',
@@ -321,6 +323,7 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
         description: form.description.trim() || undefined,
         categoryId: form.categoryId,
         unitId: form.unitId,
+        brand: form.brand.trim() || null,
         sku: form.sku.trim(),
         price: num(form.price),
         compareAtPrice: form.compareAtPrice.trim() ? num(form.compareAtPrice) : null,
@@ -617,6 +620,9 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
                   />
                 </Field>
               </div>
+              <Field label={t.editor.brand} htmlFor="brand" hint={t.editor.brandHint}>
+                <BrandInput id="brand" value={form.brand} placeholder={t.editor.brandPlaceholder} onChange={(v) => set('brand', v)} />
+              </Field>
             </CardContent>
           </Card>
 
@@ -919,6 +925,31 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
  * What customers will pay, e.g. "Buy 1–9: 120,000 ₭ each" then "Buy 10+: 100,000 ₭ each, 17% off".
  * Shown once the rows make sense together.
  */
+/**
+ * Free text with the platform's brands as suggestions (GET /brands?q=), so shops pick "Samsung"
+ * rather than typing a new spelling; the API reuses a brand whatever the case or spacing.
+ */
+function BrandInput({ id, value, placeholder, onChange }: { id: string; value: string; placeholder: string; onChange: (v: string) => void }) {
+  const term = useDeferredValue(value.trim())
+  const suggestions = useQuery({
+    queryKey: ['brands', 'suggest', term],
+    queryFn: () => api<{ slug: string; name: string }[]>(`/brands?${new URLSearchParams({ limit: '12', ...(term && { q: term }) })}`),
+    staleTime: 60_000,
+    placeholderData: (previous) => previous,
+  })
+  const listId = `${id}-options`
+  return (
+    <>
+      <Input id={id} list={listId} value={value} maxLength={BRAND_RULES.nameMax} placeholder={placeholder} autoComplete="off" onChange={(e) => onChange(e.target.value)} />
+      <datalist id={listId}>
+        {suggestions.data?.map((b) => (
+          <option key={b.slug} value={b.name} />
+        ))}
+      </datalist>
+    </>
+  )
+}
+
 function BulkPreview({ price, tiers, t, locale }: { price: string; tiers: TierRow[]; t: Dict; locale: ReturnType<typeof useI18n>['locale'] }) {
   const base = num(price)
   const rows = tiers.map((r) => ({ from: num(r.minQuantity), price: num(r.price) }))

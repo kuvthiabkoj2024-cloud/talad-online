@@ -1,10 +1,11 @@
+import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { Icon } from '@/components/icon';
 import { Image } from 'expo-image';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, type ScrollViewInstance, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, type ScrollViewInstance, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ProductCard } from '@/components/product-card';
@@ -12,7 +13,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Pill } from '@/components/ui';
 import { BrandGreen, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { api, API_URL, getApiToken, type ChatProduct } from '@/lib/api';
+import { api, ApiError, filePart, postForm, type ChatProduct } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { shrinkPhoto } from '@/lib/shrink-photo';
@@ -113,22 +114,16 @@ export default function ChatScreen() {
       form.append('history', JSON.stringify(history));
       form.append('locale', locale);
       if (sent) {
-        form.append('photo', { uri: sent.uri, name: sent.fileName ?? 'photo.jpg', type: sent.mimeType ?? 'image/jpeg' } as unknown as Blob);
+        form.append('photo', await filePart(sent));
         // The preview is only kept for the saved conversation; the API takes up to 80,000 characters.
         if (sent.thumb.length < 78_000) form.append('thumb', sent.thumb);
       }
-      const token = getApiToken();
-      const res = await fetch(`${API_URL}/chat`, { method: 'POST', body: form, headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      const data = await res.json().catch(() => ({}));
-      const photoError = (t.chat.photoErrors as Record<string, string>)[data?.code];
-      setMessages((prev) => [
-        ...prev,
-        res.ok
-          ? { id: uid(), role: 'assistant', text: data.reply, products: data.products, suggestions: data.suggestions }
-          : { id: uid(), role: 'assistant', text: res.status === 429 ? t.chat.throttled : (photoError ?? t.chat.error), error: true },
-      ]);
-    } catch {
-      setMessages((prev) => [...prev, { id: uid(), role: 'assistant', text: t.chat.error, error: true }]);
+      const data = await postForm<{ reply: string; products?: ChatProduct[]; suggestions?: string[] }>('/chat', form);
+      setMessages((prev) => [...prev, { id: uid(), role: 'assistant', text: data.reply, products: data.products, suggestions: data.suggestions }]);
+    } catch (e) {
+      const photoError = e instanceof ApiError && e.code ? (t.chat.photoErrors as Record<string, string>)[e.code] : undefined;
+      const text = e instanceof ApiError && e.status === 429 ? t.chat.throttled : (photoError ?? t.chat.error);
+      setMessages((prev) => [...prev, { id: uid(), role: 'assistant', text, error: true }]);
     } finally {
       setPending(false);
     }
@@ -144,7 +139,7 @@ export default function ChatScreen() {
   const ready = (!!text.trim() || !!photo) && !pending;
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.flex, { backgroundColor: theme.background }]}>
+    <KeyboardAvoid style={[styles.flex, { backgroundColor: theme.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.two, backgroundColor: theme.card, borderBottomColor: theme.border }]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => (router.canGoBack() ? router.back() : router.navigate('/'))} hitSlop={8}>
           <Icon name="back" size={24} color={theme.text} />
@@ -258,7 +253,7 @@ export default function ChatScreen() {
           {t.chat.disclaimer}
         </ThemedText>
       </View>
-    </KeyboardAvoidingView>
+    </KeyboardAvoid>
   );
 }
 

@@ -1,11 +1,12 @@
 import { Icon } from '@/components/icon';
 import { useQuery } from '@tanstack/react-query';
 import { formatPhone } from '@talad/shared';
+import Constants from 'expo-constants';
 import { Image } from 'expo-image';
 import { useRouter, type Href } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import type { ReactNode } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -14,7 +15,8 @@ import { BrandGreen, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { api, avatarSrc, SITE_URL } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { useI18n } from '@/lib/i18n';
+import { useShopAttention } from '@/lib/seller';
+import { fill, useI18n } from '@/lib/i18n';
 import { THEME_MODES, useThemeMode } from '@/lib/theme-mode';
 
 /** Profile: who's signed in and the website's account menu, then language and signing out. */
@@ -25,6 +27,8 @@ export default function AccountScreen() {
   const { t, locale, setLocale } = useI18n();
   const { mode, setMode } = useThemeMode();
   const { customer, signOut } = useAuth();
+  // New orders, video updates and unread customer chats in the shop (approved shops only).
+  const shopAttention = useShopAttention(customer?.shop?.status === 'APPROVED');
   const unread = useQuery({ queryKey: ['me', 'messages-unread'], queryFn: () => api<{ count: number }>('/me/conversations/unread-count'), enabled: !!customer, refetchInterval: 30_000 });
   const orderCounts = useQuery({
     queryKey: ['me', 'orders', 'all'],
@@ -33,11 +37,13 @@ export default function AccountScreen() {
   });
   const photo = customer && avatarSrc(customer);
   // The website's order shortcuts: each opens order history on that tab.
-  const shortcuts: { status: 'to-pay' | 'to-ship' | 'to-receive' | 'completed'; icon: IconName }[] = [
-    { status: 'to-pay', icon: 'wallet' },
-    { status: 'to-ship', icon: 'package' },
-    { status: 'to-receive', icon: 'truck' },
-    { status: 'completed', icon: 'done' },
+  // Each status its own colour: amber waits on you, blue is being prepared, purple is on the way,
+  // green is done. Translucent tints read on light and dark themes alike.
+  const shortcuts: { status: 'to-pay' | 'to-ship' | 'to-receive' | 'completed'; icon: IconName; color: string; tint: string }[] = [
+    { status: 'to-pay', icon: 'wallet', color: '#d97706', tint: 'rgba(245,158,11,0.16)' },
+    { status: 'to-ship', icon: 'package', color: '#2563eb', tint: 'rgba(37,99,235,0.14)' },
+    { status: 'to-receive', icon: 'truck', color: '#7c3aed', tint: 'rgba(124,58,237,0.14)' },
+    { status: 'completed', icon: 'done', color: '#2e7d32', tint: 'rgba(46,125,50,0.14)' },
   ];
   const initials = customer?.name
     .split(/\s+/)
@@ -122,17 +128,17 @@ export default function AccountScreen() {
               </Pressable>
             </View>
             <View style={styles.shortcuts}>
-              {shortcuts.map(({ status, icon }) => {
+              {shortcuts.map(({ status, icon, color, tint }) => {
                 const n = orderCounts.data?.counts[status] ?? 0;
                 return (
                   <Pressable key={status} onPress={() => router.push({ pathname: '/orders', params: { status } })} style={({ pressed }) => [styles.shortcut, pressed && styles.pressed]}>
                     <View>
-                      <View style={[styles.shortcutIcon, { backgroundColor: theme.primarySoft }]}>
-                        <Icon name={icon} size={22} color={theme.primary} />
+                      <View style={[styles.shortcutIcon, { backgroundColor: tint }]}>
+                        <Icon name={icon} size={22} color={color} />
                       </View>
                       {n > 0 && (
                         <View style={[styles.dotBadge, { backgroundColor: theme.sale, borderColor: theme.card }]}>
-                          <ThemedText style={styles.badgeText}>{n > 99 ? '99+' : n}</ThemedText>
+                          <ThemedText style={styles.dotText}>{n > 99 ? '99+' : n}</ThemedText>
                         </View>
                       )}
                     </View>
@@ -158,6 +164,7 @@ export default function AccountScreen() {
               sub={customer.shop ? customer.shop.name : t.acct.openShopDescription}
               accent
               divider
+              badge={shopAttention}
               onPress={() => router.push(customer.shop ? '/seller' : '/seller/register')}
             />
           </Card>
@@ -204,12 +211,19 @@ export default function AccountScreen() {
               </View>
             }
           />
+          <Row icon="shield" label={t.account.about} sub={t.account.aboutSub} divider onPress={() => router.push('/about')} />
           <Row icon="globe" label={t.account.website} onPress={() => void WebBrowser.openBrowserAsync(`${SITE_URL}/${locale}`)} divider />
         </Card>
         {customer && (
           <Card>
             <Row icon="log-out" label={t.account.signOut} danger onPress={confirmSignOut} />
           </Card>
+        )}
+        {/* Which build this is (for support): version and the platform's build number. */}
+        {!!appVersion && (
+          <ThemedText type="caption" themeColor="textSecondary" style={styles.version}>
+            MC Mart · {fill(t.about.version, { v: appVersion })}
+          </ThemedText>
         )}
       </View>
     </ScrollView>
@@ -266,7 +280,12 @@ function Row({
   );
 }
 
+/** "1.0.0 (3)": the app version and this platform's build number (none on the web). */
+const build = Platform.OS === 'android' ? Constants.expoConfig?.android?.versionCode : Platform.OS === 'ios' ? Constants.expoConfig?.ios?.buildNumber : undefined;
+const appVersion = Constants.expoConfig?.version ? `${Constants.expoConfig.version}${build ? ` (${build})` : ''}` : null;
+
 const styles = StyleSheet.create({
+  version: { textAlign: 'center', marginTop: Spacing.one },
   flex: { flex: 1 },
   content: { paddingBottom: Spacing.four },
   hero: { backgroundColor: BrandGreen, paddingHorizontal: Spacing.three, paddingBottom: Spacing.five },
@@ -284,7 +303,20 @@ const styles = StyleSheet.create({
   shortcut: { flex: 1, alignItems: 'center', gap: Spacing.one + 2, paddingHorizontal: 2 },
   shortcutIcon: { width: 46, height: 46, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   shortcutLabel: { textAlign: 'center' },
-  dotBadge: { position: 'absolute', top: -6, right: -8, minWidth: 20, borderRadius: 10, borderWidth: 2, paddingHorizontal: 4, alignItems: 'center' },
+  // A circle (same width and height) for 1–2 digits; "99+" stretches it into a pill.
+  dotBadge: {
+    position: 'absolute',
+    top: -7,
+    right: -9,
+    height: 22,
+    minWidth: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    paddingHorizontal: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dotText: { color: '#ffffff', fontSize: 10, lineHeight: 13, fontWeight: '700', textAlign: 'center', includeFontPadding: false },
   pressed: { opacity: 0.7 },
   langs: { flexDirection: 'row', gap: Spacing.one },
   lang: { borderWidth: 1, borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: 2 },

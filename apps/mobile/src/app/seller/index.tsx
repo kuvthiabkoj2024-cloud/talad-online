@@ -31,6 +31,8 @@ const TOOLS: { key: ToolKey; icon: IconName; href?: Href }[] = [
   { key: 'chatbot', icon: 'bot', href: '/seller/chatbot' },
   { key: 'profile', icon: 'shop', href: '/seller/profile' },
   { key: 'security', icon: 'shield', href: '/seller/security' },
+  // Terms, privacy and contact (the website's footer): the app has no footer.
+  { key: 'about', icon: 'alert', href: '/about' },
 ];
 
 /**

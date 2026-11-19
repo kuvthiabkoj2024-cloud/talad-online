@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { avatarPrefix } from '../../auth/customer-auth.service.js';
+import { avatarFields } from './feed-posts.service.js';
 import { MediaService } from '../../media/media.service.js';
 import { NotificationsService } from '../../notifications/notifications.service.js';
 import { PrismaService } from '../../../prisma/prisma.service.js';
@@ -21,7 +21,7 @@ export interface VideoCommentView {
   createdAt: Date;
   replyCount: number;
   /** `isShop`: the shop answering from Seller Center (its name and logo). */
-  author: { id: string; name: string; avatarUrl: string | null; isShop: boolean };
+  author: { id: string; name: string; avatarUrl: string | null; avatarVersion: string | null; isShop: boolean };
 }
 
 /** A shop's video with its numbers, for Seller Center. */
@@ -53,7 +53,7 @@ export interface ShopVideoList {
 }
 
 export interface VideoLikePage {
-  items: { customer: { id: string; name: string; avatarUrl: string | null }; createdAt: Date }[];
+  items: { customer: { id: string; name: string; avatarUrl: string | null; avatarVersion: string | null }; createdAt: Date }[];
   nextCursor: string | null;
 }
 
@@ -378,7 +378,7 @@ export class VideoEngagementService {
     });
     const items = rows.slice(0, limit);
     return {
-      items: items.map((r) => ({ createdAt: r.createdAt, customer: { ...r.customer, avatarUrl: this.publicAvatar(r.customer) } })),
+      items: items.map((r) => ({ createdAt: r.createdAt, customer: { ...r.customer, ...avatarFields(r.customer) } })),
       nextCursor: rows.length > limit ? items[items.length - 1].customer.id : null,
     };
   }
@@ -459,11 +459,6 @@ export class VideoEngagementService {
     return p;
   }
 
-  /** Uploaded avatars are private objects; only provider photos (e.g. Google) are public URLs. */
-  private publicAvatar(c: { id: string; avatarUrl: string | null }): string | null {
-    return c.avatarUrl && !c.avatarUrl.startsWith(avatarPrefix(c.id)) ? c.avatarUrl : null;
-  }
-
   /** The video must be public; for a post, also says whose it is (they get notified). */
   private async assertTarget(target: CommentTarget): Promise<{ customerId: string } | null> {
     if ('productId' in target) {
@@ -490,8 +485,8 @@ export class VideoEngagementService {
       createdAt: r.createdAt,
       replyCount: r.replyCount,
       author: r.byShop && shop
-        ? { id: shop.id, name: shop.name, avatarUrl: shop.logoUrl ? this.media.publicUrl(shop.logoUrl) : null, isShop: true }
-        : { id: c.id, name: c.name, avatarUrl: this.publicAvatar(c), isShop: false },
+        ? { id: shop.id, name: shop.name, avatarUrl: shop.logoUrl ? this.media.publicUrl(shop.logoUrl) : null, avatarVersion: null, isShop: true }
+        : { id: c.id, name: c.name, ...avatarFields(c), isShop: false },
     };
   }
 }

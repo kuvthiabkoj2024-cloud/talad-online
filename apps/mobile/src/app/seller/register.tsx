@@ -12,8 +12,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { Redirect, Stack, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 
+import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { Field, Input } from '@/components/form';
 import { Icon } from '@/components/icon';
 import { pickPhoto, type PickedFile } from '@/components/seller/photo';
@@ -222,7 +223,7 @@ function ApplicationForm({ customer, application }: { customer: CustomerProfile;
             : null;
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
+    <KeyboardAvoid style={styles.flex}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={[styles.hero, { backgroundColor: BrandGreen }]}>
           <ThemedText type="subtitle" style={styles.onBrand}>
@@ -388,7 +389,7 @@ function ApplicationForm({ customer, application }: { customer: CustomerProfile;
         <Button label={application ? r.resubmit : r.submit} loading={submitting} onPress={() => void submit()} />
       </ScrollView>
       <PrivateImage path={viewing} onClose={() => setViewing(null)} />
-    </KeyboardAvoidingView>
+    </KeyboardAvoid>
   );
 }
 

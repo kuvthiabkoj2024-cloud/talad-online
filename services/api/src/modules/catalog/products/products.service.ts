@@ -45,7 +45,7 @@ export interface FeedPostItem {
   videoUrl: string;
   caption: string;
   createdAt: Date;
-  author: { id: string; name: string; avatarUrl: string | null };
+  author: { id: string; name: string; avatarUrl: string | null; avatarVersion: string | null };
   stats: { views: number; likes: number; comments: number; shares: number };
 }
 
@@ -88,6 +88,8 @@ export interface ProductDetail extends Omit<ProductCard, 'imageUrl'> {
   options: ProductOption[];
   variants: ProductVariantOption[];
   unit: { code: string; name: unknown };
+  /** Null when the shop didn't give one. */
+  brand: { slug: string; name: string } | null;
   category: {
     slug: string;
     name: unknown;
@@ -150,13 +152,14 @@ const SHOP_SORT_SQL: Record<ShopProductSort, Prisma.Sql> = {
   price_desc: Prisma.sql`${MIN_PRICE} DESC, p.id DESC`,
 };
 
-/** Joins and text the storefront search looks in: product, shop and category names (both languages). */
+/** Joins and text the storefront search looks in: product, brand, shop and category names (both languages). */
 const SEARCH_JOINS = Prisma.sql`
   JOIN "Shop" s ON s.id = p."shopId"
   JOIN "Category" c ON c.id = p."categoryId"
-  LEFT JOIN "Category" pc ON pc.id = c."parentId"`;
+  LEFT JOIN "Category" pc ON pc.id = c."parentId"
+  LEFT JOIN "Brand" b ON b.id = p."brandId"`;
 /** Everything a search looks in, with Lao's two spellings of ໝ/ໜ made one (see normalizeLao). */
-const SEARCHABLE = Prisma.sql`replace(replace(concat_ws(' ', p.name, p.description, p.sku, s.name, c.name->>'lo', c.name->>'en', pc.name->>'lo', pc.name->>'en'), 'ຫມ', 'ໝ'), 'ຫນ', 'ໜ')`;
+const SEARCHABLE = Prisma.sql`replace(replace(concat_ws(' ', p.name, p.description, p.sku, b.name, s.name, c.name->>'lo', c.name->>'en', pc.name->>'lo', pc.name->>'en'), 'ຫມ', 'ໝ'), 'ຫນ', 'ໜ')`;
 /** The product name, spelt the same way. */
 const NAME = Prisma.sql`replace(replace(p.name, 'ຫມ', 'ໝ'), 'ຫນ', 'ໜ')`;
 /** ILIKE pattern with wildcards escaped; always passed as a bound parameter. */
@@ -208,6 +211,7 @@ export class ProductsService {
         ...VISIBLE,
         ...(query.category && { category: { OR: [{ slug: query.category }, { parent: { slug: query.category } }] } }),
         ...(query.shop && { shop: { ...VISIBLE.shop, slug: query.shop } }),
+        ...(query.brand && { brand: { slug: query.brand } }),
         ...(query.exclude && { id: { not: query.exclude } }),
       },
       orderBy,
@@ -224,6 +228,26 @@ export class ProductsService {
    */
   async feed(query: FeedQuery): Promise<FeedPage> {
     const at = await this.feedCursor(query.cursor);
+    const words = feedSearchWords(query.q);
+    const productMatch: Prisma.ProductWhereInput = words.length
+      ? {
+          AND: words.map((variants) => ({
+            OR: variants.flatMap((v) => [
+              { name: { contains: v, mode: 'insensitive' as const } },
+              { description: { contains: v, mode: 'insensitive' as const } },
+              { brand: { name: { contains: v, mode: 'insensitive' as const } } },
+              { shop: { name: { contains: v, mode: 'insensitive' as const } } },
+            ]),
+          })),
+        }
+      : {};
+    const postMatch: Prisma.FeedPostWhereInput = words.length
+      ? {
+          AND: words.map((variants) => ({
+            OR: variants.flatMap((v) => [{ caption: { contains: v, mode: 'insensitive' as const } }, { customer: { name: { contains: v, mode: 'insensitive' as const } } }]),
+          })),
+        }
+      : {};
     // Strictly after the cursor in (time desc, id desc) order.
     const before = (field: 'publishedAt' | 'createdAt') =>
       at ? { OR: [{ [field]: { lt: at.time } }, { [field]: at.time, id: { lt: at.id } }] } : {};
@@ -231,7 +255,7 @@ export class ProductsService {
       query.type === 'customer'
         ? []
         : this.prisma.product.findMany({
-            where: { ...VISIBLE, videoKey: { not: null }, videoHidden: false, ...before('publishedAt') },
+            where: { ...VISIBLE, videoKey: { not: null }, videoHidden: false, ...before('publishedAt'), ...productMatch },
             orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
             take: query.limit + 1,
             select: feedSelect,
@@ -239,7 +263,7 @@ export class ProductsService {
       query.type === 'shop'
         ? []
         : this.prisma.feedPost.findMany({
-            where: { isHidden: false, customer: { isActive: true }, ...before('createdAt') },
+            where: { isHidden: false, customer: { isActive: true }, ...before('createdAt'), ...postMatch },
             orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
             take: query.limit + 1,
             include: feedPostInclude,
@@ -327,7 +351,7 @@ export class ProductsService {
   }
 
   /**
-   * Storefront search (§5): every word must match the name, description, SKU, shop or category.
+   * Storefront search (§5): every word must match the name, description, SKU, brand, shop or category.
    * A word also matches its translations (Market Chat's glossary and the words admins taught),
    * so "ກາເຟ" finds "Bolaven Arabica coffee" and "coffee" finds Lao-named products.
    */
@@ -425,6 +449,7 @@ export class ProductsService {
         images: { orderBy: { sortOrder: 'asc' } },
         variants: { orderBy: { sku: 'asc' } },
         unit: { select: { code: true, name: true } },
+        brand: { select: { slug: true, name: true } },
         category: {
           select: {
             slug: true,
@@ -501,6 +526,7 @@ export class ProductsService {
       videoUrl: product.videoKey && !product.videoHidden ? this.media.publicUrl(product.videoKey) : null,
       variants,
       unit: product.unit,
+      brand: product.brand,
       category: product.category,
       shop: {
         id: shop.id,
@@ -513,6 +539,21 @@ export class ProductsService {
       },
     };
   }
+}
+
+/**
+ * The feed search's words, each with the spellings to try: a leading "#" is dropped (a hashtag
+ * matches its word anywhere in a caption) and Lao's two spellings of ໝ/ໜ both match.
+ */
+export function feedSearchWords(q: string | undefined): string[][] {
+  if (!q) return [];
+  return q
+    .trim()
+    .split(/\s+/)
+    .map((w) => w.replace(/^#+/, ''))
+    .filter(Boolean)
+    .slice(0, 6)
+    .map((w) => [...new Set([w, normalizeLao(w), w.replace(/ໝ/g, 'ຫມ').replace(/ໜ/g, 'ຫນ')])]);
 }
 
 /**

@@ -14,6 +14,11 @@ export class ListProductsQuery {
   @IsString()
   category?: string;
 
+  /** Brand slug (GET /brands): with `category`, the category page's brand filter. */
+  @IsOptional()
+  @IsString()
+  brand?: string;
+
   /** Shop slug. */
   @IsOptional()
   @IsString()

@@ -502,6 +502,9 @@ const lo = {
     "chooseCategory": "ເລືອກໝວດໝູ່",
     "unit": "ຫົວໜ່ວຍ",
     "chooseUnit": "ເລືອກຫົວໜ່ວຍ",
+    "brand": "ແບຣນ / ຍີ່ຫໍ້",
+    "brandPlaceholder": "ເຊັ່ນ Samsung, Apple",
+    "brandHint": "ບໍ່ບັງຄັບ · ລູກຄ້າກັ່ນຕອງສິນຄ້າຕາມໝວດໝູ່ ແລ້ວຕາມແບຣນໄດ້",
     "pricing": "ລາຄາ ແລະ ສະຕັອກ",
     "bulk": {
       "title": "ລາຄາຂາຍສົ່ງ",
@@ -863,6 +866,7 @@ const lo = {
     chatbot: 'ແຊັດບອດ',
     profile: 'ໂປຣໄຟລ໌ຮ້ານ',
     security: 'ຄວາມປອດໄພ',
+    about: 'ກ່ຽວກັບ MC Mart',
   },
   shopStatus: { PENDING: 'ລໍຖ້າການອະນຸມັດ', APPROVED: 'ຮ້ານຄ້າອອນລາຍ', REJECTED: 'ຄຳຮ້ອງຖືກປະຕິເສດ', SUSPENDED: 'ຖືກລະງັບ' },
   home: {
@@ -1622,6 +1626,9 @@ const en: SellerStrings = {
     "chooseCategory": "Choose a category",
     "unit": "Unit",
     "chooseUnit": "Choose a unit",
+    "brand": "Brand",
+    "brandPlaceholder": "e.g. Samsung, Apple",
+    "brandHint": "Optional · customers can filter a category by brand",
     "guarantee": {
       "title": "Guarantee",
       "hint": "Turn this on if the product comes with a guarantee.",
@@ -1983,6 +1990,7 @@ const en: SellerStrings = {
     chatbot: 'Chat Bot',
     profile: 'Shop profile',
     security: 'Security',
+    about: 'About MC Mart',
   },
   shopStatus: { PENDING: 'Waiting for approval', APPROVED: 'Open for business', REJECTED: 'Application rejected', SUSPENDED: 'Suspended' },
   home: {

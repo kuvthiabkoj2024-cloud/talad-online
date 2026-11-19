@@ -163,9 +163,10 @@ export class CartService {
     }));
   }
 
+  /** The cart by shop; `count` is the badge number, the same as count(): lines, not units. */
   async view(customerId: string) {
     const lines = await this.lines(customerId);
-    return { shops: groupByShop(lines), count: lines.reduce((n, l) => n + l.quantity, 0) };
+    return { shops: groupByShop(lines), count: lines.length };
   }
 
   /** Header badge: distinct items in the cart (each product/variant once), not units. */

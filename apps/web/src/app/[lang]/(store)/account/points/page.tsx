@@ -1,4 +1,3 @@
-import { formatMoney, pointTierRanges } from "@talad/shared";
 import { Coins, Gift, ShoppingBag } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -15,15 +14,13 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: account.pointsTitle, robots: { index: false } };
 }
 
-/** The customer's loyalty points: balance and its value, how they work, and the history. */
+/** The customer's loyalty points: balance, when they expire, and the history (no money values or earning rules). */
 export default async function PointsPage() {
   const locale = await getLocale();
   const { account: dict } = await getDictionary();
   await requireCustomer(locale, `/${locale}/account/points`);
   const points = await apiGetAsCustomer<PointsView>("/me/points");
   const p = points ?? { balance: 0, owed: 0, pointValue: 0, worth: 0, earnTiers: [], earnPer: 0, expiryDays: null, items: [], nextCursor: null };
-  // A range worth no points isn't a promise to show.
-  const ranges = pointTierRanges(p.earnTiers).filter((r) => r.points > 0);
 
   return (
     <>
@@ -33,7 +30,6 @@ export default async function PointsPage() {
         <p className="text-sm text-white/80">{dict.pointsBalanceLabel}</p>
         <p className="mt-1 text-4xl font-bold tabular-nums">{p.balance.toLocaleString("en-US")}</p>
         {p.owed > 0 && <p className="mt-1 text-sm font-medium">{interpolate(dict.pointsOwed, { n: p.owed.toLocaleString("en-US") })}</p>}
-        {p.pointValue > 0 && <p className="mt-1 text-sm font-medium">{interpolate(dict.pointsWorth, { amount: formatMoney(p.worth, locale) })}</p>}
         <Link
           href={`/${locale}`}
           className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-sm font-semibold text-primary shadow transition hover:bg-white/90"
@@ -43,41 +39,12 @@ export default async function PointsPage() {
         </Link>
       </section>
 
-      <ul className="flex flex-col gap-2 rounded-2xl bg-card p-4 text-sm shadow-sm ring-1 ring-border">
-        {p.earnPer > 0 && (
-          <li className="flex items-start gap-2">
-            <Gift className="mt-0.5 size-4 shrink-0 text-primary" />
-            {interpolate(dict.pointsHowEarn, { amount: formatMoney(p.earnPer, locale) })}
-          </li>
-        )}
-        {ranges.length > 0 && (
-          <li className="flex items-start gap-2">
-            <Gift className="mt-0.5 size-4 shrink-0 text-primary" />
-            <span>
-              {dict.pointsTiersTitle}
-              <span className="mt-1 flex flex-col gap-0.5 font-medium">
-                {ranges.map((r) => (
-                  <span key={r.upTo ?? "open"}>
-                    {interpolate(r.upTo === null ? (r.over ? dict.pointsTierAbove : dict.pointsTierAny) : r.over ? dict.pointsTierRange : dict.pointsTierUpTo, {
-                      min: formatMoney(r.over, locale),
-                      max: r.upTo === null ? "" : formatMoney(r.upTo, locale),
-                      n: r.points.toLocaleString("en-US"),
-                    })}
-                  </span>
-                ))}
-              </span>
-            </span>
-          </li>
-        )}
-        {(ranges.length > 0 || p.earnPer > 0) && <li className="pl-6 text-xs text-muted-foreground">{dict.pointsExcluded}</li>}
-        {p.pointValue > 0 && (
-          <li className="flex items-start gap-2">
-            <Coins className="mt-0.5 size-4 shrink-0 text-primary" />
-            {interpolate(dict.pointsHowUse, { value: formatMoney(p.pointValue, locale) })}
-          </li>
-        )}
-        {p.expiryDays && <li className="pl-6 text-xs text-muted-foreground">{interpolate(dict.pointsExpire, { days: p.expiryDays })}</li>}
-      </ul>
+      {p.expiryDays && (
+        <p className="flex items-start gap-2 rounded-2xl bg-card p-4 text-sm text-muted-foreground shadow-sm ring-1 ring-border">
+          <Gift className="mt-0.5 size-4 shrink-0 text-primary" />
+          {interpolate(dict.pointsExpire, { days: p.expiryDays })}
+        </p>
+      )}
 
       <PointsHistory initial={p} locale={locale} dict={dict} />
     </>

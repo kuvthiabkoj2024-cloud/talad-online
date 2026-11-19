@@ -1028,6 +1028,9 @@ export const en = {
     chooseCategory: 'Choose a category',
     unit: 'Unit',
     chooseUnit: 'Choose a unit',
+    brand: 'Brand',
+    brandPlaceholder: 'e.g. Samsung, Apple',
+    brandHint: 'Optional · customers can filter a category by brand',
     guarantee: {
       title: 'Guarantee',
       hint: 'Turn this on if the product comes with a guarantee.',

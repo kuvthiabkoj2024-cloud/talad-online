@@ -4,8 +4,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { Stack, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 
+import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { Field, Input } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, EmptyState } from '@/components/ui';
@@ -83,7 +84,7 @@ export default function NewPostScreen() {
   const busy = progress !== null;
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.flex, { backgroundColor: theme.background }]}>
+    <KeyboardAvoid style={[styles.flex, { backgroundColor: theme.background }]}>
       <Stack.Screen options={{ title: t.feed.postTitle }} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <ThemedText type="small" themeColor="textSecondary">
@@ -131,7 +132,7 @@ export default function NewPostScreen() {
           onPress={() => void post()}
         />
       </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAvoid>
   );
 }
 

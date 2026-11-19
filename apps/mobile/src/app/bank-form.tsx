@@ -1,3 +1,4 @@
+import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { Icon } from '@/components/icon';
 import { useQueryClient } from '@tanstack/react-query';
 import { BANK_CODES, LAO_BANKS, normalizeAccountNumber } from '@talad/shared';
@@ -5,7 +6,7 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Field, Input, Select, Toggle } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
@@ -62,7 +63,7 @@ export default function BankFormScreen() {
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.flex, { backgroundColor: theme.background }]}>
+    <KeyboardAvoid style={[styles.flex, { backgroundColor: theme.background }]}>
       <Stack.Screen options={{ title: existing ? t.acct.editBank : t.acct.addBank }} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Card style={styles.card}>
@@ -107,7 +108,7 @@ export default function BankFormScreen() {
         </Card>
         <Button label={t.acct.save} loading={busy} onPress={() => void save()} />
       </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAvoid>
   );
 }
 

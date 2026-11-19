@@ -4,6 +4,7 @@ import {
   GUARANTEE_UNITS,
   MEDIA_LIMITS,
   PRICE_TIER_RULES,
+  BRAND_RULES,
   PRODUCT_RULES,
   PRODUCT_SAVE_INTENTS,
   PRODUCT_STATUSES,
@@ -150,6 +151,13 @@ export class ShopProductDto {
 
   @IsUUID('7')
   unitId: string;
+
+  /** Brand name (e.g. "Samsung"): an existing brand is reused, case ignored; empty or null = none. */
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(BRAND_RULES.nameMax)
+  brand?: string | null;
 
   @Transform(trim)
   @Matches(PRODUCT_RULES.skuPattern)

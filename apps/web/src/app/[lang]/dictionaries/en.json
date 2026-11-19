@@ -141,7 +141,8 @@
     "bulkFrom": "{n}+ items",
     "bulkExact": "{n} items",
     "bulkEach": "{price} each",
-    "bulkNote": "All options of this product count together in your cart."
+    "bulkNote": "All options of this product count together in your cart.",
+    "brand": "Brand: {brand}"
   },
   "auth": {
     "signIn": "Sign in",
@@ -841,7 +842,13 @@
     "close": "Close",
     "shopBadge": "Shop",
     "follow": "Follow {name}",
-    "backToProfile": "Back to profile"
+    "backToProfile": "Back to profile",
+    "search": "Search videos",
+    "searchPlaceholder": "Search by title, #hashtag or text",
+    "searchClear": "Clear search",
+    "searchEmpty": "No videos for \"{q}\"",
+    "searchEmptyBody": "Try another word or #hashtag.",
+    "searchResults": "Results for {q}"
   },
   "profile": {
     "videos": "Videos",
@@ -926,7 +933,9 @@
     "popular": "Popular",
     "new": "Newest",
     "sortBy": "Sort by",
-    "productCount": "{n} products"
+    "productCount": "{n} products",
+    "brand": "Brand",
+    "allBrands": "All brands"
   },
   "pages": {
     "updated": "Last updated {date}",

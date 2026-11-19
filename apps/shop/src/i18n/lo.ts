@@ -1091,6 +1091,9 @@ export const lo: Dict = {
     chooseCategory: "ເລືອກໝວດໝູ່",
     unit: "ຫົວໜ່ວຍ",
     chooseUnit: "ເລືອກຫົວໜ່ວຍ",
+    brand: 'ແບຣນ / ຍີ່ຫໍ້',
+    brandPlaceholder: 'ເຊັ່ນ Samsung, Apple',
+    brandHint: 'ບໍ່ບັງຄັບ · ລູກຄ້າກັ່ນຕອງສິນຄ້າຕາມໝວດໝູ່ ແລ້ວຕາມແບຣນໄດ້',
     pricing: "ລາຄາ ແລະ ສະຕັອກ",
     bulk: {
       title: "ລາຄາຂາຍສົ່ງ",

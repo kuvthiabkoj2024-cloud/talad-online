@@ -1,6 +1,6 @@
 import type { Locale } from '@talad/shared';
 
-import { API_URL, ApiError, getApiToken, SITE_URL, type FeedEntry } from './api';
+import { filePart, postForm, SITE_URL, type FeedEntry } from './api';
 
 /**
  * The feed's social side (§2.5), as on the website (apps/web/src/lib/video-actions.ts): views,
@@ -16,7 +16,7 @@ export interface VideoComment {
   createdAt: string;
   replyCount: number;
   /** `isShop`: the shop answering (its name and logo). */
-  author: { id: string; name: string; avatarUrl: string | null; isShop: boolean };
+  author: { id: string; name: string; avatarUrl: string | null; avatarVersion?: string | null; isShop: boolean };
 }
 
 export interface VideoCommentPage {
@@ -46,36 +46,15 @@ export function shareUrl(item: FeedEntry, locale: Locale): string {
 /** Wait this long on a video before it counts as a view (the website's VIEW_AFTER_MS). */
 export const VIEW_AFTER_MS = 2500;
 
-/**
- * A multipart upload that reports progress (0–1): a posted video can take a while.
- * React Native's FormData takes { uri, name, type } for files.
- */
-export function uploadWithProgress<T>(
+/** A multipart upload that reports progress (0–1): a posted video can take a while. */
+export async function uploadWithProgress<T>(
   path: string,
   fields: Record<string, string>,
   file: { uri: string; name: string; type: string },
   onProgress: (fraction: number) => void,
 ): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const form = new FormData();
-    form.append('file', file as unknown as Blob);
-    for (const [k, v] of Object.entries(fields)) form.append(k, v);
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${API_URL}${path}`);
-    const token = getApiToken();
-    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
-    xhr.onerror = () => reject(new ApiError(0, { code: 'NETWORK', message: 'Network error' }));
-    xhr.onload = () => {
-      let body: Record<string, unknown> = {};
-      try {
-        body = JSON.parse(xhr.responseText || '{}');
-      } catch {
-        // Not JSON (e.g. a proxy's 413 page).
-      }
-      if (xhr.status >= 200 && xhr.status < 300) resolve(body as T);
-      else reject(new ApiError(xhr.status, xhr.status === 413 ? { code: 'FILE_TOO_LARGE' } : body));
-    };
-    xhr.send(form);
-  });
+  const form = new FormData();
+  form.append('file', await filePart({ uri: file.uri, fileName: file.name, mimeType: file.type }, 'video.mp4'));
+  for (const [k, v] of Object.entries(fields)) form.append(k, v);
+  return postForm<T>(path, form, onProgress);
 }

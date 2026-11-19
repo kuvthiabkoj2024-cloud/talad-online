@@ -1,7 +1,11 @@
 import { LAO_BANKS, MAX_PAYMENT_SLIPS, type BankCode } from '@talad/shared';
 import { Image } from 'expo-image';
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import { File, Paths } from 'expo-file-system';
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
+import * as MediaLibrary from 'expo-media-library';
+import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { Icon } from '@/components/icon';
 import { pickPhoto } from '@/components/seller/photo';
@@ -38,7 +42,7 @@ export function useAskPhoto() {
 }
 
 /** Where to transfer: the QR (private image), the amount and the bank account, as the website's payment panel. */
-function TransferPanel({ title, body, qrPath, amount, transfer }: { title: string; body: string; qrPath: string | null; amount: number; transfer: TransferAccount }) {
+export function TransferPanel({ title, body, qrPath, amount, transfer }: { title: string; body: string; qrPath: string | null; amount: number; transfer: TransferAccount }) {
   const theme = useTheme();
   const { o } = useOrderI18n();
   const c = o.checkout;
@@ -52,6 +56,7 @@ function TransferPanel({ title, body, qrPath, amount, transfer }: { title: strin
       {qrPath && (
         <View style={styles.qrWrap}>
           <AuthImage path={qrPath} style={styles.qr} />
+          <DownloadQr path={qrPath} />
           <ThemedText type="caption" themeColor="textSecondary">
             {c.saveQrHint}
           </ThemedText>
@@ -73,17 +78,97 @@ function TransferPanel({ title, body, qrPath, amount, transfer }: { title: strin
             </ThemedText>
           )}
           {transfer.accountName && <ThemedText type="smallBold">{transfer.accountName}</ThemedText>}
-          <ThemedText type="small" selectable style={styles.mono}>
-            {transfer.accountNumber.replace(/(\d{4})(?=\d)/g, '$1 ')}
-          </ThemedText>
+          <View style={styles.numberRow}>
+            <ThemedText type="small" selectable style={[styles.mono, styles.number]}>
+              {transfer.accountNumber.replace(/(\d{4})(?=\d)/g, '$1 ')}
+            </ThemedText>
+            <CopyButton text={transfer.accountNumber} />
+          </View>
         </View>
       )}
     </View>
   );
 }
 
+/** Copies the account number (digits only, as bank apps want it); says "Copied" for a moment. */
+function CopyButton({ text }: { text: string }) {
+  const theme = useTheme();
+  const { o } = useOrderI18n();
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    await Clipboard.setStringAsync(text.replace(/\s/g, ''));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  }
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={o.checkout.copy}
+      onPress={() => void copy()}
+      hitSlop={6}
+      style={({ pressed }) => [styles.copy, { backgroundColor: copied ? theme.primary : theme.primarySoft }, pressed && styles.pressed]}>
+      <Icon name={copied ? 'check' : 'copy'} size={15} color={copied ? '#ffffff' : theme.primary} />
+      <ThemedText type="caption" style={[styles.bold, { color: copied ? '#ffffff' : theme.primary }]}>
+        {copied ? o.checkout.copied : o.checkout.copy}
+      </ThemedText>
+    </Pressable>
+  );
+}
+
+/**
+ * Saves a payment QR (a private image: sent with the sign-in token) to the phone's photos, so the
+ * customer can scan it from the gallery in their bank app. Re-encoded as PNG: the API serves it
+ * without a file extension, and the gallery needs a real image file.
+ */
+function DownloadQr({ path }: { path: string }) {
+  const theme = useTheme();
+  const { o } = useOrderI18n();
+  const c = o.checkout;
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    try {
+      if (Platform.OS === 'web') {
+        const token = getApiToken();
+        const blob = await (await fetch(`${API_URL}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })).blob();
+        const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'mcmart-qr.png' });
+        a.click();
+        return;
+      }
+      if (!(await MediaLibrary.requestPermissionsAsync(true)).granted) return Alert.alert(c.qrSaveDenied);
+      const token = getApiToken();
+      const file = await File.downloadFileAsync(`${API_URL}${path}`, new File(Paths.cache, `qr-${Date.now()}`), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        idempotent: true,
+      });
+      const png = await (await ImageManipulator.manipulate(file.uri).renderAsync()).saveAsync({ format: SaveFormat.PNG });
+      await MediaLibrary.Asset.create(png.uri);
+      file.delete();
+      Alert.alert(c.qrSaved);
+    } catch {
+      Alert.alert(c.qrSaveFailed);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={saving}
+      onPress={() => void save()}
+      style={({ pressed }) => [styles.download, { borderColor: theme.primary }, (pressed || saving) && styles.pressed]}>
+      {saving ? <ActivityIndicator size="small" color={theme.primary} /> : <Icon name="download" size={18} color={theme.primary} />}
+      <ThemedText type="smallBold" themeColor="primary">
+        {c.downloadQr}
+      </ThemedText>
+    </Pressable>
+  );
+}
+
 /** Picked slips before sending: thumbnails with remove, and an add tile up to `max`. */
-function SlipPicker({ picked, max, onAdd, onRemove }: { picked: LocalFile[]; max: number; onAdd: () => void; onRemove: (i: number) => void }) {
+export function SlipPicker({ picked, max, onAdd, onRemove, busy }: { picked: (LocalFile & { uploading?: boolean; failed?: boolean })[]; max: number; onAdd: () => void; onRemove: (i: number) => void; busy?: boolean }) {
   const theme = useTheme();
   const { o } = useOrderI18n();
   return (
@@ -91,15 +176,25 @@ function SlipPicker({ picked, max, onAdd, onRemove }: { picked: LocalFile[]; max
       {picked.map((p, i) => (
         <View key={p.uri} style={[styles.thumb, { backgroundColor: theme.backgroundElement }]}>
           <Image source={p.uri} style={StyleSheet.absoluteFill} contentFit="cover" />
+          {(p.uploading || p.failed) && (
+            <View style={[StyleSheet.absoluteFill, styles.thumbState, p.failed && styles.thumbFailed]}>
+              {p.uploading ? <ActivityIndicator color="#ffffff" /> : <Icon name="alert" size={20} color="#ffffff" />}
+            </View>
+          )}
           <Pressable accessibilityRole="button" accessibilityLabel={o.checkout.removeSlip} onPress={() => onRemove(i)} hitSlop={6} style={styles.remove}>
             <Icon name="x" size={14} color="#ffffff" />
           </Pressable>
         </View>
       ))}
       {picked.length < max && (
-        <Pressable accessibilityRole="button" accessibilityLabel={o.checkout.addSlip} onPress={onAdd} style={[styles.thumb, styles.add, { borderColor: theme.primary }]}>
-          <Icon name="add" size={22} color={theme.primary} />
-          <ThemedText type="caption" themeColor="primary" style={styles.center}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={o.checkout.addSlip}
+          disabled={busy}
+          onPress={onAdd}
+          style={({ pressed }) => [styles.add, { borderColor: theme.primary, backgroundColor: theme.primarySoft }, (pressed || busy) && styles.pressed]}>
+          <Icon name="camera" size={22} color={theme.primary} />
+          <ThemedText type="smallBold" themeColor="primary" style={styles.center}>
             {picked.length ? o.checkout.addSlip : o.checkout.chooseSlip}
           </ThemedText>
         </Pressable>
@@ -252,9 +347,17 @@ const styles = StyleSheet.create({
   mono: { fontVariant: ['tabular-nums'], letterSpacing: 1 },
   thumbs: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   thumb: { width: 72, height: 92, borderRadius: Radius.sm, overflow: 'hidden' },
-  add: { borderWidth: 1.5, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', gap: 2, padding: 4 },
+  // Full width, below the picked slips: an easy target.
+  add: { width: '100%', minHeight: 56, flexDirection: 'row', borderWidth: 1.5, borderStyle: 'dashed', borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', gap: Spacing.two, padding: Spacing.three },
+  download: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, borderWidth: 1.5, borderRadius: Radius.full, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, marginTop: Spacing.one },
+  pressed: { opacity: 0.7 },
+  numberRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  number: { flex: 1 },
+  copy: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: Radius.full, paddingHorizontal: Spacing.two + 2, paddingVertical: 6 },
   remove: { position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
   sent: { alignItems: 'center', gap: 2 },
+  thumbState: { alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.4)' },
+  thumbFailed: { backgroundColor: 'rgba(185,28,28,0.6)' },
   center: { textAlign: 'center' },
   bold: { fontWeight: '700' },
   sky: { color: '#075985' },

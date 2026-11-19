@@ -124,6 +124,14 @@ export default async function ProductPage(props: Props) {
               <ChevronRight className="size-4 shrink-0" />
             </Link>
             <h1 className="mt-2 text-xl font-bold leading-snug sm:text-2xl">{product.name}</h1>
+            {product.brand && (
+              <Link
+                href={`/${locale}/c/${product.category.slug}?brand=${encodeURIComponent(product.brand.slug)}`}
+                className="mt-1 inline-block text-sm text-muted-foreground hover:text-primary hover:underline"
+              >
+                {interpolate(dict.brand, { brand: product.brand.name })}
+              </Link>
+            )}
             {product.soldCount > 0 && (
               <p className="mt-2 text-sm text-muted-foreground">
                 {interpolate(dict.sold, { n: product.soldCount.toLocaleString("en-US") })}

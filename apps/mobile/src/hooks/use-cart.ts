@@ -27,7 +27,11 @@ export function useCartActions() {
           method: 'POST',
           body: { productId: input.productId, quantity: input.quantity, ...(input.variantId && { variantId: input.variantId }) },
         }),
-      onSuccess: refresh,
+      // The new count shows (and the cart badge pops) right away; the full cart reloads behind it.
+      onSuccess: (res) => {
+        queryClient.setQueryData<CartView>(CART_KEY, (old) => (old ? { ...old, count: res.count } : old));
+        return refresh();
+      },
     }),
     setQuantity: useMutation({
       mutationFn: ({ itemId, quantity }: { itemId: string; quantity: number }) =>

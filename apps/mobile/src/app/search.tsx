@@ -14,7 +14,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { shrinkPhoto } from '@/lib/shrink-photo';
 import { api, upload, type ProductCard } from '@/lib/api';
 import { fill, useI18n } from '@/lib/i18n';
-import { listeningLanguage, speechRecognizer } from '@/lib/voice';
+import { listeningLanguage, recognitionService, speechRecognizer, type Speech } from '@/lib/voice';
 
 interface PhotoResult {
   items: ProductCard[];
@@ -57,10 +57,16 @@ export default function SearchScreen() {
     if (!speech) return Alert.alert(t.search.voice, t.search.voiceUnavailable);
     const permission = await speech.requestPermissionsAsync();
     if (!permission.granted) return Alert.alert(t.search.voice, t.search.voiceDenied);
-    const { lang, english } = await listeningLanguage(speech, locale);
-    setVoiceNote(english ? t.search.voiceEnglishOnly : null);
+    const service = recognitionService(speech);
+    const { lang, english } = await listeningLanguage(speech, locale, service);
+    listen(speech, lang, service, english);
+  }
 
+  /** One listening turn; when Lao isn't understood after all, listens again in English. */
+  function listen(speech: Speech, lang: string, service: string | undefined, english: boolean) {
+    setVoiceNote(english ? t.search.voiceEnglishOnly : null);
     let heard = '';
+    let retry: (() => void) | null = null;
     const subs = [
       speech.addListener('result', (e) => {
         heard = e.results[0]?.transcript ?? heard;
@@ -68,17 +74,28 @@ export default function SearchScreen() {
         if (e.isFinal && heard.trim()) search(heard);
       }),
       speech.addListener('error', (e) => {
-        if (e.error === 'no-speech' || e.error === 'speech-timeout') setVoiceNote(t.search.voiceNoSpeech);
+        if (e.error === 'aborted') return;
+        if (e.error === 'language-not-supported' && lang !== 'en-US') retry = () => listen(speech, 'en-US', service, true);
+        else if (e.error === 'no-speech' || e.error === 'speech-timeout') setVoiceNote(t.search.voiceNoSpeech);
         else if (e.error === 'not-allowed') setVoiceNote(t.search.voiceDenied);
+        else if (e.error === 'network') setVoiceNote(t.search.voiceNetwork);
+        else setVoiceNote(t.search.voiceFailed);
       }),
       speech.addListener('end', () => {
         setListening(false);
         subs.forEach((s) => s.remove());
+        retry?.();
       }),
     ];
     stopVoice.current = () => speech.stop();
     setListening(true);
-    speech.start({ lang, interimResults: true, continuous: false });
+    try {
+      speech.start({ lang, interimResults: true, continuous: false, ...(service && { androidRecognitionServicePackage: service }) });
+    } catch {
+      subs.forEach((s) => s.remove());
+      setListening(false);
+      setVoiceNote(t.search.voiceFailed);
+    }
   }
   // Leaving the screen stops listening.
   useEffect(() => () => stopVoice.current(), []);

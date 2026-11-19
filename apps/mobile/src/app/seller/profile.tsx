@@ -16,9 +16,10 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { Stack } from 'expo-router';
 import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { Field, Input, Select } from '@/components/form';
 import { Icon } from '@/components/icon';
 import { PrivateImage } from '@/components/seller/private-image';
@@ -227,7 +228,7 @@ function ProfileForm({ profile: p, onImage }: { profile: ShopProfile; onImage: (
   );
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex} keyboardVerticalOffset={90}>
+    <KeyboardAvoid style={styles.flex}>
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 110 + insets.bottom }]} keyboardShouldPersistTaps="handled">
         <Card style={sellerStyles.card}>
           <ThemedText type="smallBold">{t.images}</ThemedText>
@@ -431,7 +432,7 @@ function ProfileForm({ profile: p, onImage }: { profile: ShopProfile; onImage: (
         )}
       </Sheet>
       <PrivateImage path={viewQr ? '/me/shop/profile/payment-qr' : null} onClose={() => setViewQr(false)} />
-    </KeyboardAvoidingView>
+    </KeyboardAvoid>
   );
 }
 

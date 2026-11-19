@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import type { CommentTarget, VideoComment } from "@/lib/api";
+import { avatarSrc } from "@/lib/customer";
 import { formatRelativeTime, interpolate } from "@/lib/format";
 import { deleteVideoComment, loadVideoComments, loadVideoReplies, postVideoComment } from "@/lib/video-actions";
 import { useSession } from "../auth/session-provider";
@@ -428,10 +429,10 @@ function CommentRow({
     >
       {profile ? (
         <Link href={profile} className="shrink-0">
-          <Avatar name={c.author.name} src={c.author.avatarUrl} size={small ? "size-7" : "size-9"} />
+          <Avatar name={c.author.name} src={avatarSrc(c.author)} size={small ? "size-7" : "size-9"} />
         </Link>
       ) : (
-        <Avatar name={c.author.name} src={c.author.avatarUrl} size={small ? "size-7" : "size-9"} />
+        <Avatar name={c.author.name} src={avatarSrc(c.author)} size={small ? "size-7" : "size-9"} />
       )}
       <div className="min-w-0 flex-1">
         <p className="flex items-baseline gap-2 text-xs text-muted-foreground">

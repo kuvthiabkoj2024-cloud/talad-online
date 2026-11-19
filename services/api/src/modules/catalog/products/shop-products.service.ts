@@ -16,6 +16,7 @@ import type { ListShopProductsQuery, ShopProductDto } from './shop-product.dto.j
 import { ImageIndexService } from '../image-search/image-index.service.js';
 import { commissionData } from '../commission/commission.js';
 import { CommissionRequestsService } from '../commission/commission-requests.service.js';
+import { BrandsService } from '../brands/brands.service.js';
 import { productOptions, variantLabel, type ProductOption } from './product-options.js';
 
 export interface ShopProductRow {
@@ -57,6 +58,8 @@ export interface ShopProductDetail {
   description: string | null;
   categoryId: string;
   unitId: string;
+  /** The brand's name, or null. */
+  brand: string | null;
   sku: string;
   price: number;
   compareAtPrice: number | null;
@@ -86,6 +89,7 @@ export class ShopProductsService {
     private readonly storage: StorageService,
     private readonly imageIndex: ImageIndexService,
     private readonly commissions: CommissionRequestsService,
+    private readonly brands: BrandsService,
   ) {}
 
   async list(shopId: string, query: ListShopProductsQuery): Promise<ShopProductList> {
@@ -175,6 +179,7 @@ export class ShopProductsService {
       include: {
         images: { orderBy: { sortOrder: 'asc' } },
         variants: { orderBy: { sku: 'asc' } },
+        brand: { select: { name: true } },
       },
     });
     if (!p) throw new NotFoundException('Product not found');
@@ -192,6 +197,7 @@ export class ShopProductsService {
       description: p.description,
       categoryId: p.categoryId,
       unitId: p.unitId,
+      brand: p.brand?.name ?? null,
       sku: p.sku,
       price: p.price.toNumber(),
       compareAtPrice: p.compareAtPrice?.toNumber() ?? null,
@@ -220,12 +226,14 @@ export class ShopProductsService {
     // A commission request outside the limits stops the save before anything is created.
     if (dto.commissionRequest) commissionData({ type: dto.commissionRequest.type, value: dto.commissionRequest.value });
     const status = await this.statusFor(dto.intent, 'DRAFT');
+    const brandId = await this.brands.resolve(dto.brand);
     try {
       const product = await this.prisma.product.create({
         data: {
           shopId: shop.id,
           slug: await this.uniqueSlug(shop.id, dto.name, dto.sku),
           ...this.fields(dto),
+          brandId,
           status,
           publishedAt: status === 'PUBLISHED' ? new Date() : null,
           images: { create: dto.imageKeys.map((key, sortOrder) => ({ key, sortOrder })) },
@@ -261,6 +269,8 @@ export class ShopProductsService {
     }
 
     const status = await this.statusFor(dto.intent, current.status);
+    // Older clients don't send `brand`: leave it as it is.
+    const brand = dto.brand === undefined ? {} : { brandId: await this.brands.resolve(dto.brand) };
     // Photos are re-created in the new order; unchanged ones keep their photo-search embedding.
     const indexed = new Map(current.images.map((i) => [i.key, { embedding: i.embedding, embeddingModel: i.embeddingModel, embeddedAt: i.embeddedAt }]));
     try {
@@ -273,6 +283,7 @@ export class ShopProductsService {
             // MC Mart hid the old video; a new one starts visible.
             ...((dto.videoKey ?? null) !== current.videoKey && { videoHidden: false, videoHiddenReason: null, videoHiddenAt: null }),
             ...this.fields(dto),
+            ...brand,
             status,
             ...(status !== current.status && status !== 'REJECTED' && { rejectionReason: null }),
             ...(status === 'PUBLISHED' && !current.publishedAt && { publishedAt: new Date() }),

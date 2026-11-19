@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ProductsService } from './products.service.js';
+import { feedSearchWords, ProductsService } from './products.service.js';
 
 function setup() {
   const prisma = {
@@ -30,5 +30,18 @@ describe('feed tabs', () => {
     await service.feed({ limit: 8 });
     expect(prisma.product.findMany).toHaveBeenCalledOnce();
     expect(prisma.feedPost.findMany).toHaveBeenCalledOnce();
+  });
+});
+
+describe('feedSearchWords', () => {
+  it('drops hashtags and splits words', () => {
+    expect(feedSearchWords('  #cat  food ')).toEqual([['cat'], ['food']]);
+    expect(feedSearchWords('##')).toEqual([]);
+    expect(feedSearchWords(undefined)).toEqual([]);
+  });
+
+  it('tries both Lao spellings', () => {
+    expect(feedSearchWords('ໝາ')[0]).toEqual(expect.arrayContaining(['ໝາ', 'ຫມາ']));
+    expect(feedSearchWords('ຫມາ')[0]).toEqual(expect.arrayContaining(['ຫມາ', 'ໝາ']));
   });
 });

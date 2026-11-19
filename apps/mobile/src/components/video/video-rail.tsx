@@ -8,7 +8,7 @@ import { Icon, type IconName } from '@/components/icon';
 import { ThemedText } from '@/components/themed-text';
 import { CommentsSheet } from '@/components/video/comments-sheet';
 import { Spacing } from '@/constants/theme';
-import { api, productHref, type FeedEntry } from '@/lib/api';
+import { api, avatarSrc, type FeedEntry } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { count } from '@/lib/format';
 import { fill, useI18n } from '@/lib/i18n';
@@ -142,7 +142,7 @@ export function VideoRail({ item, active, onDeleted }: { item: FeedEntry; active
     ]);
   }
 
-  const avatar = isPost ? item.author.avatarUrl : item.shop.logoUrl;
+  const avatar = isPost ? avatarSrc(item.author) : item.shop.logoUrl;
   const name = isPost ? item.author.name : item.shop.name;
   const showFollow = !mine && (!signedIn || following.data === false);
 
@@ -152,7 +152,7 @@ export function VideoRail({ item, active, onDeleted }: { item: FeedEntry; active
         <Pressable
           accessibilityRole="link"
           accessibilityLabel={name}
-          onPress={() => router.push(isPost ? `/u/${item.author.id}` : productHref(item))}
+          onPress={() => router.push(isPost ? `/u/${item.author.id}` : `/shop/${item.shop.slug}`)}
           style={styles.avatar}>
           {avatar ? (
             <Image source={avatar} style={StyleSheet.absoluteFill} contentFit="cover" />

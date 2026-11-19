@@ -494,6 +494,22 @@ model Category {
   @@index([parentId])
 }
 
+/// A product brand (Samsung, Apple…), shared by every shop. Shops type it on a product; the API
+/// reuses the brand whose `key` matches (case and spaces ignored) or creates it. Customers
+/// filter a category's products by it.
+model Brand {
+  id        String   @id @default(uuid(7))
+  /// The name as first entered, e.g. "Samsung".
+  name      String
+  /// For matching: lowercased, single-spaced name ("samsung").
+  key       String   @unique
+  /// For URLs (?brand=samsung); Lao-only names get "brand-<id part>".
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  products Product[]
+}
+
 model Unit {
   id        String   @id @default(uuid(7))
   code      String   @unique // kg, pcs, box, l
@@ -509,6 +525,8 @@ model Product {
   shopId            String
   categoryId        String
   unitId            String
+  /// Optional brand (filters: category → brand).
+  brandId           String?
   slug              String
   sku               String
   name              String
@@ -558,6 +576,7 @@ model Product {
   shop               Shop                @relation(fields: [shopId], references: [id])
   category           Category            @relation(fields: [categoryId], references: [id])
   unit               Unit                @relation(fields: [unitId], references: [id])
+  brand              Brand?              @relation(fields: [brandId], references: [id], onDelete: SetNull)
   images             ProductImage[]
   variants           ProductVariant[]
   cartItems          CartItem[]
@@ -571,6 +590,7 @@ model Product {
   @@unique([shopId, slug])
   @@index([shopId, status])
   @@index([categoryId, status])
+  @@index([brandId, status])
   @@index([status, publishedAt])
 }
 

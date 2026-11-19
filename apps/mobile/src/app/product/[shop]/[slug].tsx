@@ -2,16 +2,18 @@ import { Icon } from '@/components/icon';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CartBadge, useWiggle } from '@/components/cart-badge';
 import { Stepper } from '@/components/stepper';
 import { ThemedText } from '@/components/themed-text';
 import { ProductGrid } from '@/components/product-card';
 import { Button, Card, EmptyState, LoadError, Loading, Pill, SectionTitle } from '@/components/ui';
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
-import { useCartActions } from '@/hooks/use-cart';
+import { useCartActions, useCartCount } from '@/hooks/use-cart';
 import { useTheme } from '@/hooks/use-theme';
 import type { Locale } from '@talad/shared';
 
@@ -57,6 +59,10 @@ function Product({ product, themeBg, locale }: { product: ProductDetail; themeBg
   const insets = useSafeAreaInsets();
   const { customer } = useAuth();
   const { add } = useCartActions();
+  const cartCount = useCartCount();
+  const wiggle = useWiggle();
+  const [justAdded, setJustAdded] = useState(false);
+  const addedTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [picked, setPicked] = useState<Record<string, string>>(() =>
     // A single variant (or options with one value each) needs no choosing.
     Object.fromEntries(product.options.filter((o) => o.values.length === 1).map((o) => [o.name, o.values[0]])),
@@ -85,13 +91,13 @@ function Product({ product, themeBg, locale }: { product: ProductDetail; themeBg
     if (!customer) return router.push('/login');
     if (missing) return Alert.alert(fill(t.product.choose, { option: missing.name }));
     try {
-      await add.mutateAsync({ productId: product.id, variantId: variant?.id ?? null, quantity });
-      if (thenCart) router.navigate('/cart');
-      else
-        Alert.alert(t.product.added, undefined, [
-          { text: t.common.close, style: 'cancel' },
-          { text: t.product.viewCart, onPress: () => router.navigate('/cart') },
-        ]);
+      const added = await add.mutateAsync({ productId: product.id, variantId: variant?.id ?? null, quantity });
+      // Buy now: straight to checkout with this line only.
+      if (thenCart) return router.push({ pathname: '/checkout', params: { items: added.itemId } });
+      // No popup: the cart badge below pops, and the button says "Added" for a moment.
+      setJustAdded(true);
+      clearTimeout(addedTimer.current);
+      addedTimer.current = setTimeout(() => setJustAdded(false), 1600);
     } catch (e) {
       Alert.alert(e instanceof ApiError ? e.message : t.common.error);
     }
@@ -115,6 +121,15 @@ function Product({ product, themeBg, locale }: { product: ProductDetail; themeBg
               )}
             </View>
             <ThemedText type="subtitle">{product.name}</ThemedText>
+            {product.brand && (
+              <ThemedText
+                type="caption"
+                themeColor="primary"
+                accessibilityRole="link"
+                onPress={() => router.push({ pathname: '/category/[slug]', params: { slug: product.category.slug, brand: product.brand!.slug } })}>
+                {fill(t.categories.brandOf, { brand: product.brand.name })}
+              </ThemedText>
+            )}
             <View style={styles.metaRow}>
               {product.ratingAvg > 0 && (
                 <View style={styles.inline}>
@@ -198,9 +213,15 @@ function Product({ product, themeBg, locale }: { product: ProductDetail; themeBg
       </ScrollView>
 
       <View style={[styles.bar, { backgroundColor: theme.card, borderTopColor: theme.border, paddingBottom: insets.bottom + Spacing.two }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t.product.viewCart} onPress={() => router.navigate('/cart')} hitSlop={6} style={styles.cartBtn}>
+          <Animated.View style={wiggle.style}>
+            <Icon name="cart" size={26} color={theme.primary} />
+            <CartBadge count={cartCount} onBump={wiggle.bump} />
+          </Animated.View>
+        </Pressable>
         <Button
-          label={t.product.addToCart}
-          icon="cart"
+          label={justAdded ? `✓ ${t.product.added}` : t.product.addToCart}
+          icon={justAdded ? undefined : 'cart'}
           variant="outline"
           disabled={soldOut}
           loading={add.isPending}
@@ -274,7 +295,7 @@ function ShopCard({ product }: { product: ProductDetail }) {
 
   return (
     <Card style={styles.card}>
-      <View style={styles.shop}>
+      <Pressable accessibilityRole="link" accessibilityLabel={t.shop.viewShop} onPress={() => router.push(`/shop/${shop.slug}`)} style={({ pressed }) => [styles.shop, pressed && { opacity: 0.8 }]}>
         <View style={[styles.shopLogo, { backgroundColor: theme.primarySoft }]}>
           {shop.logoUrl ? <Image source={shop.logoUrl} style={StyleSheet.absoluteFill} contentFit="cover" /> : <Icon name="shop" size={20} color={theme.primary} />}
         </View>
@@ -289,7 +310,13 @@ function ShopCard({ product }: { product: ProductDetail }) {
             {fill(t.product.products, { n: shop.productCount })}
           </ThemedText>
         </View>
-      </View>
+        <View style={styles.inline}>
+          <ThemedText type="caption" themeColor="primary">
+            {t.shop.viewShop}
+          </ThemedText>
+          <Icon name="chevron-right" size={16} color={theme.primary} />
+        </View>
+      </Pressable>
       {!own && (
         <View style={styles.shopActions}>
           <Button
@@ -363,6 +390,7 @@ const styles = StyleSheet.create({
   description: { lineHeight: 22 },
   tiers: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   tier: { flexGrow: 1, minWidth: 100, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
+  cartBtn: { width: 48, alignItems: 'center', justifyContent: 'center' },
   bar: { flexDirection: 'row', gap: Spacing.two, paddingHorizontal: Spacing.three, paddingTop: Spacing.two, borderTopWidth: StyleSheet.hairlineWidth },
   noPhoto: { alignItems: 'center', justifyContent: 'center' },
   counter: { position: 'absolute', right: Spacing.three, bottom: Spacing.three, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: Radius.full, paddingHorizontal: Spacing.two + 2 },

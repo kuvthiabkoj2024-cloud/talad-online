@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import type { CustomerProfile } from "@/lib/api";
+import { avatarSrc } from "@/lib/customer";
 import { followedProfiles, setProfileFollow } from "@/lib/follow-actions";
 import { formatCount, interpolate } from "@/lib/format";
 import { useSession } from "../auth/session-provider";
@@ -117,9 +118,9 @@ export function ProfileHeader({
 
       <div className="relative flex flex-col items-center px-5 pb-6 text-center">
         <span className="-mt-14 flex size-28 items-center justify-center overflow-hidden rounded-full bg-primary-soft text-3xl font-bold text-primary shadow-xl ring-4 ring-card">
-          {profile.avatarUrl ? (
+          {avatarSrc(profile) ? (
             // eslint-disable-next-line @next/next/no-img-element -- social profile picture
-            <img src={profile.avatarUrl} alt="" referrerPolicy="no-referrer" className="size-full object-cover" />
+            <img src={avatarSrc(profile)!} alt="" referrerPolicy="no-referrer" className="size-full object-cover" />
           ) : (
             initialsOf(profile.name)
           )}

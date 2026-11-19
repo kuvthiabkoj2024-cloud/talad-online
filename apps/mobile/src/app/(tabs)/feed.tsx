@@ -5,13 +5,13 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useVideoPlayer, VideoView, type VideoPlayer } from 'expo-video';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, View, type ListViewToken } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, TextInput, View, type ListViewToken } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui';
 import { VideoRail } from '@/components/video/video-rail';
-import { Radius, Spacing } from '@/constants/theme';
+import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import { api, productHref, type FeedEntry } from '@/lib/api';
 import { count, priceRange } from '@/lib/format';
 import { useAuth } from '@/lib/auth';
@@ -22,6 +22,7 @@ type FeedType = 'shop' | 'customer';
 /**
  * The website's video feed: one video per screen, swipe up for the next. Customers | Shops at
  * the top (Shops first, as on the website). Only the video on screen plays; tap it to pause.
+ * The search (top left) finds videos by title, caption and #hashtags, shop, brand or poster.
  */
 export default function FeedScreen() {
   const insets = useSafeAreaInsets();
@@ -35,6 +36,10 @@ export default function FeedScreen() {
   const [muted, setMuted] = useState(false);
   // The slide the viewer tapped to pause (by position); scrolling away resumes the next one.
   const [pausedIndex, setPausedIndex] = useState<number | null>(null);
+  // The search on ('' = whole feed), and the field while it's being typed.
+  const [q, setQ] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [text, setText] = useState('');
 
   // Leaving the tab pauses the video; coming back resumes it.
   useFocusEffect(
@@ -45,9 +50,11 @@ export default function FeedScreen() {
   );
 
   const feed = useInfiniteQuery({
-    queryKey: ['feed', type],
+    queryKey: ['feed', type, q],
     queryFn: ({ pageParam }) =>
-      api<{ items: FeedEntry[]; nextCursor: string | null }>(`/products/feed?type=${type}${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ''}`),
+      api<{ items: FeedEntry[]; nextCursor: string | null }>(
+        `/products/feed?type=${type}${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ''}${q ? `&q=${encodeURIComponent(q)}` : ''}`,
+      ),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor,
   });
@@ -65,12 +72,23 @@ export default function FeedScreen() {
     setPausedIndex(null);
   };
 
+  /** Searches (or, with '', clears); a #hashtag tapped in a caption searches the customers' videos. */
+  const search = (term: string, tab?: FeedType) => {
+    const clean = term.trim().slice(0, 100);
+    setSearching(false);
+    setText(clean);
+    setQ(clean);
+    if (tab) setType(tab);
+    setActive(0);
+    setPausedIndex(null);
+  };
+
   return (
     <View style={styles.screen} onLayout={(e) => setHeight(e.nativeEvent.layout.height)}>
       <StatusBar style="light" />
       {height > 0 && (
         <FlatList
-          key={type}
+          key={`${type}:${q}`}
           data={items}
           keyExtractor={(item) => item.id}
           pagingEnabled
@@ -95,12 +113,24 @@ export default function FeedScreen() {
               muted={muted}
               onToggleMute={() => setMuted((m) => !m)}
               onDeleted={() => void feed.refetch()}
+              onHashtag={(tag) => search(tag, 'customer')}
             />
           )}
           ListEmptyComponent={
             feed.isPending ? (
               <View style={[styles.center, { height }]}>
                 <ActivityIndicator color="#ffffff" />
+              </View>
+            ) : q ? (
+              <View style={[styles.center, { height }]}>
+                <Icon name="search" size={48} color="rgba(255,255,255,0.6)" />
+                <ThemedText type="smallBold" style={[styles.white, styles.textCenter]}>
+                  {fill(t.feed.searchEmpty, { q })}
+                </ThemedText>
+                <ThemedText type="small" style={styles.dim}>
+                  {t.feed.searchEmptyBody}
+                </ThemedText>
+                <Button label={t.feed.searchClear} variant="outline" onPress={() => search('')} />
               </View>
             ) : (
               <View style={[styles.center, { height }]}>
@@ -134,6 +164,47 @@ export default function FeedScreen() {
         ))}
       </View>
 
+      {/* Search (top left): a round button, the search as a chip once on, a field while typing. */}
+      {searching ? (
+        <View style={[styles.searchBar, { top: insets.top + Spacing.two }]}>
+          <Icon name="search" size={18} color="#6b7280" />
+          <TextInput
+            autoFocus
+            value={text}
+            onChangeText={setText}
+            onSubmitEditing={() => search(text)}
+            placeholder={t.feed.searchPlaceholder}
+            placeholderTextColor="#9ca3af"
+            returnKeyType="search"
+            maxLength={100}
+            style={styles.searchInput}
+          />
+          <Pressable accessibilityRole="button" accessibilityLabel={t.feed.searchClear} hitSlop={8} onPress={() => setSearching(false)}>
+            <Icon name="x" size={20} color="#6b7280" />
+          </Pressable>
+        </View>
+      ) : q ? (
+        <View style={[styles.searchChip, { top: insets.top + Spacing.two }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={t.feed.search} onPress={() => setSearching(true)} style={styles.chipText}>
+            <Icon name="search" size={16} color="#ffffff" />
+            <ThemedText type="smallBold" numberOfLines={1} style={[styles.white, styles.shrink]}>
+              {q}
+            </ThemedText>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={t.feed.searchClear} hitSlop={8} onPress={() => search('')}>
+            <Icon name="x" size={16} color="#ffffff" />
+          </Pressable>
+        </View>
+      ) : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t.feed.search}
+          onPress={() => setSearching(true)}
+          style={[styles.round, styles.searchButton, { top: insets.top + Spacing.two }]}>
+          <Icon name="search" size={20} color="#ffffff" />
+        </Pressable>
+      )}
+
       {/* Post your own video (the website's "Post" button). */}
       <Pressable
         accessibilityRole="button"
@@ -166,6 +237,7 @@ function Slide({
   muted,
   onToggleMute,
   onDeleted,
+  onHashtag,
 }: {
   item: FeedEntry;
   height: number;
@@ -176,6 +248,7 @@ function Slide({
   muted: boolean;
   onToggleMute: () => void;
   onDeleted: () => void;
+  onHashtag: (tag: string) => void;
 }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -210,11 +283,21 @@ function Slide({
       {/* Keeps the white text readable over bright videos. */}
       <LinearGradient pointerEvents="none" colors={['transparent', 'rgba(0,0,0,0.65)']} style={styles.bottomShade} />
       <View pointerEvents="box-none" style={[styles.info, { paddingBottom: Spacing.three }]}>
-        <ThemedText type="smallBold" style={styles.white} numberOfLines={1}>
+        <ThemedText type="smallBold" style={styles.white} numberOfLines={1} onPress={() => router.push(isPost ? `/u/${item.author.id}` : `/shop/${item.shop.slug}`)}>
           {isPost ? item.author.name : item.shop.name}
         </ThemedText>
         <ThemedText type="small" style={styles.white} numberOfLines={2}>
-          {isPost ? item.caption : item.name}
+          {isPost
+            ? item.caption.split(/(#[\p{L}\p{N}\p{M}_]+)/u).map((part, i) =>
+                i % 2 === 1 ? (
+                  <ThemedText key={i} type="smallBold" style={styles.white} onPress={() => onHashtag(part)}>
+                    {part}
+                  </ThemedText>
+                ) : (
+                  part
+                ),
+              )
+            : item.name}
         </ThemedText>
         <ThemedText type="caption" style={styles.dim}>
           {fill(t.feed.views, { n: count(item.stats.views, locale) })}
@@ -262,6 +345,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
   },
+  textCenter: { textAlign: 'center' },
+  shrink: { flexShrink: 1 },
+  searchButton: { position: 'absolute', left: Spacing.three, width: 40, height: 40, borderRadius: 20 },
+  searchChip: {
+    position: 'absolute',
+    left: Spacing.three,
+    maxWidth: '28%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.two + 2,
+    height: 40,
+  },
+  chipText: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 },
+  searchBar: {
+    position: 'absolute',
+    left: Spacing.three,
+    right: Spacing.three,
+    height: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    backgroundColor: '#ffffff',
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.three,
+    zIndex: 10,
+  },
+  searchInput: { flex: 1, color: '#111827', fontSize: 15, fontFamily: FontFamily.regular, paddingVertical: 0 },
   round: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
   info: {
     position: 'absolute',

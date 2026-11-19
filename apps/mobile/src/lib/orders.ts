@@ -1,6 +1,6 @@
 import type { DepositStatus, GuaranteeUnit, OrderStatus, PaymentMethod } from '@talad/shared';
 
-import { API_URL, ApiError, getApiToken } from './api';
+import { filePart, postForm, type LocalFile } from './api';
 
 /** Mirrors the customer order API (GET /me/orders/:number), as the website's `OrderDetail`. */
 export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED' | 'EXPIRED';
@@ -86,19 +86,13 @@ export interface OrderDetail {
 export const orderKey = (number: string) => ['me', 'order', number] as const;
 export const orderPath = (number: string) => `/me/orders/${encodeURIComponent(number)}`;
 
-export type LocalFile = { uri: string; mimeType?: string | null; fileName?: string | null };
+export type { LocalFile };
 
 /** Sends several files under one form field (payment slips: `files`), with the sign-in token. */
 export async function postFiles<T>(path: string, field: string, files: LocalFile[]): Promise<T> {
   const form = new FormData();
-  for (const [i, f] of files.entries()) {
-    form.append(field, { uri: f.uri, name: f.fileName ?? `photo-${i + 1}.jpg`, type: f.mimeType ?? 'image/jpeg' } as unknown as Blob);
-  }
-  const token = getApiToken();
-  const res = await fetch(`${API_URL}${path}`, { method: 'POST', body: form, headers: token ? { Authorization: `Bearer ${token}` } : {} });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, body);
-  return body as T;
+  for (const [i, f] of files.entries()) form.append(field, await filePart(f, `photo-${i + 1}.jpg`));
+  return postForm<T>(path, form);
 }
 
 /** Mirrors `TrackedOrder` (POST /orders/track): where an order is, without anything private. */

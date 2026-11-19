@@ -4,13 +4,15 @@ import { PrismaService } from '../../../prisma/prisma.service.js';
 import { MediaService } from '../../media/media.service.js';
 import { NotificationsService } from '../../notifications/notifications.service.js';
 import type { FeedPostItem } from '../products/products.service.js';
-import { feedPostInclude, publicAvatar, toFeedPost } from './feed-posts.service.js';
+import { avatarFields, feedPostInclude, toFeedPost } from './feed-posts.service.js';
 
 /** A customer's public profile: who they are and their numbers. */
 export interface CustomerProfileView {
   id: string;
   name: string;
   avatarUrl: string | null;
+  /** An uploaded photo: GET /avatars/:id?v=<version>. */
+  avatarVersion: string | null;
   joinedAt: Date;
   followers: number;
   following: number;
@@ -25,7 +27,7 @@ export interface ProfileVideoPage {
 }
 
 export interface ProfileFollowerPage {
-  items: { id: string; name: string; avatarUrl: string | null; followedAt: Date }[];
+  items: { id: string; name: string; avatarUrl: string | null; avatarVersion: string | null; followedAt: Date }[];
   nextCursor: string | null;
   total: number;
 }
@@ -80,7 +82,7 @@ export class ProfilesService {
     return {
       id: c.id,
       name: c.name,
-      avatarUrl: publicAvatar(c),
+      ...avatarFields(c),
       joinedAt: c.createdAt,
       followers: c._count.followers,
       following: c._count.following,
@@ -119,7 +121,7 @@ export class ProfilesService {
     ]);
     const items = rows.slice(0, limit);
     return {
-      items: items.map((r) => ({ id: r.follower.id, name: r.follower.name, avatarUrl: publicAvatar(r.follower), followedAt: r.createdAt })),
+      items: items.map((r) => ({ id: r.follower.id, name: r.follower.name, ...avatarFields(r.follower), followedAt: r.createdAt })),
       nextCursor: rows.length > limit ? items[items.length - 1].follower.id : null,
       total,
     };
@@ -141,7 +143,7 @@ export class ProfilesService {
     ]);
     const items = rows.slice(0, limit);
     return {
-      items: items.map((r) => ({ id: r.following.id, name: r.following.name, avatarUrl: publicAvatar(r.following), followedAt: r.createdAt })),
+      items: items.map((r) => ({ id: r.following.id, name: r.following.name, ...avatarFields(r.following), followedAt: r.createdAt })),
       nextCursor: rows.length > limit ? items[items.length - 1].following.id : null,
       total,
     };

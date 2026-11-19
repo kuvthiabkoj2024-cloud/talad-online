@@ -1,9 +1,11 @@
 import { formatPhone, normalizePhone, OTP_LENGTH, PHONE_COUNTRY_CODE } from '@talad/shared';
 import { Image } from 'expo-image';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
+import { Icon } from '@/components/icon';
+import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { ThemedText } from '@/components/themed-text';
 import { Turnstile, TURNSTILE_SITE_KEY } from '@/components/turnstile';
 import { Button, Card } from '@/components/ui';
@@ -11,20 +13,25 @@ import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { api, ApiError, type CustomerProfile } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { googleIdToken, googleSignInAvailable } from '@/lib/google-auth';
 import { fill, useI18n } from '@/lib/i18n';
 
 type Session = { token: string; customer: CustomerProfile };
 type Verified = Session | { twoFactor: { method: 'TOTP' | 'SMS'; challenge: string } };
 
 /**
- * Sign in with an SMS code, as on the website. A number without an account gets a name field
- * and signs up instead; accounts with two-step verification are asked for that code too.
+ * Sign in or sign up, as on the website: with an SMS code or with Google. Sign up asks for a name
+ * (a number without an account switches to it too) and shows the terms being agreed to; accounts
+ * with two-step verification are asked for that code too. `?next=seller` (Sell on MC Mart) goes on
+ * to the shop application afterwards.
  */
 export default function LoginScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { t, locale } = useI18n();
   const { signIn } = useAuth();
+  const { next } = useLocalSearchParams<{ next?: string }>();
+  const showGoogle = googleSignInAvailable();
   const [phone, setPhone] = useState('');
   const [name, setName] = useState('');
   const [register, setRegister] = useState(false);
@@ -82,7 +89,26 @@ export default function LoginScreen() {
       return;
     }
     await signIn(res.token, res.customer);
-    router.back();
+    if (next === 'seller') router.replace(res.customer.shop ? '/seller' : '/seller/register');
+    else router.back();
+  };
+
+  const withGoogle = () =>
+    run(async () => {
+      let idToken: string | null;
+      try {
+        idToken = await googleIdToken();
+      } catch (e) {
+        return setError(e instanceof Error && e.message === 'PLAY_SERVICES' ? t.login.googlePlayServices : t.login.googleFailed);
+      }
+      if (!idToken) return;
+      await finish(await api<Verified>('/auth/customer/google', { method: 'POST', body: { idToken } }));
+    });
+
+  const switchMode = (toRegister: boolean) => {
+    setRegister(toRegister);
+    setError(null);
+    setStep({ kind: 'phone' });
   };
 
   const verify = () =>
@@ -100,8 +126,8 @@ export default function LoginScreen() {
   const input = [styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.card }];
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.flex, { backgroundColor: theme.background }]}>
-      <Stack.Screen options={{ title: t.login.title }} />
+    <KeyboardAvoid style={[styles.flex, { backgroundColor: theme.background }]}>
+      <Stack.Screen options={{ title: register ? t.login.signUp : t.login.title }} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.brand}>
           <View style={[styles.logoWrap, { backgroundColor: theme.primary }]}>
@@ -111,10 +137,26 @@ export default function LoginScreen() {
         </View>
 
         <Card style={styles.card}>
+          {step.kind === 'phone' && (
+            <View style={[styles.tabs, { backgroundColor: theme.backgroundElement }]} accessibilityRole="tablist">
+              {[false, true].map((reg) => (
+                <Pressable
+                  key={String(reg)}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: register === reg }}
+                  onPress={() => switchMode(reg)}
+                  style={[styles.tab, register === reg && [styles.tabOn, { backgroundColor: theme.card }]]}>
+                  <ThemedText type="smallBold" themeColor={register === reg ? 'primary' : 'textSecondary'}>
+                    {reg ? t.login.signUp : t.login.signIn}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          )}
           {step.kind === 'phone' ? (
             <>
               <ThemedText type="small" themeColor="textSecondary">
-                {t.login.subtitle}
+                {register ? t.login.signUpSubtitle : t.login.subtitle}
               </ThemedText>
               <ThemedText type="smallBold">{t.login.phone}</ThemedText>
               <View style={[styles.phoneRow, { borderColor: theme.border, backgroundColor: theme.card }]}>
@@ -149,6 +191,35 @@ export default function LoginScreen() {
                 onError={setCaptchaError}
               />
               <Button label={t.login.sendCode} loading={busy} onPress={() => void sendCode()} />
+              {showGoogle && (
+                <>
+                  <View style={styles.orRow}>
+                    <View style={[styles.line, { backgroundColor: theme.border }]} />
+                    <ThemedText type="caption" themeColor="textSecondary">
+                      {t.login.or}
+                    </ThemedText>
+                    <View style={[styles.line, { backgroundColor: theme.border }]} />
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={busy}
+                    onPress={() => void withGoogle()}
+                    style={({ pressed }) => [styles.google, { borderColor: theme.border, backgroundColor: theme.card }, pressed && styles.pressed]}>
+                    <ThemedText style={styles.gMark}>G</ThemedText>
+                    <ThemedText type="smallBold">{t.login.withGoogle}</ThemedText>
+                  </Pressable>
+                </>
+              )}
+              <View style={styles.switchRow}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {register ? t.login.haveAccount : t.login.noAccount}
+                </ThemedText>
+                <Pressable accessibilityRole="button" onPress={() => switchMode(!register)} hitSlop={8}>
+                  <ThemedText type="smallBold" themeColor="primary">
+                    {register ? t.login.signIn : t.login.signUp}
+                  </ThemedText>
+                </Pressable>
+              </View>
             </>
           ) : (
             <>
@@ -181,8 +252,47 @@ export default function LoginScreen() {
             </ThemedText>
           )}
         </Card>
+
+        <ThemedText type="caption" themeColor="textSecondary" style={styles.center}>
+          {t.login.termsPrefix}{' '}
+          <ThemedText type="caption" themeColor="primary" style={styles.underline} onPress={() => router.push('/pages/terms')}>
+            {t.login.termsLink}
+          </ThemedText>{' '}
+          {t.login.and}{' '}
+          <ThemedText type="caption" themeColor="primary" style={styles.underline} onPress={() => router.push('/pages/privacy')}>
+            {t.login.privacyLink}
+          </ThemedText>
+        </ThemedText>
+
+        {next !== 'seller' && (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.setParams({ next: 'seller' })}
+            style={({ pressed }) => [styles.sell, { borderColor: theme.border, backgroundColor: theme.card }, pressed && styles.pressed]}>
+            <View style={[styles.sellIcon, { backgroundColor: theme.primarySoft }]}>
+              <Icon name="shop" size={22} color={theme.primary} />
+            </View>
+            <View style={styles.flex}>
+              <ThemedText type="caption" themeColor="textSecondary">
+                {t.login.sellTitle}
+              </ThemedText>
+              <ThemedText type="smallBold" themeColor="primary">
+                {t.login.sell}
+              </ThemedText>
+            </View>
+            <Icon name="chevron-right" size={18} color={theme.textSecondary} />
+          </Pressable>
+        )}
+        {next === 'seller' && (
+          <Card style={[styles.sellNote, { backgroundColor: theme.primarySoft }]}>
+            <Icon name="shop" size={20} color={theme.primary} />
+            <ThemedText type="small" style={styles.flex}>
+              {t.login.sellNote}
+            </ThemedText>
+          </Card>
+        )}
       </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAvoid>
   );
 }
 
@@ -198,4 +308,18 @@ const styles = StyleSheet.create({
   phoneInput: { fontSize: 16, paddingHorizontal: Spacing.three, fontFamily: FontFamily.regular },
   input: { height: 52, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, fontSize: 16, fontFamily: FontFamily.regular },
   code: { fontSize: 24, letterSpacing: 8, textAlign: 'center' },
+  tabs: { flexDirection: 'row', borderRadius: Radius.full, padding: 4 },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: Spacing.two, borderRadius: Radius.full },
+  tabOn: { shadowColor: '#000000', shadowOpacity: 0.08, shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, elevation: 2 },
+  orRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  line: { flex: 1, height: StyleSheet.hairlineWidth },
+  google: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.two, height: 50, borderWidth: 1, borderRadius: Radius.full },
+  gMark: { fontSize: 18, fontWeight: '800', color: '#4285F4' },
+  pressed: { opacity: 0.8 },
+  switchRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: Spacing.one },
+  center: { textAlign: 'center' },
+  underline: { textDecorationLine: 'underline' },
+  sell: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, padding: Spacing.three, borderWidth: 1, borderRadius: Radius.lg },
+  sellIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  sellNote: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, padding: Spacing.three },
 });

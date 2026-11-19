@@ -20,8 +20,11 @@ export const SELLER_CENTER_URL = process.env.NEXT_PUBLIC_SHOP_URL ?? "http://loc
 /** Where an account applies to open a shop (Seller Center asks it to sign in first). */
 export const OPEN_SHOP_URL = `${SELLER_CENTER_URL.replace(/\/$/, "")}/register`;
 
-/** Image URL for a customer's photo: uploaded (served via /api/avatars) or external. */
-export function avatarSrc(c: Pick<CustomerProfile, "id" | "avatarUrl" | "avatarVersion">): string | null {
+/**
+ * Image URL for a customer's photo: uploaded (served via /api/avatars) or external. Works for
+ * public payloads too (video profile, feed, comments, followers), which carry the same fields.
+ */
+export function avatarSrc(c: Pick<CustomerProfile, "id" | "avatarUrl"> & { avatarVersion?: string | null }): string | null {
   return c.avatarVersion ? `/api/avatars/${c.id}?v=${c.avatarVersion}` : c.avatarUrl;
 }
 

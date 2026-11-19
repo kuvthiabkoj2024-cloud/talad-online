@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Breadcrumb } from "@/components/breadcrumb";
 import { ProductList } from "@/components/product-grid";
-import { apiGet, listProducts, type CategoryNode } from "@/lib/api";
+import { apiGet, listProducts, type BrandItem, type CategoryNode } from "@/lib/api";
 import { localized } from "@/lib/format";
 import { getDictionary, getLocale } from "@/app/[lang]/dictionaries";
 
@@ -28,14 +28,35 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: localized(category.name, locale, category.slug) };
 }
 
-/** Category listing (§5): products in the category and its subcategories. `?sort=new` */
+/** Brand slugs as the API makes them (anything else is ignored). */
+const BRAND_SLUG = /^[a-z0-9-]{1,60}$/;
+
+/**
+ * Category listing (§5): products in the category and its subcategories. `?sort=new`;
+ * `?brand=samsung` narrows them to a brand (the chips list brands with products here).
+ */
 export default async function CategoryPage({ params, searchParams }: Props) {
   const locale = await getLocale();
   const { catalog } = await getDictionary();
   const { slug } = await params;
-  const sort = (await searchParams).sort === "new" ? "new" : "popular";
+  const sp = await searchParams;
+  const sort = sp.sort === "new" ? "new" : "popular";
+  const brand = typeof sp.brand === "string" && BRAND_SLUG.test(sp.brand) ? sp.brand : undefined;
   const { category, parent } = await findCategory(slug);
-  const products = (await listProducts({ category: slug, sort, limit: 60 })) ?? [];
+  const [products, brands] = await Promise.all([
+    listProducts({ category: slug, sort, limit: 60, ...(brand && { brand }) }).then((p) => p ?? []),
+    apiGet<BrandItem[]>(`/brands?category=${encodeURIComponent(slug)}`).then((b) => b ?? []),
+  ]);
+  /** This page with a sort and brand (each dropped when it's the default). */
+  const href = (next: { sort?: "popular" | "new"; brand?: string | null }) => {
+    const params = new URLSearchParams();
+    const s = next.sort ?? sort;
+    const b = next.brand === undefined ? brand : next.brand;
+    if (s === "new") params.set("sort", "new");
+    if (b) params.set("brand", b);
+    const q = params.toString();
+    return `/${locale}/c/${slug}${q ? `?${q}` : ""}`;
+  };
   const name = localized(category.name, locale, category.slug);
   const siblings = parent ? parent.children : category.children;
 
@@ -55,7 +76,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
           {(["popular", "new"] as const).map((s) => (
             <Link
               key={s}
-              href={s === "popular" ? `/${locale}/c/${slug}` : `/${locale}/c/${slug}?sort=new`}
+              href={href({ sort: s })}
               aria-current={sort === s ? "page" : undefined}
               className={`rounded-full px-4 py-1.5 font-medium ${sort === s ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
             >
@@ -84,6 +105,27 @@ export default async function CategoryPage({ params, searchParams }: Props) {
             </Link>
           ))}
         </div>
+      )}
+      {/* Brands with products in this category: category → brand. */}
+      {brands.length > 0 && (
+        <nav aria-label={catalog.brand} className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1">
+          <span className="shrink-0 text-sm font-medium text-muted-foreground">{catalog.brand}:</span>
+          {[{ slug: null, name: catalog.allBrands }, ...brands].map((b) => {
+            const active = (b.slug ?? undefined) === brand;
+            return (
+              <Link
+                key={b.slug ?? "all"}
+                href={href({ brand: b.slug })}
+                aria-current={active ? "page" : undefined}
+                className={`shrink-0 rounded-full border px-3.5 py-1 text-sm ${
+                  active ? "border-primary bg-primary text-primary-foreground" : "bg-card hover:border-primary hover:text-primary"
+                }`}
+              >
+                {b.name}
+              </Link>
+            );
+          })}
+        </nav>
       )}
       {products.length === 0 ? (
         <p className="rounded-2xl border bg-card px-6 py-12 text-center text-muted-foreground">{catalog.empty}</p>

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import type { ProfileFollowerPage } from "@/lib/api";
+import { avatarSrc } from "@/lib/customer";
 import { loadProfilePeople } from "@/lib/profile-actions";
 import { initialsOf } from "./profile-header";
 
@@ -59,9 +60,9 @@ export function ProfileFollowers({
           <li key={f.id}>
             <Link href={`/${locale}/u/${f.id}`} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/60">
               <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-soft text-sm font-bold text-primary ring-2 ring-primary-soft">
-                {f.avatarUrl ? (
+                {avatarSrc(f) ? (
                   // eslint-disable-next-line @next/next/no-img-element -- social profile picture
-                  <img src={f.avatarUrl} alt="" referrerPolicy="no-referrer" className="size-full object-cover" />
+                  <img src={avatarSrc(f)!} alt="" referrerPolicy="no-referrer" className="size-full object-cover" />
                 ) : (
                   initialsOf(f.name)
                 )}

@@ -78,6 +78,8 @@ export interface ProductDetail extends Omit<ProductCard, "imageUrl" | "shop"> {
   options: { name: string; values: string[] }[];
   variants: ProductVariantOption[];
   unit: { code: string; name: LocalizedText };
+  /** Null when the shop didn't give one. */
+  brand?: { slug: string; name: string } | null;
   category: {
     slug: string;
     name: LocalizedText;
@@ -99,9 +101,18 @@ export interface ProductDetail extends Omit<ProductCard, "imageUrl" | "shop"> {
 export interface ProductQuery {
   sort?: "popular" | "new";
   category?: string;
+  /** Brand slug (with `category`: the category page's brand filter). */
+  brand?: string;
   shop?: string;
   exclude?: string;
   limit?: number;
+}
+
+/** A brand with products in a category (GET /brands?category=). */
+export interface BrandItem {
+  slug: string;
+  name: string;
+  productCount: number;
 }
 
 export function listProducts(query: ProductQuery): Promise<ProductCard[] | null> {
@@ -141,7 +152,7 @@ export interface VideoComment {
   createdAt: string;
   replyCount: number;
   /** `isShop`: the shop answering (its name and logo). */
-  author: { id: string; name: string; avatarUrl: string | null; isShop: boolean };
+  author: { id: string; name: string; avatarUrl: string | null; avatarVersion?: string | null; isShop: boolean };
 }
 
 export interface VideoCommentPage {
@@ -156,7 +167,7 @@ export interface FeedPostItem {
   videoUrl: string;
   caption: string;
   createdAt: string;
-  author: { id: string; name: string; avatarUrl: string | null };
+  author: { id: string; name: string; avatarUrl: string | null; avatarVersion?: string | null };
   stats: PostStats;
 }
 
@@ -175,6 +186,8 @@ export interface CustomerProfile {
   id: string;
   name: string;
   avatarUrl: string | null;
+  /** An uploaded photo (see avatarSrc). */
+  avatarVersion?: string | null;
   joinedAt: string;
   followers: number;
   following: number;
@@ -205,7 +218,7 @@ export interface LikedVideoPage {
 }
 
 export interface ProfileFollowerPage {
-  items: { id: string; name: string; avatarUrl: string | null; followedAt: string }[];
+  items: { id: string; name: string; avatarUrl: string | null; avatarVersion?: string | null; followedAt: string }[];
   nextCursor: string | null;
   total: number;
 }
@@ -221,6 +234,10 @@ export interface FeedPage {
 /** The feed's two tabs: shops' product videos and customers' own videos. */
 export type FeedType = "shop" | "customer";
 
-export function feedPath(type: FeedType, cursor?: string): string {
-  return `/products/feed?type=${type}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+/** `q`: search the videos (title, caption and #hashtags, shop, brand, poster). */
+export function feedPath(type: FeedType, cursor?: string, q?: string): string {
+  return `/products/feed?type=${type}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}${q ? `&q=${encodeURIComponent(q)}` : ""}`;
 }
+
+/** A feed search as typed in the URL: trimmed, at most 100 characters; "" = none. */
+export const feedQuery = (q: unknown) => (typeof q === "string" ? q.trim().slice(0, 100) : "");

@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { KeyboardAvoid } from '@/components/keyboard-avoid';
 import { Icon } from '@/components/icon';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -13,7 +14,7 @@ export function Sheet({ visible, title, onClose, children }: { visible: boolean;
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.fill}>
+      <KeyboardAvoid style={styles.fill}>
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="close" />
         <View style={[styles.sheet, { backgroundColor: theme.card, paddingBottom: insets.bottom + Spacing.three }]}>
           <View style={styles.head}>
@@ -28,7 +29,7 @@ export function Sheet({ visible, title, onClose, children }: { visible: boolean;
             {children}
           </ScrollView>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAvoid>
     </Modal>
   );
 }

@@ -1,3 +1,4 @@
+import type { BroadcastAudience, BroadcastChannel, BroadcastContent, BroadcastRepeat, BroadcastStatus, BroadcastType } from '@talad/shared'
 import type { AdminPermission, Commission, DepositStatus, KycDocumentType, Locale, OrderStatus, PaymentMethod, PointTier, ProductStatus, ShopOrderTab } from '@talad/shared'
 
 export type LocalizedText = Partial<Record<Locale, string>>
@@ -446,16 +447,26 @@ export interface Settings {
   readOnly: { currency: string; timezone: string; locales: string[]; taxRate: number }
 }
 
-export interface Announcement {
+/** An admin notification (services/api broadcasts): who, channels, schedule and the last send. */
+export interface Broadcast {
   id: string
-  audience: 'customers' | 'sellers'
-  type: 'PROMOTION' | 'SYSTEM'
-  title: string
-  titleLo?: string
-  link?: string
-  recipients: number
-  sentAt: string
-  by: string | null
+  audience: BroadcastAudience
+  target: { name: string; phone: string | null } | null
+  type: BroadcastType
+  channels: BroadcastChannel[]
+  content: BroadcastContent
+  link: string | null
+  repeat: BroadcastRepeat
+  weekdays: number[]
+  startAt: string
+  endAt: string | null
+  status: BroadcastStatus
+  nextRunAt: string | null
+  lastRunAt: string | null
+  runs: number
+  lastResult: { recipients: number; inApp: number; pushSent: number; pushFailed: number; smsSent: number; smsFailed: number; error?: string } | null
+  createdBy: string | null
+  createdAt: string
 }
 
 export interface AuditEntry {

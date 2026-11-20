@@ -334,7 +334,7 @@ function Editor({ product }: { product?: ShopProductDetail }) {
   );
 
   return (
-    <KeyboardAvoid style={styles.flex}>
+    <KeyboardAvoid bottomInset={insets.bottom} style={styles.flex}>
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 120 + insets.bottom }]} keyboardShouldPersistTaps="handled">
         {product?.status === 'REJECTED' && product.rejectionReason && (
           <Notice tone="danger">{fill(e.rejectedNote, { reason: product.rejectionReason })}</Notice>

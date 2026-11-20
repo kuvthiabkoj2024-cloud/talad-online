@@ -867,6 +867,7 @@ const lo = {
     profile: 'ໂປຣໄຟລ໌ຮ້ານ',
     security: 'ຄວາມປອດໄພ',
     about: 'ກ່ຽວກັບ MC Mart',
+    notifications: 'ການແຈ້ງເຕືອນ',
   },
   shopStatus: { PENDING: 'ລໍຖ້າການອະນຸມັດ', APPROVED: 'ຮ້ານຄ້າອອນລາຍ', REJECTED: 'ຄຳຮ້ອງຖືກປະຕິເສດ', SUSPENDED: 'ຖືກລະງັບ' },
   home: {
@@ -1991,6 +1992,7 @@ const en: SellerStrings = {
     profile: 'Shop profile',
     security: 'Security',
     about: 'About MC Mart',
+    notifications: 'Notifications',
   },
   shopStatus: { PENDING: 'Waiting for approval', APPROVED: 'Open for business', REJECTED: 'Application rejected', SUSPENDED: 'Suspended' },
   home: {

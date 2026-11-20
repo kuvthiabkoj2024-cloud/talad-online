@@ -228,7 +228,7 @@ function ProfileForm({ profile: p, onImage }: { profile: ShopProfile; onImage: (
   );
 
   return (
-    <KeyboardAvoid style={styles.flex}>
+    <KeyboardAvoid bottomInset={insets.bottom} style={styles.flex}>
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 110 + insets.bottom }]} keyboardShouldPersistTaps="handled">
         <Card style={sellerStyles.card}>
           <ThemedText type="smallBold">{t.images}</ThemedText>

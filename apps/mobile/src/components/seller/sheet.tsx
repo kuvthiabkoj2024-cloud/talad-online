@@ -14,7 +14,7 @@ export function Sheet({ visible, title, onClose, children }: { visible: boolean;
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoid style={styles.fill}>
+      <KeyboardAvoid bottomInset={insets.bottom} style={styles.fill}>
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="close" />
         <View style={[styles.sheet, { backgroundColor: theme.card, paddingBottom: insets.bottom + Spacing.three }]}>
           <View style={styles.head}>

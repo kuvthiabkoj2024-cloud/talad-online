@@ -14,6 +14,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageHeading } from "@/components/account/page-heading";
 import { MarkAllReadButton, NotificationRow } from "@/components/notifications/notification-controls";
+import { PromotionsSwitch } from "@/components/notifications/promotions-switch";
 import { PushCard } from "@/components/notifications/push-card";
 import { Pagination } from "@/components/pagination";
 import { ProductImage } from "@/components/product-image";
@@ -97,7 +98,10 @@ export default async function NotificationsPage({ searchParams }: PageProps<"/[l
 
   const apiQuery = new URLSearchParams({ page: String(page) });
   if (active !== "all") apiQuery.set("tab", active);
-  const data = await apiGetAsCustomer<NotificationList>(`/me/notifications?${apiQuery}`);
+  const [data, settings] = await Promise.all([
+    apiGetAsCustomer<NotificationList>(`/me/notifications?${apiQuery}`),
+    apiGetAsCustomer<{ promotions: boolean }>("/me/notification-settings"),
+  ]);
   if (data && page > data.totalPages) redirect(listHref(active, data.totalPages));
   const now = requestTime();
   const groups = groupByDay(data?.items ?? [], now, dict);
@@ -126,6 +130,7 @@ export default async function NotificationsPage({ searchParams }: PageProps<"/[l
       />
 
       <PushCard locale={locale} dict={dict} />
+      {settings && <PromotionsSwitch initial={settings.promotions} dict={dict} />}
 
       <nav
         aria-label={dict.title}

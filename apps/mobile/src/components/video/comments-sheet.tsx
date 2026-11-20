@@ -88,7 +88,7 @@ export function CommentsSheet({
 
   return (
     <Modal visible={!!target} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoid style={styles.fill}>
+      <KeyboardAvoid bottomInset={insets.bottom} style={styles.fill}>
         <Pressable style={styles.backdrop} onPress={onClose} />
         <View style={[styles.sheet, { backgroundColor: theme.card, paddingBottom: insets.bottom + Spacing.two }]}>
           <View style={styles.head}>

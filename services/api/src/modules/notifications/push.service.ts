@@ -5,6 +5,7 @@ import webpush from 'web-push';
 import type { Env } from '../../config/env.validation.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { RealtimeService, type Audience } from '../realtime/realtime.service.js';
+import { CHAT_TITLE, PROMO_TYPES } from './push-common.js';
 
 /** A browser's `PushSubscription.toJSON()`, plus the app's language. */
 export interface PushSubscriptionInput {
@@ -25,10 +26,6 @@ interface PushPayload {
   badge: number;
 }
 
-const CHAT_TITLE: Record<Locale, (name: string) => string> = {
-  lo: (name) => `ຂໍ້ຄວາມໃໝ່ຈາກ ${name}`,
-  en: (name) => `New message from ${name}`,
-};
 /** Newest browsers per recipient; older ones are usually gone anyway. */
 const MAX_DEVICES = 10;
 const DAY_S = 86_400;
@@ -93,6 +90,11 @@ export class PushService implements OnModuleInit, OnModuleDestroy {
     for (const audience of to) {
       const [kind, id] = audience.split(':') as ['customer' | 'shop' | 'admin', string];
       if (kind === 'admin') continue;
+      // Customers who turned promotions off (Profile → Notifications) get none by push.
+      if (kind === 'customer' && event.kind === 'notification' && PROMO_TYPES.has(event.type)) {
+        const c = await this.prisma.customer.findUnique({ where: { id }, select: { promoNotifications: true } });
+        if (!c?.promoNotifications) continue;
+      }
       const subs = await this.prisma.pushSubscription.findMany({
         where: kind === 'customer' ? { customerId: id } : { shopId: id },
         orderBy: { updatedAt: 'desc' },
@@ -103,6 +105,24 @@ export class PushService implements OnModuleInit, OnModuleDestroy {
       const badge = await this.unread(kind, id);
       await Promise.all(subs.map((s) => this.send(s, { ...payloadFor(event, kind, isLocale(s.locale) ? s.locale : 'lo', this.sellerUrl), badge })));
     }
+  }
+
+  /**
+   * The same notification to many accounts' browsers at once (admin broadcasts): customers by
+   * id, or shops by id. The caller has already left out customers who turned promotions off.
+   */
+  async sendToMany(kind: 'customer' | 'shop', ids: string[], event: Extract<RealtimeEvent, { kind: 'notification' }>): Promise<{ sent: number; failed: number }> {
+    const count = { sent: 0, failed: 0 };
+    if (!this.publicKey || !ids.length) return count;
+    const subs = await this.prisma.pushSubscription.findMany({
+      where: kind === 'customer' ? { customerId: { in: ids } } : { shopId: { in: ids } },
+      select: { id: true, endpoint: true, p256dh: true, auth: true, locale: true },
+    });
+    for (const s of subs) {
+      const ok = await this.send(s, { ...payloadFor(event, kind, isLocale(s.locale) ? s.locale : 'lo', this.sellerUrl), badge: 0 });
+      count[ok ? 'sent' : 'failed']++;
+    }
+    return count;
   }
 
   /** What the app icon's number shows: unread notifications plus unread chat messages. */
@@ -117,7 +137,8 @@ export class PushService implements OnModuleInit, OnModuleDestroy {
     return notifications + ((kind === 'customer' ? chats._sum.customerUnread : chats._sum.shopUnread) ?? 0);
   }
 
-  private async send(sub: { id: string; endpoint: string; p256dh: string; auth: string }, payload: PushPayload): Promise<void> {
+  /** True when the push service took it. */
+  private async send(sub: { id: string; endpoint: string; p256dh: string; auth: string }, payload: PushPayload): Promise<boolean> {
     try {
       await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, JSON.stringify(payload), {
         TTL: DAY_S,
@@ -125,11 +146,13 @@ export class PushService implements OnModuleInit, OnModuleDestroy {
         // A chat's later message replaces one the phone hasn't fetched yet.
         ...(payload.tag.startsWith('chat-') && { topic: payload.tag.slice(5).replaceAll('-', '') }),
       });
+      return true;
     } catch (e) {
       const status = (e as { statusCode?: number }).statusCode;
       // The browser unsubscribed or the subscription expired: stop sending to it.
       if (status === 404 || status === 410) await this.prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {});
       else this.logger.warn(`Push failed (${status ?? (e instanceof Error ? e.message : String(e))})`);
+      return false;
     }
   }
 }

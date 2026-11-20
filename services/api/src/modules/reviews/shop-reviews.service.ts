@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { MediaService } from '../media/media.service.js';
 
 export interface ShopReview {
@@ -32,6 +33,7 @@ export class ShopReviewsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly media: MediaService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async list(
@@ -111,9 +113,25 @@ export class ShopReviewsService {
         ? review.targetId === shopId
         : !!(await this.prisma.product.findFirst({ where: { id: review.targetId, shopId }, select: { id: true } })));
     if (!owns) throw new NotFoundException('Review not found');
-    const saved = await this.prisma.review.update({
-      where: { id },
-      data: { reply, repliedAt: reply ? new Date() : null },
+    const saved = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.review.update({ where: { id }, data: { reply, repliedAt: reply ? new Date() : null } });
+      // The customer hears about the shop's first reply (not later edits or removals).
+      if (reply && !review.reply) {
+        const shop = await tx.shop.findUnique({ where: { id: shopId }, select: { name: true, slug: true } });
+        const product = review.target === 'PRODUCT' ? await tx.product.findUnique({ where: { id: review.targetId }, select: { slug: true } }) : null;
+        const name = shop?.name ?? '';
+        await this.notifications.send(
+          tx,
+          review.customerId,
+          'SYSTEM',
+          {
+            lo: { title: `${name} ຕອບລີວິວຂອງທ່ານ`, body: reply.slice(0, 200) },
+            en: { title: `${name} replied to your review`, body: reply.slice(0, 200) },
+          },
+          shop ? { link: product ? `/p/${shop.slug}/${product.slug}` : `/s/${shop.slug}` } : {},
+        );
+      }
+      return row;
     });
     return { reply: saved.reply, repliedAt: saved.repliedAt };
   }

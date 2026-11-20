@@ -924,7 +924,12 @@
     "pushTurnOff": "Turn off",
     "pushDenied": "Notifications are blocked. Allow them in your browser's site settings.",
     "pushInstall": "On iPhone and iPad, add MC Mart to your Home Screen first to get notifications.",
-    "pushFailed": "Couldn't turn them on. Please try again."
+    "pushFailed": "Couldn't turn them on. Please try again.",
+    "promoTitle": "Promotions and MC Mart news",
+    "promoBody": "Get promotions by push and SMS. When off, they still show in your notifications. Order and chat notifications always come.",
+    "promoOn": "On",
+    "promoOff": "Off",
+    "promoFailed": "Couldn't save. Please try again."
   },
   "catalog": {
     "allCategories": "All categories",

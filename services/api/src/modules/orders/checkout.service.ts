@@ -298,6 +298,7 @@ export class CheckoutService {
               });
             }
           }
+          await this.warnLowStock(tx, lines);
 
           if (couponRule) await this.redeemCoupon(tx, couponRule, customerId);
           // Spend the points (a balance that dropped since the quote refuses the order).
@@ -629,5 +630,33 @@ export class CheckoutService {
   private async defaultCommissionRate(): Promise<number> {
     const setting = await this.prisma.setting.findUnique({ where: { key: 'defaultCommissionRate' } });
     return typeof setting?.value === 'number' ? setting.value : DEFAULT_COMMISSION_RATE;
+  }
+
+  /**
+   * This order took a product (or option) down to the shop's low-stock level: warn the shop once,
+   * as it crosses the line (not on every later order).
+   */
+  private async warnLowStock(tx: Prisma.TransactionClient, lines: { productId: string; variantId: string | null; quantity: number }[]): Promise<void> {
+    for (const l of lines) {
+      const p = await tx.product.findUnique({
+        where: { id: l.productId },
+        select: { id: true, name: true, shopId: true, stock: true, lowStockThreshold: true, variants: l.variantId ? { where: { id: l.variantId }, select: { stock: true, attributes: true } } : false },
+      });
+      if (!p) continue;
+      const left = l.variantId ? (p.variants?.[0]?.stock ?? 0) : p.stock;
+      if (left > p.lowStockThreshold || left + l.quantity <= p.lowStockThreshold) continue;
+      const option = l.variantId ? Object.values((p.variants?.[0]?.attributes ?? {}) as Record<string, string>).join(' / ') : '';
+      const name = option ? `${p.name} (${option})` : p.name;
+      await this.notifications.toShop(
+        tx,
+        p.shopId,
+        'ACTIVITY',
+        {
+          lo: { title: left === 0 ? `ສິນຄ້າໝົດ: ${name}` : `ສິນຄ້າໃກ້ໝົດ: ${name}`, body: left === 0 ? 'ລູກຄ້າຊື້ບໍ່ໄດ້ຈົນກວ່າທ່ານເພີ່ມສະຕັອກ.' : `ເຫຼືອ ${left} ຊິ້ນ. ເພີ່ມສະຕັອກກ່ອນໝົດ.` },
+          en: { title: left === 0 ? `Sold out: ${name}` : `Low stock: ${name}`, body: left === 0 ? "Customers can't buy it until you add stock." : `${left} left. Add stock before it runs out.` },
+        },
+        { link: `/products/${p.id}` },
+      );
+    }
   }
 }

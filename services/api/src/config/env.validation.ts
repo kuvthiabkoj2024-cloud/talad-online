@@ -167,6 +167,14 @@ class EnvironmentVariables {
   VAPID_SUBJECT: string = 'mailto:support@mcmart.app';
 
   /**
+   * Expo push (the phone app): an access token from expo.dev, needed only when the project has
+   * "Enhanced security for push notifications" on. Unset = send without it.
+   */
+  @IsOptional()
+  @IsString()
+  EXPO_ACCESS_TOKEN?: string;
+
+  /**
    * Outgoing email over SMTP (e.g. Gmail with an app password: smtp.gmail.com, 465). Unset
    * host: emails are only written to the log.
    */

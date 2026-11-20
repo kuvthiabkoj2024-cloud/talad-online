@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -6,6 +7,8 @@ import Animated, { interpolate, useAnimatedStyle, type SharedValue } from 'react
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/icon';
+import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { ThemedText } from '@/components/themed-text';
 import { BrandGreen, Radius, Spacing } from '@/constants/theme';
 import { useI18n } from '@/lib/i18n';
@@ -19,6 +22,13 @@ const SEARCH_ROW = Spacing.three + 46 + 6;
  * while scrolling down and brings it back on the way up, like the website.
  */
 export function AppHeader({ searchShown }: { searchShown?: SharedValue<number> }) {
+  const { customer } = useAuth();
+  const unread = useQuery({
+    queryKey: ['me', 'notifications-unread'],
+    queryFn: () => api<{ count: number }>('/me/notifications/unread-count'),
+    enabled: !!customer,
+    refetchInterval: 30_000,
+  });
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t, locale, setLocale } = useI18n();
@@ -39,6 +49,20 @@ export function AppHeader({ searchShown }: { searchShown?: SharedValue<number> }
           hitSlop={6}
           style={({ pressed }) => [styles.round, pressed && styles.pressed]}>
           <Icon name="track" size={20} color="#ffffff" />
+        </Pressable>
+        {/* Notifications, with the unread count (sign in first). */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t.notif.title}
+          onPress={() => router.push(customer ? '/notifications' : '/login')}
+          hitSlop={6}
+          style={({ pressed }) => [styles.round, pressed && styles.pressed]}>
+          <Icon name="bell" size={20} color="#ffffff" />
+          {!!unread.data?.count && (
+            <View style={styles.bellBadge}>
+              <ThemedText style={styles.bellText}>{unread.data.count > 99 ? '99+' : unread.data.count}</ThemedText>
+            </View>
+          )}
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -87,6 +111,8 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.one,
   },
   onGreen: { color: '#ffffff' },
+  bellBadge: { position: 'absolute', top: -5, right: -6, height: 18, minWidth: 18, borderRadius: 9, paddingHorizontal: 3, backgroundColor: '#dc2626', borderWidth: 1.5, borderColor: '#ffffff', alignItems: 'center', justifyContent: 'center' },
+  bellText: { color: '#ffffff', fontSize: 9, lineHeight: 12, fontWeight: '800', includeFontPadding: false },
   round: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.45)', alignItems: 'center', justifyContent: 'center' },
   search: {
     shadowColor: '#000000',

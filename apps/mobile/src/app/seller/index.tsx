@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { Stack, useRouter, type Href } from 'expo-router';
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
@@ -10,6 +11,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
 import { count } from '@/lib/format';
 import { fill } from '@/lib/i18n';
+import { api } from '@/lib/api';
 import { useMyShop, useShopBadges, useShopSummary, useShopUnread } from '@/lib/seller';
 import { useSellerI18n } from '@/lib/seller-i18n';
 
@@ -17,6 +19,7 @@ type ToolKey = keyof ReturnType<typeof useSellerI18n>['s']['nav'];
 
 /** The Seller Center's menu, in its order. `href`: built in the app; the rest are on their way. */
 const TOOLS: { key: ToolKey; icon: IconName; href?: Href }[] = [
+  { key: 'notifications', icon: 'bell', href: '/seller/notifications' },
   { key: 'stats', icon: 'chart', href: '/seller/stats' },
   { key: 'products', icon: 'package', href: '/seller/products' },
   { key: 'videos', icon: 'video', href: '/seller/videos' },
@@ -49,6 +52,7 @@ export default function SellerHomeScreen() {
   const summary = useShopSummary();
   const badges = useShopBadges();
   const unread = useShopUnread();
+  const inbox = useQuery({ queryKey: ['seller', 'inbox-unread'], queryFn: () => api<{ count: number }>('/me/shop/notifications/unread-count'), enabled: owner, refetchInterval: 30_000 });
 
   if (!owner) {
     return (
@@ -63,7 +67,7 @@ export default function SellerHomeScreen() {
     );
   }
 
-  const badge: Partial<Record<ToolKey, number>> = { orders: badges.data?.orders, videos: badges.data?.videos, messages: unread.data };
+  const badge: Partial<Record<ToolKey, number>> = { orders: badges.data?.orders, videos: badges.data?.videos, messages: unread.data, notifications: inbox.data?.count };
   const o = summary.data?.orders;
   const counters: { label: string; value?: number; tab: string }[] = [
     { label: s.home.toPay, value: o?.toPay, tab: 'to-pay' },

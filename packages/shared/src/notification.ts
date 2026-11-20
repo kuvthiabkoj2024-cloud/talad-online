@@ -79,3 +79,55 @@ export interface NotificationData {
   /** Text per language; `title` / `body` are the fallback. */
   i18n?: Partial<Record<Locale, { title: string; body: string }>>;
 }
+
+// ─── Admin broadcasts (in-app / push / SMS, now, later or repeating) ─────────
+
+/** Everyone, or one person: all customers, all sellers (approved shops), one customer, one shop. */
+export const BROADCAST_AUDIENCES = ['customers', 'sellers', 'customer', 'shop'] as const;
+export type BroadcastAudience = (typeof BROADCAST_AUDIENCES)[number];
+/** In-app inbox, push (phones and the website/PWA) and SMS (one person only: it costs money). */
+export const BROADCAST_CHANNELS = ['IN_APP', 'PUSH', 'SMS'] as const;
+export type BroadcastChannel = (typeof BROADCAST_CHANNELS)[number];
+export const BROADCAST_TYPES = ['PROMOTION', 'SYSTEM'] as const;
+export type BroadcastType = (typeof BROADCAST_TYPES)[number];
+/** Once (now or at a time), every day, or on chosen weekdays, at the same time of day. */
+export const BROADCAST_REPEATS = ['ONCE', 'DAILY', 'WEEKLY'] as const;
+export type BroadcastRepeat = (typeof BROADCAST_REPEATS)[number];
+export const BROADCAST_STATUSES = ['ACTIVE', 'PAUSED', 'DONE'] as const;
+export type BroadcastStatus = (typeof BROADCAST_STATUSES)[number];
+
+/** Laos is UTC+7 all year (no daylight saving): schedules are set in Vientiane time. */
+export const VIENTIANE_OFFSET_MS = 7 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * When a broadcast sends next, strictly after `after`. `startAt` is the first send (date and
+ * time); repeats go out at the same Vientiane time of day: every day (DAILY) or on `weekdays`
+ * (WEEKLY, 0 = Sunday … 6 = Saturday, in Vientiane), never after `endAt`. A ONCE broadcast only
+ * has `startAt`. Null = no more sends.
+ */
+export function nextBroadcastRun(
+  schedule: { repeat: BroadcastRepeat; startAt: Date; endAt?: Date | null; weekdays?: readonly number[] },
+  after: Date,
+): Date | null {
+  const { repeat, startAt, endAt, weekdays = [] } = schedule;
+  if (repeat === 'ONCE') return startAt.getTime() > after.getTime() ? startAt : null;
+  // Work on Vientiane "wall clock" time: shifted by +7 h, then read with UTC getters.
+  const local = (d: Date) => new Date(d.getTime() + VIENTIANE_OFFSET_MS);
+  const start = local(startAt);
+  const timeOfDay = start.getTime() - Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
+  const from = local(new Date(Math.max(after.getTime(), startAt.getTime() - 1)));
+  let day = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
+  // At most a week ahead finds any weekday; one more day covers "today's time already passed".
+  for (let i = 0; i < 9; i++, day += DAY_MS) {
+    const at = new Date(day + timeOfDay - VIENTIANE_OFFSET_MS);
+    if (at.getTime() <= after.getTime() || at.getTime() < startAt.getTime()) continue;
+    if (endAt && at.getTime() > endAt.getTime()) return null;
+    if (repeat === 'WEEKLY' && !weekdays.includes(new Date(day).getUTCDay())) continue;
+    return at;
+  }
+  return null;
+}
+
+/** A broadcast's text in both languages. */
+export type BroadcastContent = Record<'lo' | 'en', { title: string; body: string }>;

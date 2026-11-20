@@ -207,7 +207,7 @@ export default function CheckoutScreen() {
   const dim = requoting ? styles.dim : undefined;
 
   return (
-    <KeyboardAvoid style={[styles.flex, { backgroundColor: theme.background }]}>
+    <KeyboardAvoid bottomInset={insets.bottom} style={[styles.flex, { backgroundColor: theme.background }]}>
       <Stack.Screen options={{ title: c.title }} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {blocked && (

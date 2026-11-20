@@ -27,6 +27,6 @@ import { SocialIdentityService } from './social-identity.service.js';
     SmsService,
     SocialIdentityService,
   ],
-  exports: [AdminAuthGuard, CustomerAuthGuard, EmailService, SessionService, ShopOwnerGuard],
+  exports: [AdminAuthGuard, CustomerAuthGuard, EmailService, SessionService, ShopOwnerGuard, SmsService],
 })
 export class AuthModule {}

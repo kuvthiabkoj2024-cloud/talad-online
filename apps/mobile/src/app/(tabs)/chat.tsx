@@ -139,7 +139,7 @@ export default function ChatScreen() {
   const ready = (!!text.trim() || !!photo) && !pending;
 
   return (
-    <KeyboardAvoid style={[styles.flex, { backgroundColor: theme.background }]}>
+    <KeyboardAvoid bottomInset={insets.bottom} style={[styles.flex, { backgroundColor: theme.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.two, backgroundColor: theme.card, borderBottomColor: theme.border }]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => (router.canGoBack() ? router.back() : router.navigate('/'))} hitSlop={8}>
           <Icon name="back" size={24} color={theme.text} />

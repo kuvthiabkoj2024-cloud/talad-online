@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 
 import { api, setApiToken, setUnauthorizedHandler, type CustomerProfile } from './api';
+import { unregisterPush } from './push-notifications';
 import { storage } from './storage';
 
 const KEY = 'mcmart.session';
@@ -59,6 +60,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
+    // While still signed in: this phone stops getting the account's pushes.
+    await unregisterPush();
     await api('/auth/customer/logout', { method: 'POST' }).catch(() => {});
     await forget();
   }, [forget]);

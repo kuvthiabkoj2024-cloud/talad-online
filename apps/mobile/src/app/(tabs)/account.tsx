@@ -28,6 +28,7 @@ export default function AccountScreen() {
   const { mode, setMode } = useThemeMode();
   const { customer, signOut } = useAuth();
   // New orders, video updates and unread customer chats in the shop (approved shops only).
+  const notifUnread = useQuery({ queryKey: ['me', 'notifications-unread'], queryFn: () => api<{ count: number }>('/me/notifications/unread-count'), enabled: !!customer, refetchInterval: 30_000 });
   const shopAttention = useShopAttention(customer?.shop?.status === 'APPROVED');
   const unread = useQuery({ queryKey: ['me', 'messages-unread'], queryFn: () => api<{ count: number }>('/me/conversations/unread-count'), enabled: !!customer, refetchInterval: 30_000 });
   const orderCounts = useQuery({
@@ -211,6 +212,8 @@ export default function AccountScreen() {
               </View>
             }
           />
+          {customer && <Row icon="bell" label={t.notif.title} badge={notifUnread.data?.count} divider onPress={() => router.push('/notifications')} />}
+          {customer && <Row icon="megaphone" label={t.notif.settings} sub={t.notif.settingsSub} divider onPress={() => router.push('/notification-settings')} />}
           <Row icon="shield" label={t.account.about} sub={t.account.aboutSub} divider onPress={() => router.push('/about')} />
           <Row icon="globe" label={t.account.website} onPress={() => void WebBrowser.openBrowserAsync(`${SITE_URL}/${locale}`)} divider />
         </Card>

@@ -207,7 +207,7 @@ export function Conversation({ side }: { side: ChatSide }) {
   // The other side: the shop (for the customer) or the customer (for the shop).
   const other = side === 'shop' ? thread.data?.customer?.name : thread.data?.shop?.name;
   return (
-    <KeyboardAvoid style={[styles.flex, { backgroundColor: theme.background }]}>
+    <KeyboardAvoid bottomInset={insets.bottom} style={[styles.flex, { backgroundColor: theme.background }]}>
       <Stack.Screen options={{ title: other ?? t.msg.title }} />
       {thread.isPending && <Loading />}
       {thread.isError && (

@@ -14,6 +14,7 @@ import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { Colors, FontFamily } from '@/constants/theme';
+import { PushHandler } from '@/components/push-handler';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { LocaleProvider } from '@/lib/i18n';
 import { ThemeModeProvider } from '@/lib/theme-mode';
@@ -81,6 +82,7 @@ function Navigation() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ presentation: 'modal' }} />
       </Stack>
+      <PushHandler />
     </ThemeProvider>
   );
 }

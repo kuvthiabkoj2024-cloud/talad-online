@@ -165,6 +165,7 @@ model AdminUser {
 
   auditLogs     AuditLog[]
   notifications Notification[]
+  broadcasts    Broadcast[]
 
   role AdminRole @relation(fields: [roleId], references: [id])
 
@@ -239,56 +240,56 @@ model AuditLog {
 /// A shop belongs to a platform account (Customer). The owner signs in with that
 /// account — the same login they buy with — so shops hold no credentials of their own.
 model Shop {
-  id                   String     @id @default(uuid(7))
-  slug                 String     @unique
+  id                          String     @id @default(uuid(7))
+  slug                        String     @unique
   /// Owning account; one shop per account for now (staff sub-accounts are Phase 2).
-  ownerId              String?    @unique
-  name                 String
-  ownerName            String
+  ownerId                     String?    @unique
+  name                        String
+  ownerName                   String
   /// Business contact details shown to the platform (not used to sign in).
   /// Optional; unique when given (several shops may have none).
-  email                String?    @unique
-  phone                String     @unique
-  status               ShopStatus @default(PENDING)
-  rejectionReason      String?
-  logoUrl              String?
-  coverUrl             String?
-  description          String?
-  address              String?
-  latitude             Decimal?   @db.Decimal(9, 6)
-  longitude            Decimal?   @db.Decimal(9, 6)
-  businessHours        Json?
-  socialLinks          Json?
+  email                       String?    @unique
+  phone                       String     @unique
+  status                      ShopStatus @default(PENDING)
+  rejectionReason             String?
+  logoUrl                     String?
+  coverUrl                    String?
+  description                 String?
+  address                     String?
+  latitude                    Decimal?   @db.Decimal(9, 6)
+  longitude                   Decimal?   @db.Decimal(9, 6)
+  businessHours               Json?
+  socialLinks                 Json?
   /// Overrides the platform default when set (§2.3): a percent, or a fixed kip amount per unit sold.
-  commissionRate       Decimal?   @db.Decimal(5, 2)
-  commissionFixed      Decimal?   @db.Decimal(14, 2)
+  commissionRate              Decimal?   @db.Decimal(5, 2)
+  commissionFixed             Decimal?   @db.Decimal(14, 2)
   /// Order deadline policy (§3.6), in hours.
-  paymentWindowHrs     Int        @default(24)
-  autoConfirmHrs       Int        @default(168)
+  paymentWindowHrs            Int        @default(24)
+  autoConfirmHrs              Int        @default(168)
   /// Manual payments (§6): customers transfer to this account / QR and upload a slip.
-  paymentQrKey         String? // private storage key of the shop's LAO QR image
-  paymentBankCode      String?
-  paymentAccountName   String?
-  paymentAccountNumber String?
+  paymentQrKey                String? // private storage key of the shop's LAO QR image
+  paymentBankCode             String?
+  paymentAccountName          String?
+  paymentAccountNumber        String?
   /// Cash on delivery: each shop opts in after accepting the COD terms (MC Mart takes no
   /// part in collecting the cash and is not responsible for COD losses).
-  codEnabled           Boolean    @default(false)
+  codEnabled                  Boolean    @default(false)
   /// When the owner last accepted those terms (required to turn COD on).
-  codTermsAcceptedAt   DateTime?
+  codTermsAcceptedAt          DateTime?
   /// The shop's own urgent delivery: { enabled, eta, zones: [{ province, districts[], fee }] } (@talad/shared UrgentDelivery).
-  urgentDelivery       Json?
+  urgentDelivery              Json?
   /// Customers may choose to collect their order at the shop (at `address`), free of delivery.
-  pickupEnabled        Boolean    @default(false)
+  pickupEnabled               Boolean    @default(false)
   /// Couriers the shop doesn't ship with (DeliveryProvider ids). Empty = every active courier,
   /// so couriers added later are on until the shop turns them off.
-  disabledDeliveryProviderIds String[] @default([])
-  ratingAvg           Decimal    @default(0) @db.Decimal(3, 2)
-  ratingCount          Int        @default(0)
+  disabledDeliveryProviderIds String[]   @default([])
+  ratingAvg                   Decimal    @default(0) @db.Decimal(3, 2)
+  ratingCount                 Int        @default(0)
   /// Customers following the shop (denormalized from ShopFollow).
-  followerCount        Int        @default(0)
-  verifiedAt           DateTime?
-  createdAt            DateTime   @default(now())
-  updatedAt            DateTime   @updatedAt
+  followerCount               Int        @default(0)
+  verifiedAt                  DateTime?
+  createdAt                   DateTime   @default(now())
+  updatedAt                   DateTime   @updatedAt
 
   owner              Customer?           @relation("ShopOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   kycDocuments       ShopKycDocument[]
@@ -384,23 +385,25 @@ model CodTransfer {
 
 /// A platform account: everyone buys with it, and it may also own a shop.
 model Customer {
-  id              String          @id @default(uuid(7))
-  email           String?         @unique
-  phone           String?         @unique
-  name            String
-  passwordHash    String?
-  phoneVerifiedAt DateTime?
+  id                 String          @id @default(uuid(7))
+  email              String?         @unique
+  phone              String?         @unique
+  name               String
+  passwordHash       String?
+  phoneVerifiedAt    DateTime?
   /// Subject ids from social sign-in providers.
-  googleId        String?         @unique
-  appleId         String?         @unique
-  avatarUrl       String?
-  locale          String          @default("lo")
-  twoFactorMethod TwoFactorMethod @default(NONE)
-  totpSecret      String?
-  pointsBalance   Int             @default(0)
-  isActive        Boolean         @default(true)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  googleId           String?         @unique
+  appleId            String?         @unique
+  avatarUrl          String?
+  locale             String          @default("lo")
+  /// Promotions and MC Mart news by push / SMS (orders and chats always come).
+  promoNotifications Boolean         @default(true)
+  twoFactorMethod    TwoFactorMethod @default(NONE)
+  totpSecret         String?
+  pointsBalance      Int             @default(0)
+  isActive           Boolean         @default(true)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   /// The shop this account owns, if any — owners still shop as customers.
   shop              Shop?                 @relation("ShopOwner")
@@ -422,6 +425,7 @@ model Customer {
   redemptions       CouponRedemption[]
   shopNotes         ShopCustomerNote[]
   notifications     Notification[]
+  pushDevices       PushDevice[]
   /// Market Chat (the shopping assistant) history — private to this account.
   assistantMessages AssistantMessage[]
   /// Private conversations with shops.
@@ -521,7 +525,7 @@ model Unit {
 }
 
 model Product {
-  id                String        @id @default(uuid(7))
+  id                String         @id @default(uuid(7))
   shopId            String
   categoryId        String
   unitId            String
@@ -531,8 +535,8 @@ model Product {
   sku               String
   name              String
   description       String?
-  price             Decimal       @db.Decimal(14, 2)
-  compareAtPrice    Decimal?      @db.Decimal(14, 2)
+  price             Decimal        @db.Decimal(14, 2)
+  compareAtPrice    Decimal?       @db.Decimal(14, 2)
   /// Bulk pricing: [{ minQuantity: 10, price: 100000 }, …] in quantity order, each cheaper (PriceTier
   /// in @talad/shared). Units of every option count together; null = one price for any quantity.
   priceTiers        Json?
@@ -542,36 +546,36 @@ model Product {
   guaranteeTerms    String?
   /// Deposit asked for with cash on delivery: an amount per unit, or a percent of the price.
   depositType       DepositType?
-  depositValue      Decimal?      @db.Decimal(14, 2)
-  stock             Int           @default(0)
-  lowStockThreshold Int           @default(5)
+  depositValue      Decimal?       @db.Decimal(14, 2)
+  stock             Int            @default(0)
+  lowStockThreshold Int            @default(5)
   /// The options variants differ by, in the seller's order: [{ name: "Colour", values: ["Red", "Blue"] }, …].
   /// Kept here because variant `attributes` (jsonb) don't keep key or value order.
   options           Json?
-  status            ProductStatus @default(DRAFT)
+  status            ProductStatus  @default(DRAFT)
   rejectionReason   String?
   /// The single short product video (§2.5); transcoded asset key.
   videoKey          String?
   /// Hidden by MC Mart (moderation): customers no longer see it. A new video clears this.
-  videoHidden       Boolean       @default(false)
+  videoHidden       Boolean        @default(false)
   videoHiddenReason String?
   videoHiddenAt     DateTime?
-  isPinned          Boolean       @default(false)
-  soldCount         Int           @default(0)
-  viewCount         Int           @default(0)
+  isPinned          Boolean        @default(false)
+  soldCount         Int            @default(0)
+  viewCount         Int            @default(0)
   /// Feed video engagement (§2.5). Favorites are `wishlistBy` (§4.7); counters are denormalized for the feed.
-  videoViewCount    Int           @default(0)
-  videoShareCount   Int           @default(0)
-  videoCommentCount Int           @default(0)
-  ratingAvg         Decimal       @default(0) @db.Decimal(3, 2)
-  ratingCount       Int           @default(0)
+  videoViewCount    Int            @default(0)
+  videoShareCount   Int            @default(0)
+  videoCommentCount Int            @default(0)
+  ratingAvg         Decimal        @default(0) @db.Decimal(3, 2)
+  ratingCount       Int            @default(0)
   publishedAt       DateTime?
   /// The product's own commission, set when an admin approves the shop's request; wins over
   /// its category and shop. Percent, or kip per unit.
-  commissionRate    Decimal?      @db.Decimal(5, 2)
-  commissionFixed   Decimal?      @db.Decimal(14, 2)
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  commissionRate    Decimal?       @db.Decimal(5, 2)
+  commissionFixed   Decimal?       @db.Decimal(14, 2)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   shop               Shop                @relation(fields: [shopId], references: [id])
   category           Category            @relation(fields: [categoryId], references: [id])
@@ -689,52 +693,52 @@ model PaymentSlip {
 }
 
 model ShopOrder {
-  id                 String      @id @default(uuid(7))
-  number             String      @unique
-  orderId            String
-  shopId             String
-  status             OrderStatus @default(PENDING)
-  subtotal           Decimal     @db.Decimal(14, 2)
-  discountTotal      Decimal     @default(0) @db.Decimal(14, 2)
+  id                  String         @id @default(uuid(7))
+  number              String         @unique
+  orderId             String
+  shopId              String
+  status              OrderStatus    @default(PENDING)
+  subtotal            Decimal        @db.Decimal(14, 2)
+  discountTotal       Decimal        @default(0) @db.Decimal(14, 2)
   /// The part of `discountTotal` MC Mart funds (platform coupons, loyalty points): paid back to the shop.
-  platformDiscount   Decimal     @default(0) @db.Decimal(14, 2)
+  platformDiscount    Decimal        @default(0) @db.Decimal(14, 2)
   /// Loyalty points the customer spent on this shop order (their value is in `platformDiscount`).
   /// Returned to the customer, and set back to 0, if the order is cancelled.
-  pointsRedeemed     Int         @default(0)
+  pointsRedeemed      Int            @default(0)
   /// Loyalty points the customer earned by confirming receipt; taken back if it is returned.
-  pointsEarned       Int         @default(0)
+  pointsEarned        Int            @default(0)
   /// The amount loyalty points are earned on: goods not on promotion, 0 with a coupon. Fixed at
   /// checkout, as prices and sales change later. Null on older orders, which earn on `total`.
-  pointsBase         Decimal?    @db.Decimal(14, 2)
+  pointsBase          Decimal?       @db.Decimal(14, 2)
   /// Paid to the shop before the order goes ahead (cash on delivery); the rest is collected on delivery.
-  depositAmount      Decimal     @default(0) @db.Decimal(14, 2)
-  depositStatus      DepositStatus?
-  depositSlipKey     String?
+  depositAmount       Decimal        @default(0) @db.Decimal(14, 2)
+  depositStatus       DepositStatus?
+  depositSlipKey      String?
   depositRejectReason String?
   /// The order cancels if the deposit is still unconfirmed by then.
-  depositDueAt       DateTime?
-  shippingFee        Decimal     @default(0) @db.Decimal(14, 2)
-  commissionAmount   Decimal     @default(0) @db.Decimal(14, 2)
-  total              Decimal     @db.Decimal(14, 2)
-  deliveryProviderId String?
-  trackingNumber     String?
+  depositDueAt        DateTime?
+  shippingFee         Decimal        @default(0) @db.Decimal(14, 2)
+  commissionAmount    Decimal        @default(0) @db.Decimal(14, 2)
+  total               Decimal        @db.Decimal(14, 2)
+  deliveryProviderId  String?
+  trackingNumber      String?
   /// Photo of the courier's bill the shop uploads when shipping (private storage key).
-  shippingBillKey    String?
+  shippingBillKey     String?
   /// The customer said the bill is wrong; cleared when the shop uploads a new one.
-  billIssueAt        DateTime?
+  billIssueAt         DateTime?
   /// Delivered by the shop itself as urgent delivery (its fee is `shippingFee`).
-  urgentDelivery     Boolean     @default(false)
+  urgentDelivery      Boolean        @default(false)
   /// The customer collects it at the shop: no courier, no bill.
-  pickup             Boolean     @default(false)
+  pickup              Boolean        @default(false)
   /// Deadline logic (§3.6): buyers may extend each deadline a limited number of times.
-  paymentDueAt       DateTime?
-  autoConfirmAt      DateTime?
-  extensionsUsed     Int         @default(0)
-  cancelReason       String?
+  paymentDueAt        DateTime?
+  autoConfirmAt       DateTime?
+  extensionsUsed      Int            @default(0)
+  cancelReason        String?
   /// The payout that settled this order with the shop (§2.3); null until paid out.
-  payoutId           String?
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  payoutId            String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
 
   order            Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
   shop             Shop                 @relation(fields: [shopId], references: [id])
@@ -751,27 +755,27 @@ model ShopOrder {
 }
 
 model OrderItem {
-  id               String   @id @default(uuid(7))
-  shopOrderId      String
-  productId        String
-  variantId        String?
+  id                String         @id @default(uuid(7))
+  shopOrderId       String
+  productId         String
+  variantId         String?
   /// Snapshots so historic orders survive product edits.
-  name             String
-  sku              String
-  unitPrice        Decimal  @db.Decimal(14, 2)
+  name              String
+  sku               String
+  unitPrice         Decimal        @db.Decimal(14, 2)
   /// Price before a flash sale (null on orders placed before this was recorded): flash savings = (regular − unit) × quantity.
-  regularPrice     Decimal? @db.Decimal(14, 2)
-  quantity         Int
-  lineTotal        Decimal  @db.Decimal(14, 2)
+  regularPrice      Decimal?       @db.Decimal(14, 2)
+  quantity          Int
+  lineTotal         Decimal        @db.Decimal(14, 2)
   /// Snapshot of the guarantee the customer got (already doubled), for the certificate.
   guaranteeDuration Int?
   guaranteeUnit     GuaranteeUnit?
   guaranteeTerms    String?
   /// This item's own rate (shop override, else its category, else the platform default) and fee.
-  commissionRate   Decimal? @db.Decimal(5, 2)
+  commissionRate    Decimal?       @db.Decimal(5, 2)
   /// Set instead of the rate when the item paid a fixed amount per unit.
-  commissionFixed  Decimal? @db.Decimal(14, 2)
-  commissionAmount Decimal? @db.Decimal(14, 2)
+  commissionFixed   Decimal?       @db.Decimal(14, 2)
+  commissionAmount  Decimal?       @db.Decimal(14, 2)
 
   shopOrder ShopOrder       @relation(fields: [shopOrderId], references: [id], onDelete: Cascade)
   product   Product         @relation(fields: [productId], references: [id])
@@ -988,20 +992,20 @@ model Review {
 
 /// A customer's own video in the feed (no product): a moment, an unboxing, a review.
 model FeedPost {
-  id           String   @id @default(uuid(7))
+  id           String    @id @default(uuid(7))
   customerId   String
   /// Public storage key (c-<customerId>/videos/).
   videoKey     String
-  caption      String   @default("")
+  caption      String    @default("")
   /// Hidden by MC Mart (moderation): gone from the feed, the profile and shared links.
-  isHidden     Boolean  @default(false)
+  isHidden     Boolean   @default(false)
   hiddenReason String?
   hiddenAt     DateTime?
-  viewCount    Int      @default(0)
-  shareCount   Int      @default(0)
-  likeCount    Int      @default(0)
-  commentCount Int      @default(0)
-  createdAt    DateTime @default(now())
+  viewCount    Int       @default(0)
+  shareCount   Int       @default(0)
+  likeCount    Int       @default(0)
+  commentCount Int       @default(0)
+  createdAt    DateTime  @default(now())
 
   customer Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
   likes    FeedPostLike[]
@@ -1126,6 +1130,62 @@ model PushSubscription {
 
   @@index([customerId])
   @@index([shopId])
+}
+
+/// A phone running the app that gets push notifications (an Expo push token: Android via
+/// Firebase, iPhone via Apple). Shop notifications go to the shop owner's phones.
+model PushDevice {
+  id         String   @id @default(uuid(7))
+  token      String   @unique
+  /// ios | android
+  platform   String
+  /// Language the notifications are written in (the app's language when it registered).
+  locale     String   @default("lo")
+  customerId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+}
+
+/// An admin message to customers or shops (all, or one) by in-app inbox, push and/or SMS: now,
+/// at a time, every day or on chosen weekdays (Vientiane time). Values: BROADCAST_* in @talad/shared.
+model Broadcast {
+  id               String    @id @default(uuid(7))
+  /// customers | sellers | customer | shop
+  audience         String
+  targetCustomerId String?
+  targetShopId     String?
+  /// PROMOTION | SYSTEM (customers who turned promotions off get no PROMOTION push / SMS)
+  type             String
+  /// IN_APP, PUSH, SMS (SMS for one person only)
+  channels         String[]
+  /// { lo: { title, body }, en: { title, body } }
+  content          Json
+  /// Where it opens (storefront path, e.g. /feed or /p/shop/product).
+  link             String?
+  /// ONCE | DAILY | WEEKLY; repeats go out at startAt's Vientiane time of day.
+  repeat           String
+  /// WEEKLY: 0 = Sunday … 6 = Saturday.
+  weekdays         Int[]     @default([])
+  startAt          DateTime
+  endAt            DateTime?
+  /// ACTIVE | PAUSED | DONE
+  status           String    @default("ACTIVE")
+  nextRunAt        DateTime?
+  lastRunAt        DateTime?
+  runs             Int       @default(0)
+  /// The last send: recipients, inApp, pushSent, pushFailed, smsSent, smsFailed, error.
+  lastResult       Json?
+  createdById      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  createdBy AdminUser? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([status, nextRunAt])
 }
 
 // ─── CMS & settings (§2.8, §2.11) ───────────────────────────────────────────
@@ -1320,20 +1380,20 @@ model CommissionRequest {
 /// meaning-ish similarity against `questions` (several phrasings, Lao and English) before anything
 /// else; Claude also gets them as official answers.
 model AssistantAnswer {
-  id           String   @id @default(uuid(7))
+  id           String    @id @default(uuid(7))
   /// Ways customers ask it, e.g. ["ມີຮ້ານຢູ່ປາກເຊບໍ", "any shop in Pakse?"].
   questions    String[]
   answerLo     String
   answerEn     String
   /// Optional product search words: matching products are shown under the answer.
   productWords String?
-  isActive     Boolean  @default(true)
+  isActive     Boolean   @default(true)
   /// How many times it has answered a customer.
-  hits         Int      @default(0)
+  hits         Int       @default(0)
   lastHitAt    DateTime?
   createdById  String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 /// Market Chat training (admin): a word customers use and what to search for instead
@@ -1353,17 +1413,17 @@ model AssistantWord {
 /// products), grouped by its text for admins to teach. No customer is recorded; long digit
 /// runs (phone numbers, order numbers) are masked.
 model AssistantMiss {
-  id        String   @id @default(uuid(7))
+  id       String   @id @default(uuid(7))
   /// Lowercased, trimmed, digits masked: the grouping key.
-  text      String   @unique
-  lang      String
+  text     String   @unique
+  lang     String
   /// "not_understood" | "not_found" | "related"
-  outcome   String
-  count     Int      @default(1)
+  outcome  String
+  count    Int      @default(1)
   /// Taught (or dismissed) by an admin: hidden from the inbox until asked again.
-  resolved  Boolean  @default(false)
-  firstAt   DateTime @default(now())
-  lastAt    DateTime @default(now())
+  resolved Boolean  @default(false)
+  firstAt  DateTime @default(now())
+  lastAt   DateTime @default(now())
 
   @@index([resolved, lastAt])
 }

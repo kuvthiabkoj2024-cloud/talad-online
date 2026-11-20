@@ -5,7 +5,9 @@ import type { Metadata } from "next";
 import { PageHeading } from "@/components/account/page-heading";
 import { ProfileEditor } from "@/components/account/profile-editor";
 import { SELLER_CENTER_URL } from "@/lib/customer";
+import { PromotionsSwitch } from "@/components/notifications/promotions-switch";
 import { requireCustomer } from "@/lib/require-customer";
+import { apiGetAsCustomer } from "@/lib/session";
 import { getDictionary, getLocale } from "@/app/[lang]/dictionaries";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -16,8 +18,9 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function ProfilePage() {
   const locale = await getLocale();
-  const { account: dict, auth } = await getDictionary();
+  const { account: dict, auth, notifications } = await getDictionary();
   const customer = await requireCustomer(locale, `/${locale}/account/profile`);
+  const settings = await apiGetAsCustomer<{ promotions: boolean }>("/me/notification-settings");
 
   const memberSince = dateFormatter(locale, {
     year: "numeric",
@@ -40,6 +43,8 @@ export default async function ProfilePage() {
         labels={{ fullName: auth.fullName, phone: auth.phone, close: auth.close }}
         memberSince={memberSince}
       />
+
+      {settings && <PromotionsSwitch initial={settings.promotions} dict={notifications} />}
 
       {customer.shop && (
         <section className="flex flex-col gap-4 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border sm:flex-row sm:items-center">

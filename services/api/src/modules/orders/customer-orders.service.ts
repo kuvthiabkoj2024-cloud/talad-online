@@ -241,7 +241,7 @@ export class CustomerOrdersService {
         order: {
           select: {
             slips: { select: { status: true } },
-            shopOrders: { where: { status: 'PENDING' }, select: { id: true, number: true, shop: { select: { name: true } } } },
+            shopOrders: { where: { status: 'PENDING' }, select: { id: true, number: true, shopId: true, shop: { select: { name: true } } } },
           },
         },
       },
@@ -258,6 +258,17 @@ export class CustomerOrdersService {
         await restoreStock(tx, so.id);
         await returnPoints(tx, so.id);
         await tx.payment.updateMany({ where: { shopOrderId: so.id, status: 'PENDING' }, data: { status: 'FAILED' } });
+        // The shop may already be preparing it (cash on delivery): tell it straight away.
+        await this.notifications.toShop(
+          tx,
+          so.shopId,
+          'ORDER',
+          {
+            lo: { title: `ລູກຄ້າຍົກເລີກຄຳສັ່ງຊື້ ${so.number}`, body: 'ລູກຄ້າຍົກເລີກຄຳສັ່ງຊື້ນີ້ແລ້ວ. ບໍ່ຕ້ອງກະກຽມ ຫຼື ສົ່ງສິນຄ້າ; ສະຕັອກຖືກຄືນແລ້ວ.' },
+            en: { title: `Order cancelled by the customer ${so.number}`, body: "The customer cancelled this order. Don't prepare or send it; the stock is back." },
+          },
+          { link: `/orders/${so.number}` },
+        );
       }
     });
     return { status: 'CANCELLED' };

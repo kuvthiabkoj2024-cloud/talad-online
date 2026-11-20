@@ -128,7 +128,7 @@ export class ShopReviewsService {
             lo: { title: `${name} ຕອບລີວິວຂອງທ່ານ`, body: reply.slice(0, 200) },
             en: { title: `${name} replied to your review`, body: reply.slice(0, 200) },
           },
-          shop ? { link: product ? `/p/${shop.slug}/${product.slug}` : `/s/${shop.slug}` } : {},
+          { actor: { type: 'shop', id: shopId }, ...(shop && { link: product ? `/p/${shop.slug}/${product.slug}` : `/s/${shop.slug}` }) },
         );
       }
       return row;

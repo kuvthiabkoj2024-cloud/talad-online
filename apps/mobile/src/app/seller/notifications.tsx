@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useEffect } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet } from 'react-native';
 
@@ -10,7 +10,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
-import { clearBadge, routeFor } from '@/lib/push-notifications';
+import { clearBadge } from '@/lib/push-notifications';
 import { sellerKeys } from '@/lib/seller';
 
 interface InboxPage {
@@ -22,7 +22,6 @@ interface InboxPage {
 /** The shop's notifications (the Seller Center's bell): new orders, payments, low stock, MC Mart news… */
 export default function SellerNotificationsScreen() {
   const theme = useTheme();
-  const router = useRouter();
   const queryClient = useQueryClient();
   const { t } = useI18n();
   const list = useInfiniteQuery({
@@ -41,9 +40,9 @@ export default function SellerNotificationsScreen() {
     void queryClient.invalidateQueries({ queryKey: sellerKeys.badges });
     void queryClient.invalidateQueries({ queryKey: ['seller', 'inbox-unread'] });
   };
-  function open(n: NotificationItem) {
+  /** Tapping marks it read (it doesn't open other screens). */
+  function read(n: NotificationItem) {
     if (!n.readAt) void api(`/me/shop/notifications/${n.id}/read`, { method: 'POST' }).then(refresh).catch(() => {});
-    router.push(routeFor({ app: 'seller', link: n.data?.link }));
   }
   async function readAll() {
     await api('/me/shop/notifications/read-all', { method: 'POST' }).catch(() => {});
@@ -75,7 +74,7 @@ export default function SellerNotificationsScreen() {
         {items.length > 0 && (
           <Card style={styles.card}>
             {items.map((n, i) => (
-              <NotificationRow key={n.id} item={n} divider={i > 0} onPress={() => open(n)} />
+              <NotificationRow key={n.id} item={n} divider={i > 0} onPress={() => read(n)} />
             ))}
           </Card>
         )}

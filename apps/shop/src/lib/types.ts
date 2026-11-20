@@ -1,3 +1,4 @@
+import type { NotificationFrom } from '@talad/shared'
 import type {
   BusinessHours,
   Commission,
@@ -572,6 +573,8 @@ export interface InboxNotification {
   data: { link?: string; imageUrl?: string; i18n?: Partial<Record<'lo' | 'en', { title: string; body: string }>> }
   readAt: string | null
   createdAt: string
+  /** Who it's from (its picture): MC Mart, or the customer (their orders, likes, comments). */
+  from?: NotificationFrom
 }
 
 export interface InboxPage {

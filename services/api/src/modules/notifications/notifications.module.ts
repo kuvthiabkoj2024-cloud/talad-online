@@ -4,7 +4,7 @@ import { MediaModule } from '../media/media.module.js';
 import { AdminBroadcastsController } from './broadcasts/broadcasts.controller.js';
 import { BroadcastsService } from './broadcasts/broadcasts.service.js';
 import { ExpoPushService } from './expo-push.service.js';
-import { NotificationSettingsController, PhonePushService, PushDevicesController } from './phone-push.controller.js';
+import { AccountLocaleController, NotificationSettingsController, PhonePushService, PushDevicesController } from './phone-push.controller.js';
 import { AdminNotificationsController, NotificationsController, ShopNotificationsController } from './notifications.controller.js';
 import { NotificationsService } from './notifications.service.js';
 import { CustomerPushController, PushConfigController, ShopPushController } from './push.controller.js';
@@ -17,7 +17,7 @@ import { PushService } from './push.service.js';
  */
 @Module({
   imports: [AuthModule, MediaModule],
-  controllers: [NotificationsController, ShopNotificationsController, AdminNotificationsController, PushConfigController, CustomerPushController, ShopPushController, PushDevicesController, NotificationSettingsController, AdminBroadcastsController],
+  controllers: [NotificationsController, ShopNotificationsController, AdminNotificationsController, PushConfigController, CustomerPushController, ShopPushController, PushDevicesController, NotificationSettingsController, AccountLocaleController, AdminBroadcastsController],
   providers: [NotificationsService, PushService, ExpoPushService, PhonePushService, BroadcastsService],
   exports: [NotificationsService],
 })

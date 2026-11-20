@@ -1,12 +1,15 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import {
+  fillBroadcastText,
+  formatPhone,
+  hasBroadcastVariables,
   nextBroadcastRun,
   type BroadcastAudience,
   type BroadcastContent,
   type BroadcastRepeat,
   type RealtimeEvent,
 } from '@talad/shared';
-import type { AdminUser, Broadcast, Prisma } from '../../../generated/prisma/client.js';
+import { Prisma, type AdminUser, type Broadcast } from '../../../generated/prisma/client.js';
 import { PrismaService } from '../../../prisma/prisma.service.js';
 import { AuditService } from '../../audit/audit.service.js';
 import { SmsService } from '../../auth/sms.service.js';
@@ -34,6 +37,9 @@ export interface BroadcastResult {
 interface Target {
   customerId: string;
   shopId?: string;
+  /** For `{name}` and `{shop}`. */
+  name: string;
+  shopName: string | null;
   promotions: boolean;
   phone: string | null;
   locale: string;
@@ -145,6 +151,23 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
     return this.view(id);
   }
 
+  /**
+   * Sends it again now, to the same audience, whatever its status (its schedule stays as it is).
+   * Runs in the background: a big audience can take a while; the list shows the result.
+   */
+  async resend(admin: AdminUser, id: string) {
+    const b = await this.prisma.broadcast.findUnique({ where: { id } });
+    if (!b) throw new NotFoundException('Broadcast not found');
+    const run = b.runs + 1;
+    await this.prisma.broadcast.update({ where: { id }, data: { runs: { increment: 1 }, lastRunAt: new Date(), lastResult: Prisma.DbNull } });
+    await this.audit.log({ adminId: admin.id, action: 'broadcast.resend', entityType: 'Broadcast', entityId: id });
+    void this.run(b, run)
+      .catch((e: unknown): BroadcastResult => ({ ...empty(), error: e instanceof Error ? e.message : String(e) }))
+      .then((result) => this.prisma.broadcast.update({ where: { id }, data: { lastResult: result as unknown as Prisma.InputJsonValue } }))
+      .catch((e: unknown) => this.logger.error(`Resend of ${id} failed: ${e instanceof Error ? e.message : String(e)}`));
+    return this.view(id);
+  }
+
   async remove(admin: AdminUser, id: string) {
     const { count } = await this.prisma.broadcast.deleteMany({ where: { id } });
     if (!count) throw new NotFoundException('Broadcast not found');
@@ -229,7 +252,19 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
       i18n: content,
       ...(b.link && { link: b.link }),
     };
-    const data = { ...(b.link && { link: b.link }), i18n: content, broadcastId: b.id } as Prisma.InputJsonValue;
+    // `{name}`, `{phone}`, `{shop}`: each recipient gets their own text (otherwise one text for all).
+    const personal = [content.lo, content.en].some((m) => hasBroadcastVariables(m.title) || hasBroadcastVariables(m.body));
+    const contentFor = (t: Target): BroadcastContent => {
+      if (!personal) return content;
+      const values = { name: t.name, phone: t.phone ? formatPhone(t.phone) : null, shop: t.shopName };
+      const fill = (m: { title: string; body: string }) => ({ title: fillBroadcastText(m.title, values), body: fillBroadcastText(m.body, values) });
+      return { lo: fill(content.lo), en: fill(content.en) };
+    };
+    const eventFor = (t: Target): typeof event => {
+      const c = contentFor(t);
+      return { ...event, title: c.en.title, body: c.en.body, i18n: c };
+    };
+    const dataFor = (c: BroadcastContent) => ({ ...(b.link && { link: b.link }), i18n: c, broadcastId: b.id }) as Prisma.InputJsonValue;
     const add = (c: PushCount) => {
       result.pushSent += c.sent;
       result.pushFailed += c.failed;
@@ -238,18 +273,22 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
     for await (const batch of this.targets(b)) {
       result.recipients += batch.length;
       if (b.channels.includes('IN_APP')) {
-        const rows = batch.map((t) =>
-          toShops
-            ? { shopId: t.shopId!, type: 'SYSTEM', title: content.en.title, body: content.en.body, data }
-            : { customerId: t.customerId, type: b.type, title: content.en.title, body: content.en.body, data },
-        );
+        const rows = batch.map((t) => {
+          const c = contentFor(t);
+          const row = { title: c.en.title, body: c.en.body, data: dataFor(c) };
+          return toShops ? { shopId: t.shopId!, type: 'SYSTEM', ...row } : { customerId: t.customerId, type: b.type, ...row };
+        });
         result.inApp += (await this.prisma.notification.createMany({ data: rows })).count;
       }
       // Promotions skip customers who turned them off; MC Mart news (SYSTEM) and shops always get it.
       const pushable = batch.filter((t) => toShops || !promo || t.promotions);
       if (b.channels.includes('PUSH') && pushable.length) {
-        add(await this.phones.sendToAccounts(pushable.map((t) => t.customerId), event, toShops ? 'seller' : 'customer'));
-        add(await this.web.sendToMany(toShops ? 'shop' : 'customer', pushable.map((t) => (toShops ? t.shopId! : t.customerId)), event));
+        const byAccount = new Map(pushable.map((t) => [t.customerId, t]));
+        const byShop = new Map(pushable.map((t) => [t.shopId ?? '', t]));
+        const forAccount = personal ? (id: string) => eventFor(byAccount.get(id)!) : event;
+        const forBrowser = personal ? (id: string) => eventFor((toShops ? byShop : byAccount).get(id)!) : event;
+        add(await this.phones.sendToAccounts(pushable.map((t) => t.customerId), forAccount, toShops ? 'seller' : 'customer'));
+        add(await this.web.sendToMany(toShops ? 'shop' : 'customer', pushable.map((t) => (toShops ? t.shopId! : t.customerId)), forBrowser));
       }
       if (b.channels.includes('SMS') && isSingle(b.audience as BroadcastAudience)) {
         for (const t of pushable) {
@@ -257,7 +296,8 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
             result.smsFailed++;
             continue;
           }
-          const text = t.locale === 'en' ? content.en : content.lo;
+          const own = contentFor(t);
+          const text = t.locale === 'en' ? own.en : own.lo;
           try {
             await this.sms.send(t.phone, `${text.title}\n${text.body}`);
             result.smsSent++;
@@ -277,7 +317,7 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
     for (;;) {
       const rows = await this.prisma.customer.findMany({
         where,
-        select: { id: true, phone: true, locale: true, promoNotifications: true, shop: { select: { id: true, phone: true } } },
+        select: { id: true, name: true, phone: true, locale: true, promoNotifications: true, shop: { select: { id: true, name: true, phone: true } } },
         orderBy: { id: 'asc' },
         take: BATCH,
         ...(cursor && { cursor: { id: cursor }, skip: 1 }),
@@ -286,6 +326,8 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
       yield rows.map((r) => ({
         customerId: r.id,
         shopId: r.shop?.id,
+        name: r.name,
+        shopName: r.shop?.name ?? null,
         promotions: r.promoNotifications,
         // A shop's SMS goes to the shop's own number.
         phone: b.audience === 'shop' ? (r.shop?.phone ?? r.phone) : r.phone,

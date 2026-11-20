@@ -9,10 +9,11 @@ import { useNavigate } from 'react-router'
 import { PushToggle } from '@/components/push-toggle'
 import { queryKeys } from '@/hooks/queries'
 import { useI18n } from '@/i18n/context'
-import { api, send } from '@/lib/api'
+import { api, customerPhoto, send } from '@/lib/api'
 import { fill, formatDate } from '@/lib/format'
 import { notificationText } from '@/lib/realtime'
 import type { InboxNotification, InboxPage } from '@/lib/types'
+import type { NotificationFrom } from '@talad/shared'
 
 const ICONS: Record<string, LucideIcon> = { ORDER: ReceiptText, ACTIVITY: Heart, SHOP_STATUS: Store, MESSAGE: MessageCircle }
 
@@ -99,8 +100,11 @@ export function NotificationBell({ className }: { className?: string }) {
                 return (
                   <li key={n.id}>
                     <button type="button" onClick={() => openItem(n)} className={cn('flex w-full gap-3 px-4 py-3 text-left transition-colors hover:bg-muted', !n.readAt && 'bg-brand-soft/50')}>
-                      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-soft text-primary">
-                        <Icon className="size-4" />
+                      <span className="relative shrink-0">
+                        <FromPicture from={n.from} />
+                        <span className="absolute -right-1 -bottom-1 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground ring-2 ring-popover">
+                          <Icon className="size-3" />
+                        </span>
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className={cn('block text-sm', !n.readAt ? 'font-semibold' : 'font-medium')}>{text.title}</span>
@@ -123,5 +127,32 @@ export function NotificationBell({ className }: { className?: string }) {
         <PushToggle />
       </PopoverContent>
     </Popover>
+  )
+}
+
+/**
+ * Who a notification is from, as Facebook shows it: the customer's photo (their orders, likes and
+ * comments), else MC Mart's logo (MC Mart news, approvals, system messages).
+ */
+function FromPicture({ from }: { from?: NotificationFrom }) {
+  const round = 'flex size-10 items-center justify-center overflow-hidden rounded-full'
+  if (from?.kind === 'customer' || from?.kind === 'shop') {
+    const src = from.kind === 'shop' ? from.imageUrl : customerPhoto(from)
+    if (src) return <img src={src} alt={from.name} referrerPolicy="no-referrer" className={cn(round, 'bg-muted object-cover')} />
+    return (
+      <span className={cn(round, 'bg-brand-soft text-xs font-bold text-primary')} aria-label={from.name}>
+        {from.name
+          .split(/\s+/)
+          .map((w) => w[0])
+          .join('')
+          .slice(0, 2)
+          .toUpperCase()}
+      </span>
+    )
+  }
+  return (
+    <span className={cn(round, 'bg-linear-to-br from-[#43a047] to-[#1b5e20]')}>
+      <img src="/icons/brand-logo.png" alt="MC Mart" className="size-6" />
+    </span>
   )
 }

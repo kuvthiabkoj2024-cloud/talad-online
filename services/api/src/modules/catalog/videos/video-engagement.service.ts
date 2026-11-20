@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { avatarFields } from './feed-posts.service.js';
+import { avatarFields } from '../../customers/avatar-fields.js';
 import { MediaService } from '../../media/media.service.js';
 import { NotificationsService } from '../../notifications/notifications.service.js';
 import { PrismaService } from '../../../prisma/prisma.service.js';
@@ -134,7 +134,7 @@ export class VideoEngagementService {
     ]);
     if (!product || product.shop.ownerId === customerId) return;
     const link = `/videos?video=${productId}${commentId ? `&comment=${commentId}` : ''}`;
-    await this.notifications.toShop(this.prisma, product.shopId, 'ACTIVITY', text(customer?.name || '—', product.name), { link });
+    await this.notifications.toShop(this.prisma, product.shopId, 'ACTIVITY', text(customer?.name || '—', product.name), { link, actor: { type: 'customer', id: customerId } });
   }
 
   async stats(productId: string): Promise<VideoStats> {
@@ -263,14 +263,14 @@ export class VideoEngagementService {
         await this.notifications.send(tx, post.customerId, 'SYSTEM', {
           lo: { title: parent ? `${who} ຕອບຄຳເຫັນໃນວິດີໂອຂອງທ່ານ` : `${who} ສະແດງຄຳເຫັນໃນວິດີໂອຂອງທ່ານ`, body: excerpt },
           en: { title: parent ? `${who} replied on your video` : `${who} commented on your video`, body: excerpt },
-        }, { link });
+        }, { link, actor: { type: 'customer', id: customerId } });
       }
       // …and whoever is answered hears about the reply (once, if they are that author too).
       if (parent && !parent.byShop && parent.customerId !== customerId && parent.customerId !== post?.customerId) {
         await this.notifications.send(tx, parent.customerId, 'SYSTEM', {
           lo: { title: `${who} ຕອບຄຳເຫັນຂອງທ່ານ`, body: excerpt },
           en: { title: `${who} replied to your comment`, body: excerpt },
-        }, { link });
+        }, { link, actor: { type: 'customer', id: customerId } });
       }
       return created;
     });
@@ -427,7 +427,7 @@ export class VideoEngagementService {
             lo: { title: `${shop.name} ຕອບຄຳເຫັນຂອງທ່ານ`, body: `“${excerpt}”` },
             en: { title: `${shop.name} replied to your comment`, body: `“${excerpt}”` },
           },
-          { link: commentLink({ productId }, parent.id, created.id), ...(product.images[0] && { imageUrl: product.images[0].key }) },
+          { link: commentLink({ productId }, parent.id, created.id), actor: { type: 'shop', id: shop.id }, ...(product.images[0] && { imageUrl: product.images[0].key }) },
         );
       }
       return created;

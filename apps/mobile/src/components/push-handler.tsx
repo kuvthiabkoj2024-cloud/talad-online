@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 
+import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { registerPush, routeFor, type PushData } from '@/lib/push-notifications';
@@ -20,7 +21,10 @@ export function PushHandler() {
   const handled = useRef<string | null>(null);
 
   useEffect(() => {
-    if (customer) void registerPush(locale).catch(() => {});
+    if (!customer) return;
+    // The account's language: notifications, pushes and SMS are written in it.
+    void api('/me/locale', { method: 'PUT', body: { locale } }).catch(() => {});
+    void registerPush(locale).catch(() => {});
   }, [customer?.id, locale]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

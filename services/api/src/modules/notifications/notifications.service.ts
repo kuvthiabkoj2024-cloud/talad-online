@@ -1,10 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { NOTIFICATION_TABS, type AdminNotificationType, type NotificationData, type NotificationTab, type ShopNotificationType } from '@talad/shared';
+import { NOTIFICATION_TABS, type AdminNotificationType, type NotificationData, type NotificationFrom, type NotificationTab, type ShopNotificationType } from '@talad/shared';
 import type { OrderStatus, Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { MediaService } from '../media/media.service.js';
 import { RealtimeService, type Audience } from '../realtime/realtime.service.js';
 import type { ListNotificationsQuery } from './list-notifications.query.js';
+import { avatarFields } from '../customers/avatar-fields.js';
 import { orderMessage } from './order-messages.js';
 
 export interface CustomerNotification {
@@ -15,6 +16,8 @@ export interface CustomerNotification {
   data: NotificationData;
   readAt: Date | null;
   createdAt: Date;
+  /** Who it's from, for its picture (MC Mart, a shop's logo, a customer's photo). */
+  from?: NotificationFrom;
 }
 
 export interface NotificationList {
@@ -112,10 +115,11 @@ export class NotificationsService {
       }),
       this.prisma.notification.count({ where: { ...to, readAt: null } }),
     ]);
-    const items = rows.slice(0, 20).map((r) => {
+    const page = rows.slice(0, 20).map((r) => {
       const data = (r.data ?? {}) as NotificationData;
       return { ...r, data: { ...data, imageUrl: data.imageUrl && this.media.publicUrl(data.imageUrl) } };
     });
+    const items = 'shopId' in to ? await this.withFrom(page, 'shop') : page;
     return { items, unread, nextCursor: rows.length > 20 ? items[items.length - 1].id : null };
   }
 
@@ -167,16 +171,64 @@ export class NotificationsService {
     } as NotificationList['unread'];
 
     return {
-      items: rows.map((r) => {
-        const data = (r.data ?? {}) as NotificationData;
-        return { ...r, data: { ...data, imageUrl: data.imageUrl && this.media.publicUrl(data.imageUrl) } };
-      }),
+      items: await this.withFrom(
+        rows.map((r) => {
+          const data = (r.data ?? {}) as NotificationData;
+          return { ...r, data: { ...data, imageUrl: data.imageUrl && this.media.publicUrl(data.imageUrl) } };
+        }),
+        'customer',
+      ),
       page: query.page,
       pageSize: query.pageSize,
       total,
       totalPages: Math.max(1, Math.ceil(total / query.pageSize)),
       unread,
     };
+  }
+
+  /**
+   * Who each notification is from, for its picture, as Facebook shows it: the marked sender
+   * (`data.actor`); else, for an order notification, the other side of that order (the shop for
+   * the customer, the customer for the shop); else MC Mart (admin messages, system news).
+   */
+  private async withFrom<T extends { data: NotificationData; type: string }>(items: T[], recipient: 'customer' | 'shop'): Promise<(T & { from: NotificationFrom })[]> {
+    const orderNumber = (link?: string) => {
+      const path = link?.split('?')[0] ?? '';
+      const m = recipient === 'customer' ? /^\/account\/orders\/([^/]+)$/.exec(path) : /^\/orders\/([^/]+)$/.exec(path);
+      return m?.[1];
+    };
+    const numbers = [...new Set(items.flatMap((i) => (!i.data.actor && !i.data.broadcastId && orderNumber(i.data.link) ? [orderNumber(i.data.link)!] : [])))];
+    const orders = numbers.length
+      ? await this.prisma.shopOrder.findMany({ where: { number: { in: numbers } }, select: { number: true, shopId: true, order: { select: { customerId: true } } } })
+      : [];
+    const byNumber = new Map(orders.map((o) => [o.number, o]));
+    const actorOf = (i: T): NotificationData['actor'] => {
+      if (i.data.actor) return i.data.actor;
+      if (i.data.broadcastId) return undefined;
+      const o = byNumber.get(orderNumber(i.data.link) ?? '');
+      if (!o) return undefined;
+      return recipient === 'customer' ? { type: 'shop', id: o.shopId } : { type: 'customer', id: o.order.customerId };
+    };
+    const actors = items.map(actorOf);
+    const shopIds = [...new Set(actors.flatMap((a) => (a?.type === 'shop' ? [a.id] : [])))];
+    const customerIds = [...new Set(actors.flatMap((a) => (a?.type === 'customer' ? [a.id] : [])))];
+    const [shops, customers] = await Promise.all([
+      shopIds.length ? this.prisma.shop.findMany({ where: { id: { in: shopIds } }, select: { id: true, name: true, logoUrl: true } }) : [],
+      customerIds.length ? this.prisma.customer.findMany({ where: { id: { in: customerIds } }, select: { id: true, name: true, avatarUrl: true } }) : [],
+    ]);
+    const shopById = new Map(shops.map((x) => [x.id, x]));
+    const customerById = new Map(customers.map((x) => [x.id, x]));
+    return items.map((i, n) => {
+      const a = actors[n];
+      const shop = a?.type === 'shop' ? shopById.get(a.id) : undefined;
+      const customer = a?.type === 'customer' ? customerById.get(a.id) : undefined;
+      const from: NotificationFrom = shop
+        ? { kind: 'shop', id: shop.id, name: shop.name, imageUrl: shop.logoUrl ? this.media.publicUrl(shop.logoUrl) : null }
+        : customer
+          ? { kind: 'customer', id: customer.id, name: customer.name, ...avatarFields(customer) }
+          : { kind: 'mcmart' };
+      return { ...i, from };
+    });
   }
 
   async unreadCount(customerId: string): Promise<{ count: number }> {

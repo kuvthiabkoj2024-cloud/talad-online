@@ -4,7 +4,8 @@ import { PrismaService } from '../../../prisma/prisma.service.js';
 import { MediaService } from '../../media/media.service.js';
 import { NotificationsService } from '../../notifications/notifications.service.js';
 import type { FeedPostItem } from '../products/products.service.js';
-import { avatarFields, feedPostInclude, toFeedPost } from './feed-posts.service.js';
+import { avatarFields } from '../../customers/avatar-fields.js';
+import { feedPostInclude, toFeedPost } from './feed-posts.service.js';
 
 /** A customer's public profile: who they are and their numbers. */
 export interface CustomerProfileView {
@@ -226,7 +227,7 @@ export class ProfilesService {
         await this.notifications.send(tx, followingId, 'SYSTEM', {
           lo: { title: `${who} ເລີ່ມຕິດຕາມທ່ານ`, body: 'ເບິ່ງໂປຣໄຟລ໌ຂອງເຂົາເຈົ້າ' },
           en: { title: `${who} started following you`, body: 'See their profile' },
-        }, { link: `/u/${followerId}` });
+        }, { link: `/u/${followerId}`, actor: { type: 'customer', id: followerId } });
       }
     });
     return { following: follow, followers: await this.prisma.customerFollow.count({ where: { followingId, follower: ACTIVE } }) };

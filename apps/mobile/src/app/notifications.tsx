@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -10,7 +10,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
-import { clearBadge, routeFor } from '@/lib/push-notifications';
+import { clearBadge } from '@/lib/push-notifications';
 
 const TABS = ['all', 'orders', 'promotions', 'updates'] as const;
 type Tab = (typeof TABS)[number];
@@ -22,10 +22,9 @@ interface Page {
   unread: Record<Tab, number>;
 }
 
-/** The customer's notifications, as on the website: tabs, unread first glance, tap to open. */
+/** The customer's notifications, as on the website: tabs, who each is from, tap to mark read. */
 export default function NotificationsScreen() {
   const theme = useTheme();
-  const router = useRouter();
   const queryClient = useQueryClient();
   const { t } = useI18n();
   const [tab, setTab] = useState<Tab>('all');
@@ -45,9 +44,9 @@ export default function NotificationsScreen() {
     void queryClient.invalidateQueries({ queryKey: ['me', 'notifications'] });
     void queryClient.invalidateQueries({ queryKey: ['me', 'notifications-unread'] });
   };
-  async function open(n: NotificationItem) {
+  /** Tapping marks it read (it doesn't open other screens). */
+  function read(n: NotificationItem) {
     if (!n.readAt) void api(`/me/notifications/${n.id}/read`, { method: 'POST' }).then(refresh).catch(() => {});
-    router.push(routeFor({ app: 'customer', link: n.data?.link }));
   }
   async function readAll() {
     await api(`/me/notifications/read-all${tab === 'all' ? '' : `?tab=${tab}`}`, { method: 'POST' }).catch(() => {});
@@ -84,7 +83,7 @@ export default function NotificationsScreen() {
         {items.length > 0 && (
           <Card style={styles.card}>
             {items.map((n, i) => (
-              <NotificationRow key={n.id} item={n} divider={i > 0} onPress={() => void open(n)} />
+              <NotificationRow key={n.id} item={n} divider={i > 0} onPress={() => read(n)} />
             ))}
           </Card>
         )}

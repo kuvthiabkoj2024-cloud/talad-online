@@ -14,10 +14,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageHeading } from "@/components/account/page-heading";
 import { MarkAllReadButton, NotificationRow } from "@/components/notifications/notification-controls";
+import { NotificationAvatar } from "@/components/notifications/notification-avatar";
 import { PromotionsSwitch } from "@/components/notifications/promotions-switch";
 import { PushCard } from "@/components/notifications/push-card";
 import { Pagination } from "@/components/pagination";
-import { ProductImage } from "@/components/product-image";
 import {
   notificationHref,
   notificationText,
@@ -195,24 +195,7 @@ export default async function NotificationsPage({ searchParams }: PageProps<"/[l
                       href={notificationHref(n, locale)}
                       className="flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted data-unread:bg-primary-soft/40 data-unread:hover:bg-primary-soft/70"
                     >
-                      <span className="relative shrink-0">
-                        {n.data.imageUrl ? (
-                          <span className="relative block size-12 overflow-hidden rounded-xl bg-muted">
-                            <ProductImage src={n.data.imageUrl} alt="" sizes="48px" className="object-cover" />
-                          </span>
-                        ) : (
-                          <span className={`flex size-12 items-center justify-center rounded-xl ${tone}`}>
-                            <Icon className="size-6" />
-                          </span>
-                        )}
-                        {n.data.imageUrl && (
-                          <span
-                            className={`absolute -bottom-1 -right-1 flex size-5.5 items-center justify-center rounded-full ring-2 ring-card ${tone}`}
-                          >
-                            <Icon className="size-3" />
-                          </span>
-                        )}
-                      </span>
+                      <NotificationAvatar from={n.from} icon={Icon} tone={tone} />
                       <span className="min-w-0 flex-1">
                         <span className="flex items-start gap-2">
                           <span className="flex-1 text-sm font-medium group-data-unread:font-bold">{title}</span>

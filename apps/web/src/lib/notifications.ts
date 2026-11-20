@@ -1,4 +1,4 @@
-import { sellerPath, type Locale, type NotificationData, type NotificationTab } from "@talad/shared";
+import { sellerPath, type Locale, type NotificationData, type NotificationFrom, type NotificationTab } from "@talad/shared";
 import { SELLER_CENTER_URL } from "./customer";
 
 /** Mirrors `CustomerNotification` from services/api notifications. */
@@ -10,6 +10,8 @@ export interface CustomerNotification {
   data: NotificationData;
   readAt: string | null;
   createdAt: string;
+  /** Who it's from (its picture): MC Mart, a shop or a customer. */
+  from?: NotificationFrom;
 }
 
 /** Mirrors `NotificationList` from services/api notifications. */

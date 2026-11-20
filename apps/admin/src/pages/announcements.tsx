@@ -1,6 +1,9 @@
 import {
   BROADCAST_REPEATS,
+  BROADCAST_VARIABLES,
   dateFormatter,
+  fillBroadcastText,
+  hasBroadcastVariables,
   VIENTIANE_OFFSET_MS,
   type BroadcastAudience,
   type BroadcastChannel,
@@ -13,8 +16,8 @@ import { Input } from '@talad/ui/components/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@talad/ui/components/select'
 import { Textarea } from '@talad/ui/components/textarea'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarClock, Pause, Play, Send, Trash2, X } from 'lucide-react'
-import { useDeferredValue, useState } from 'react'
+import { CalendarClock, Pause, Play, RotateCw, Send, Trash2, X } from 'lucide-react'
+import { useDeferredValue, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { FlagBadge } from '@/components/badges'
 import { ConfirmDialog, type ConfirmOptions } from '@/components/confirm-dialog'
@@ -66,6 +69,33 @@ export function AnnouncementsPage() {
   const [msg, setMsg] = useState(EMPTY)
   const [confirm, setConfirm] = useState<ConfirmOptions | null>(null)
   const edit = (k: keyof typeof EMPTY) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setMsg((m) => ({ ...m, [k]: e.target.value }))
+  // The title / message field clicked last: where "Insert" puts {name}, {phone} or {shop}.
+  type TextKey = 'titleLo' | 'bodyLo' | 'titleEn' | 'bodyEn'
+  const fields = useRef<Partial<Record<TextKey, HTMLInputElement | HTMLTextAreaElement | null>>>({})
+  const [lastField, setLastField] = useState<TextKey>('bodyLo')
+  const textField = (k: TextKey) => ({
+    ref: (el: HTMLInputElement | HTMLTextAreaElement | null) => {
+      fields.current[k] = el
+    },
+    value: msg[k],
+    onChange: edit(k),
+    onFocus: () => setLastField(k),
+  })
+  function insertVariable(v: string) {
+    const el = fields.current[lastField]
+    const value = msg[lastField]
+    const start = el?.selectionStart ?? value.length
+    const end = el?.selectionEnd ?? start
+    const token = `{${v}}`
+    setMsg((m) => ({ ...m, [lastField]: value.slice(0, start) + token + value.slice(end) }))
+    // Back in the field, just after what was inserted.
+    requestAnimationFrame(() => {
+      el?.focus()
+      el?.setSelectionRange(start + token.length, start + token.length)
+    })
+  }
+  const personal = [msg.titleLo, msg.bodyLo, msg.titleEn, msg.bodyEn].some(hasBroadcastVariables)
+  const sample = (text: string) => fillBroadcastText(text, a.sample)
 
   const vientiane = (iso: string) =>
     dateFormatter(locale, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Vientiane' }).format(new Date(iso))
@@ -125,17 +155,23 @@ export function AnnouncementsPage() {
     })
   }
 
-  async function act(b: Broadcast, action: 'pause' | 'resume' | 'delete') {
+  async function act(b: Broadcast, action: 'pause' | 'resume' | 'delete' | 'resend') {
     const run = async () => {
       try {
         if (action === 'delete') await send('DELETE', `/admin/broadcasts/${b.id}`)
         else await send('POST', `/admin/broadcasts/${b.id}/${action}`)
         void queryClient.invalidateQueries({ queryKey: KEY })
+        if (action === 'resend') {
+          toast.success(a.resent)
+          // It sends in the background: show its numbers once done.
+          setTimeout(() => void queryClient.invalidateQueries({ queryKey: KEY }), 4000)
+        }
       } catch (e) {
         toast.error(e instanceof ApiError ? e.message : t.common.saveError)
       }
     }
     if (action === 'delete') setConfirm({ title: a.delete, description: a.deleteConfirm, confirmLabel: a.delete, destructive: true, onConfirm: run })
+    else if (action === 'resend') setConfirm({ title: a.resendTitle, description: a.resendBody, confirmLabel: a.resend, onConfirm: run })
     else await run()
   }
 
@@ -254,18 +290,47 @@ export function AnnouncementsPage() {
                 )}
 
                 {/* What */}
+                {/* Personal details: {name}, {phone}, {shop}, filled in for each recipient. */}
+                <div className="flex flex-col gap-1.5 rounded-lg border border-dashed bg-muted/30 p-3">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-sm font-medium">{a.insert}</span>
+                    {BROADCAST_VARIABLES.map((v) => (
+                      <Button key={v} type="button" size="sm" variant="outline" onMouseDown={(e) => e.preventDefault()} onClick={() => insertVariable(v)}>
+                        {a.variables[v]} <code className="text-xs text-muted-foreground">{`{${v}}`}</code>
+                      </Button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {a.insertHint} {a.variableHint}
+                  </p>
+                </div>
                 <Field required id="tlo" label={a.titleLo}>
-                  <Input id="tlo" maxLength={120} value={msg.titleLo} onChange={edit('titleLo')} />
+                  <Input id="tlo" maxLength={120} {...textField('titleLo')} />
                 </Field>
                 <Field required id="blo" label={a.bodyLo}>
-                  <Textarea id="blo" rows={3} maxLength={1000} value={msg.bodyLo} onChange={edit('bodyLo')} />
+                  <Textarea id="blo" rows={3} maxLength={1000} {...textField('bodyLo')} />
                 </Field>
                 <Field required id="ten" label={a.titleEn}>
-                  <Input id="ten" maxLength={120} value={msg.titleEn} onChange={edit('titleEn')} />
+                  <Input id="ten" maxLength={120} {...textField('titleEn')} />
                 </Field>
                 <Field required id="ben" label={a.bodyEn}>
-                  <Textarea id="ben" rows={3} maxLength={1000} value={msg.bodyEn} onChange={edit('bodyEn')} />
+                  <Textarea id="ben" rows={3} maxLength={1000} {...textField('bodyEn')} />
                 </Field>
+                {personal && (
+                  <div className="rounded-lg bg-brand-soft/60 p-3 text-sm">
+                    <p className="mb-1.5 text-xs font-semibold text-primary">{a.preview}</p>
+                    {(['lo', 'en'] as const).map((l) => {
+                      const title = sample(l === 'lo' ? msg.titleLo : msg.titleEn)
+                      const body = sample(l === 'lo' ? msg.bodyLo : msg.bodyEn)
+                      return title || body ? (
+                        <div key={l} className="mb-1.5 last:mb-0">
+                          <p className="font-semibold">{title}</p>
+                          <p className="whitespace-pre-line text-muted-foreground">{body}</p>
+                        </div>
+                      ) : null
+                    })}
+                  </div>
+                )}
                 <Field id="link" label={a.link} hint={audience === 'sellers' || audience === 'shop' ? a.linkHintShop : a.linkHint}>
                   <Input id="link" pattern="/\S*" className="font-mono" placeholder="/feed" value={msg.link} onChange={edit('link')} />
                 </Field>
@@ -315,7 +380,11 @@ export function AnnouncementsPage() {
                             {r.error ?? fill(a.result, { recipients: formatNumber(r.recipients, locale), inApp: formatNumber(r.inApp, locale), pushSent: formatNumber(r.pushSent, locale), pushFailed: formatNumber(r.pushFailed, locale), smsSent: formatNumber(r.smsSent, locale) })}
                           </span>
                         )}
-                        <span className="flex items-center gap-1 pt-0.5">
+                        <span className="flex flex-wrap items-center gap-1 pt-0.5">
+                          <Button size="sm" variant="outline" onClick={() => void act(b, 'resend')}>
+                            <RotateCw />
+                            {a.resend}
+                          </Button>
                           {b.status === 'ACTIVE' && b.repeat !== 'ONCE' && (
                             <Button size="sm" variant="outline" onClick={() => void act(b, 'pause')}>
                               <Pause />

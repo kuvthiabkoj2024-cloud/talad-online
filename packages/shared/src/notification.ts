@@ -78,7 +78,20 @@ export interface NotificationData {
   imageUrl?: string;
   /** Text per language; `title` / `body` are the fallback. */
   i18n?: Partial<Record<Locale, { title: string; body: string }>>;
+  /**
+   * Who it's from, for its picture: a shop (its logo) or a customer (their photo). Without it,
+   * an order notification shows the other side of the order; anything else is from MC Mart.
+   */
+  actor?: { type: 'shop' | 'customer'; id: string };
+  /** Sent by an admin broadcast (shown as from MC Mart). */
+  broadcastId?: string;
 }
+
+/** Who a listed notification is from (resolved by the API), shown as its picture. */
+export type NotificationFrom =
+  | { kind: 'mcmart' }
+  | { kind: 'shop'; id: string; name: string; imageUrl: string | null }
+  | { kind: 'customer'; id: string; name: string; avatarUrl: string | null; avatarVersion: string | null };
 
 // ─── Admin broadcasts (in-app / push / SMS, now, later or repeating) ─────────
 
@@ -131,3 +144,23 @@ export function nextBroadcastRun(
 
 /** A broadcast's text in both languages. */
 export type BroadcastContent = Record<'lo' | 'en', { title: string; body: string }>;
+
+/**
+ * Personal bits an admin can put in a broadcast's title and message: `{name}` (the recipient),
+ * `{phone}` (their number) and `{shop}` (the shop's name, for shops and customers who own one).
+ */
+export const BROADCAST_VARIABLES = ['name', 'phone', 'shop'] as const;
+export type BroadcastVariable = (typeof BROADCAST_VARIABLES)[number];
+const VARIABLE = /\{(name|phone|shop)\}/g;
+
+/** True when the text has any `{name}`, `{phone}` or `{shop}` (each recipient then gets their own). */
+export const hasBroadcastVariables = (text: string): boolean => new RegExp(VARIABLE.source).test(text);
+
+/** The text for one recipient: variables filled in (missing ones left out), stray double spaces tidied. */
+export function fillBroadcastText(text: string, values: Partial<Record<BroadcastVariable, string | null>>): string {
+  return text
+    .replace(VARIABLE, (_, key: BroadcastVariable) => values[key] ?? '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/ +([,.!?])/g, '$1')
+    .trim();
+}

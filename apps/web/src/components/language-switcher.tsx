@@ -3,6 +3,7 @@
 import { LOCALES, type Locale } from "@talad/shared";
 import { Globe } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
+import { saveAccountLocale } from "@/lib/notification-settings-actions";
 
 const LABELS: Record<Locale, string> = { lo: "ລາວ", en: "EN" };
 const NAMES: Record<Locale, string> = { lo: "ລາວ", en: "English" };
@@ -13,6 +14,8 @@ function useSwitchLocale() {
   const pathname = usePathname();
   return (next: Locale) => {
     document.cookie = `NEXT_LOCALE=${next}; path=/; max-age=31536000; samesite=lax`;
+    // Signed in: the account's notifications (push, SMS) follow the chosen language too.
+    void saveAccountLocale(next).catch(() => {});
     // Keep the query (checkout items, search, order tab) so the page stays the same.
     router.push(pathname.replace(/^\/[^/]+/, `/${next}`) + window.location.search);
   };

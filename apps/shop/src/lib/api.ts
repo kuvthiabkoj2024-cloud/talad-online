@@ -1,5 +1,9 @@
 const BASE_URL = import.meta.env.VITE_API_URL
 
+/** A customer's photo: their upload (served by the API), else their Google / Apple picture. */
+export const customerPhoto = (c: { id: string; avatarUrl: string | null; avatarVersion: string | null }) =>
+  c.avatarVersion ? `${String(BASE_URL).replace(/\/$/, '')}/avatars/${c.id}?v=${c.avatarVersion}` : c.avatarUrl
+
 /**
  * The API session token. Seller Center is a static SPA on another origin than the API,
  * so it sends the token as a Bearer header (like the mobile app) instead of a cookie.

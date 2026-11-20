@@ -27,6 +27,25 @@ interface PushPayload {
 }
 
 /** Newest browsers per recipient; older ones are usually gone anyway. */
+type NotificationEvent = Extract<RealtimeEvent, { kind: 'notification' }>;
+
+/** A browser subscription with its account's language (a shop's: its owner's). */
+const SUB_SELECT = {
+  id: true,
+  endpoint: true,
+  p256dh: true,
+  auth: true,
+  locale: true,
+  customerId: true,
+  shopId: true,
+  customer: { select: { locale: true } },
+  shop: { select: { owner: { select: { locale: true } } } },
+} as const;
+/** The account's language (last chosen in the app or on the website); the browser's as a fallback. */
+const localeOf = (s: { locale: string; customer: { locale: string } | null; shop: { owner: { locale: string } | null } | null }): Locale => {
+  const l = s.customer?.locale ?? s.shop?.owner?.locale ?? s.locale;
+  return isLocale(l) ? l : 'lo';
+};
 const MAX_DEVICES = 10;
 const DAY_S = 86_400;
 const isLocale = (v: unknown): v is Locale => (LOCALES as readonly unknown[]).includes(v);
@@ -99,11 +118,11 @@ export class PushService implements OnModuleInit, OnModuleDestroy {
         where: kind === 'customer' ? { customerId: id } : { shopId: id },
         orderBy: { updatedAt: 'desc' },
         take: MAX_DEVICES,
-        select: { id: true, endpoint: true, p256dh: true, auth: true, locale: true },
+        select: SUB_SELECT,
       });
       if (!subs.length) continue;
       const badge = await this.unread(kind, id);
-      await Promise.all(subs.map((s) => this.send(s, { ...payloadFor(event, kind, isLocale(s.locale) ? s.locale : 'lo', this.sellerUrl), badge })));
+      await Promise.all(subs.map((s) => this.send(s, { ...payloadFor(event, kind, localeOf(s), this.sellerUrl), badge })));
     }
   }
 
@@ -111,15 +130,22 @@ export class PushService implements OnModuleInit, OnModuleDestroy {
    * The same notification to many accounts' browsers at once (admin broadcasts): customers by
    * id, or shops by id. The caller has already left out customers who turned promotions off.
    */
-  async sendToMany(kind: 'customer' | 'shop', ids: string[], event: Extract<RealtimeEvent, { kind: 'notification' }>): Promise<{ sent: number; failed: number }> {
+  async sendToMany(
+    kind: 'customer' | 'shop',
+    ids: string[],
+    event: NotificationEvent | ((id: string) => NotificationEvent),
+  ): Promise<{ sent: number; failed: number }> {
     const count = { sent: 0, failed: 0 };
     if (!this.publicKey || !ids.length) return count;
     const subs = await this.prisma.pushSubscription.findMany({
       where: kind === 'customer' ? { customerId: { in: ids } } : { shopId: { in: ids } },
-      select: { id: true, endpoint: true, p256dh: true, auth: true, locale: true },
+      select: SUB_SELECT,
     });
+    // The same notification for all, or each customer's / shop's own (`{name}` and the like).
+    const eventFor = typeof event === 'function' ? event : () => event;
     for (const s of subs) {
-      const ok = await this.send(s, { ...payloadFor(event, kind, isLocale(s.locale) ? s.locale : 'lo', this.sellerUrl), badge: 0 });
+      const own = eventFor((kind === 'customer' ? s.customerId : s.shopId) ?? '');
+      const ok = await this.send(s, { ...payloadFor(own, kind, localeOf(s), this.sellerUrl), badge: 0 });
       count[ok ? 'sent' : 'failed']++;
     }
     return count;

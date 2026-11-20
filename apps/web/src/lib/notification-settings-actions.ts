@@ -24,3 +24,16 @@ export async function setPromotions(on: boolean): Promise<{ ok: boolean }> {
     return { ok: false };
   }
 }
+
+/** The account's language (signed in only): notifications, pushes and SMS are written in it. */
+export async function saveAccountLocale(locale: "lo" | "en"): Promise<void> {
+  if (locale !== "lo" && locale !== "en") return;
+  const token = await getSessionToken();
+  if (!token) return;
+  await fetch(`${API_URL}/me/locale`, {
+    method: "PUT",
+    headers: { ...(await clientHeaders()), Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ locale }),
+    cache: "no-store",
+  }).catch(() => {});
+}

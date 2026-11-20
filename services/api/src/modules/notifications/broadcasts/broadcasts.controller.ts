@@ -50,6 +50,13 @@ export class AdminBroadcastsController {
     return this.broadcasts.resume(a, broadcastId);
   }
 
+  /** Send it again now, to the same people (the schedule doesn't change). */
+  @Post(':id/resend')
+  @HttpCode(200)
+  resend(@CurrentAdmin() a: AdminUser, @Param('id', id) broadcastId: string) {
+    return this.broadcasts.resend(a, broadcastId);
+  }
+
   @Delete(':id')
   @HttpCode(204)
   async remove(@CurrentAdmin() a: AdminUser, @Param('id', id) broadcastId: string) {

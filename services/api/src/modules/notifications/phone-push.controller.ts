@@ -29,6 +29,11 @@ class PushTokenDto {
   token: string;
 }
 
+class LocaleDto {
+  @IsIn(['lo', 'en'])
+  locale: 'lo' | 'en';
+}
+
 class NotificationSettingsDto {
   /** Promotions and MC Mart news by push / SMS. */
   @IsBoolean()
@@ -49,6 +54,11 @@ export class PhonePushService {
 
   async unregister(customerId: string, token: string): Promise<void> {
     await this.prisma.pushDevice.deleteMany({ where: { customerId, token } });
+  }
+
+  /** The language the account's notifications, pushes and SMS are written in. */
+  async saveLocale(customerId: string, locale: 'lo' | 'en'): Promise<void> {
+    await this.prisma.customer.update({ where: { id: customerId }, data: { locale } });
   }
 
   async settings(customerId: string): Promise<{ promotions: boolean }> {
@@ -100,5 +110,20 @@ export class NotificationSettingsController {
   @Put()
   save(@CurrentCustomer() c: Customer, @Body() dto: NotificationSettingsDto) {
     return this.phones.saveSettings(c.id, dto);
+  }
+}
+
+/** The app or website switched language: notifications follow (push, SMS). */
+@ApiTags('notifications')
+@ApiBearerAuth()
+@UseGuards(CustomerAuthGuard)
+@Controller('me/locale')
+export class AccountLocaleController {
+  constructor(private readonly phones: PhonePushService) {}
+
+  @Put()
+  @HttpCode(204)
+  async save(@CurrentCustomer() c: Customer, @Body() dto: LocaleDto) {
+    await this.phones.saveLocale(c.id, dto.locale);
   }
 }

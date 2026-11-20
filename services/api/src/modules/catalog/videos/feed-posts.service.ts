@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { open } from 'node:fs/promises';
 import type { Prisma } from '../../../generated/prisma/client.js';
 import { PrismaService } from '../../../prisma/prisma.service.js';
-import { avatarPrefix } from '../../auth/customer-auth.service.js';
+import { avatarFields } from '../../customers/avatar-fields.js';
 import { MediaService } from '../../media/media.service.js';
 import { NotificationsService } from '../../notifications/notifications.service.js';
 import type { FeedPostItem } from '../products/products.service.js';
@@ -15,24 +15,6 @@ import { detectVideo } from '../../media/video-type.js';
 
 export const feedPostInclude = { customer: { select: { id: true, name: true, avatarUrl: true } } } as const;
 type PostRow = Prisma.FeedPostGetPayload<{ include: typeof feedPostInclude }>;
-
-/** A social-login picture (e.g. Google) as a link; an uploaded photo isn't a link (see avatarFields). */
-export const publicAvatar = (c: { id: string; avatarUrl: string | null }) => (c.avatarUrl && !c.avatarUrl.startsWith(avatarPrefix(c.id)) ? c.avatarUrl : null);
-
-/**
- * A person's photo for public pages (video profile, feed, comments, followers), the same way as
- * their own profile: `avatarUrl` for a social-login picture, or `avatarVersion` for an uploaded
- * photo, which is public at GET /avatars/:id?v=<version> (clients build that link). Both null:
- * initials.
- */
-export const avatarFields = (c: { id: string; avatarUrl: string | null }) => {
-  const uploaded = !!c.avatarUrl?.startsWith(avatarPrefix(c.id));
-  return {
-    avatarUrl: uploaded ? null : c.avatarUrl,
-    // The object name is a fresh UUID per upload, so it doubles as the cache-busting version.
-    avatarVersion: uploaded ? c.avatarUrl!.slice(avatarPrefix(c.id).length).split('.')[0]! : null,
-  };
-};
 
 /** A customer's post as the feed (and their profile) shows it. */
 export function toFeedPost(media: MediaService, p: PostRow): FeedPostItem {
@@ -128,7 +110,7 @@ export class FeedPostsService {
         await this.notifications.send(tx, authorId, 'SYSTEM', {
           lo: { title: `${who} ມັກວິດີໂອຂອງທ່ານ`, body: '❤️' },
           en: { title: `${who} liked your video`, body: '❤️' },
-        }, { link: `/feed?post=${postId}` });
+        }, { link: `/feed?post=${postId}`, actor: { type: 'customer', id: customerId } });
       }
       return Math.max(0, post.likeCount);
     });

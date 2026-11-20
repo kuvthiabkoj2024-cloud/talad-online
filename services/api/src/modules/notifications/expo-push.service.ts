@@ -74,23 +74,32 @@ export class ExpoPushService implements OnModuleInit, OnModuleDestroy {
       if (kind === 'admin') continue;
       const ownerId = kind === 'customer' ? id : (await this.prisma.shop.findUnique({ where: { id }, select: { ownerId: true } }))?.ownerId;
       if (!ownerId) continue;
-      if (kind === 'customer' && event.kind === 'notification' && PROMO_TYPES.has(event.type) && !(await this.promotionsOn(ownerId))) continue;
+      const owner = await this.prisma.customer.findUnique({ where: { id: ownerId }, select: { locale: true, promoNotifications: true } });
+      if (!owner) continue;
+      if (kind === 'customer' && event.kind === 'notification' && PROMO_TYPES.has(event.type) && !owner.promoNotifications) continue;
       const phones = await this.prisma.pushDevice.findMany({ where: { customerId: ownerId }, orderBy: { updatedAt: 'desc' }, take: MAX_PHONES });
       if (!phones.length) continue;
       const badge = await this.unread(kind, id);
       const app: PushApp = kind === 'shop' ? 'seller' : 'customer';
-      await this.post(phones.map((p) => ({ ...this.message(p.token, event, app, isLocale(p.locale) ? p.locale : 'lo'), badge })));
+      // In the account's language (the one last chosen in the app or on the website).
+      const locale = isLocale(owner.locale) ? owner.locale : 'lo';
+      await this.post(phones.map((p) => ({ ...this.message(p.token, event, app, locale), badge })));
     }
   }
 
   /**
-   * The same notification to many accounts' phones at once (admin broadcasts). `app: 'seller'`
-   * opens the seller screens. The caller has already left out customers who turned promotions off.
+   * A notification to many accounts' phones at once (admin broadcasts): the same one, or each
+   * account's own (`event` by customer id, for `{name}` and the like). `app: 'seller'` opens the
+   * seller screens. The caller has already left out customers who turned promotions off.
    */
-  async sendToAccounts(customerIds: string[], event: NotificationEvent, app: PushApp): Promise<PushCount> {
+  async sendToAccounts(customerIds: string[], event: NotificationEvent | ((customerId: string) => NotificationEvent), app: PushApp): Promise<PushCount> {
     if (!customerIds.length) return { sent: 0, failed: 0 };
-    const phones = await this.prisma.pushDevice.findMany({ where: { customerId: { in: customerIds } }, select: { token: true, locale: true } });
-    return this.post(phones.map((p) => this.message(p.token, event, app, isLocale(p.locale) ? p.locale : 'lo')));
+    const phones = await this.prisma.pushDevice.findMany({
+      where: { customerId: { in: customerIds } },
+      select: { token: true, customerId: true, customer: { select: { locale: true } } },
+    });
+    const eventFor = typeof event === 'function' ? event : () => event;
+    return this.post(phones.map((p) => this.message(p.token, eventFor(p.customerId), app, isLocale(p.customer.locale) ? p.customer.locale : 'lo')));
   }
 
   private message(token: string, event: NotificationEvent, app: PushApp, locale: Locale): ExpoMessage {
@@ -138,11 +147,6 @@ export class ExpoPushService implements OnModuleInit, OnModuleDestroy {
       }
     }
     return count;
-  }
-
-  private async promotionsOn(customerId: string): Promise<boolean> {
-    const c = await this.prisma.customer.findUnique({ where: { id: customerId }, select: { promoNotifications: true } });
-    return c?.promoNotifications ?? false;
   }
 
   /** The app icon's number: unread notifications plus unread chat messages (as for Web Push). */

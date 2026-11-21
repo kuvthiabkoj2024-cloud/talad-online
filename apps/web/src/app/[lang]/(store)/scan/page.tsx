@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { Breadcrumb } from "@/components/breadcrumb";
 import { PhotoSearch } from "@/components/search/photo-search";
+import { pageAlternates } from "@/lib/seo";
 import { getDictionary, getLocale } from "@/app/[lang]/dictionaries";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { scan } = await getDictionary();
-  return { title: scan.title, description: scan.subtitle };
+  return { title: scan.title, description: scan.subtitle, alternates: pageAlternates(await getLocale(), "/scan") };
 }
 
 /** "Scan to search" (§5): photo → visually similar products (+ AI keywords when configured). */

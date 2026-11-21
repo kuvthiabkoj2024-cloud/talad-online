@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 import { TaladChat } from "@/components/chat/talad-chat";
 import type { SavedChatMessage } from "@/lib/chat-actions";
 import { apiGetAsCustomer, getCurrentCustomer } from "@/lib/session";
+import { pageAlternates } from "@/lib/seo";
 import { getDictionary, getLocale } from "@/app/[lang]/dictionaries";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { chat } = await getDictionary();
-  return { title: chat.title, description: chat.subtitle };
+  return { title: chat.title, description: chat.subtitle, alternates: pageAlternates(await getLocale(), "/chat") };
 }
 
 /** Market Chat (shop by chat): ask in Lao or English, or send a photo. */

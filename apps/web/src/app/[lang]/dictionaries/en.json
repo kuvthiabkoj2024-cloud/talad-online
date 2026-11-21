@@ -1,7 +1,17 @@
 {
   "meta": {
-    "title": "MC Mart — Shop local",
-    "description": "Shop from local sellers across Laos. Fast delivery, secure payments."
+    "title": "MC Mart — Online Shopping in Laos | Shop Local Products",
+    "description": "Shop online in Laos at MC Mart: phones, fashion, food, beauty and home goods from verified local shops. Nationwide delivery, cash on delivery, secure payment.",
+    "keywords": "MC Mart, online shopping Laos, Laos marketplace, buy online Laos, Vientiane online shop, Lao products, cash on delivery Laos, local shops Laos, sell online Laos",
+    "h1": "MC Mart — online shopping from local shops across Laos",
+    "share": {
+      "shop": "{products} products · {followers} followers on MC Mart",
+      "shopRated": "★ {rating} ({reviews} reviews)",
+      "profile": "{videos} videos · {followers} followers · {likes} likes on MC Mart",
+      "video": "Video by {name} on MC Mart",
+      "productVideo": "{name} · {shop} on MC Mart",
+      "category": "Shop {name} from local shops across Laos on MC Mart. Fast delivery, secure payments."
+    }
   },
   "header": {
     "feed": "Videos",

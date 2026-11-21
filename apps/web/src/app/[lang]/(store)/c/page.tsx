@@ -4,13 +4,14 @@ import { Breadcrumb } from "@/components/breadcrumb";
 import { apiGet, type CategoryNode } from "@/lib/api";
 import { categoryIcon } from "@/lib/category-icons";
 import { localized } from "@/lib/format";
+import { pageAlternates } from "@/lib/seo";
 import { getDictionary, getLocale } from "@/app/[lang]/dictionaries";
 
 export const revalidate = 300;
 
 export async function generateMetadata(): Promise<Metadata> {
   const { catalog } = await getDictionary();
-  return { title: catalog.allCategories };
+  return { title: catalog.allCategories, alternates: pageAlternates(await getLocale(), "/c") };
 }
 
 /** Every category and its subcategories. */

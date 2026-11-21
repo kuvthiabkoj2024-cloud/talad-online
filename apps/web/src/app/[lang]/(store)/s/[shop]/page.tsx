@@ -5,6 +5,8 @@ import { FreeDeliveryBadge } from "@/components/free-delivery-badge";
 import { ShopProducts } from "@/components/shop/shop-products";
 import { apiGet } from "@/lib/api";
 import { isShopSort, shopProductsPath, type PublicShop, type ShopProductPage } from "@/lib/shop";
+import { formatCount, interpolate } from "@/lib/format";
+import { metaDescription, shareMetadata } from "@/lib/seo";
 import { getDictionary, getLocale } from "@/app/[lang]/dictionaries";
 
 type Props = PageProps<"/[lang]/s/[shop]">;
@@ -16,23 +18,22 @@ async function getShop(slug: string): Promise<PublicShop> {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { lang, shop: slug } = await params;
+  const { shop: slug } = await params;
+  const lang = await getLocale();
   const shop = await getShop(slug);
-  const path = `/${lang}/s/${slug}`;
-  const description = shop.description?.slice(0, 160) || `${shop.name} · MC Mart`;
-  return {
+  const { meta } = await getDictionary();
+  const stats = interpolate(meta.share.shop, { products: shop.productCount, followers: formatCount(shop.followerCount, lang) });
+  const rated = shop.ratingCount > 0 ? interpolate(meta.share.shopRated, { rating: shop.ratingAvg.toFixed(1), reviews: shop.ratingCount }) : null;
+  return shareMetadata({
+    lang,
+    path: `/s/${slug}`,
     title: shop.name,
-    description,
-    alternates: { canonical: path },
-    openGraph: {
-      type: "website",
-      siteName: "MC Mart",
-      url: path,
-      title: shop.name,
-      description,
-      images: shop.coverUrl ? [shop.coverUrl] : shop.logoUrl ? [shop.logoUrl] : [],
-    },
-  };
+    description: metaDescription(shop.description, rated, stats),
+    // The shop's profile picture, as in a Facebook page share; its cover without one.
+    image: shop.logoUrl ?? shop.coverUrl,
+    type: "profile",
+    keywords: [shop.name],
+  });
 }
 
 /** Shop storefront (§3.2): profile, in-shop search, sort and "Load more". */

@@ -14,6 +14,7 @@ import { ProductGrid } from "@/components/product-grid";
 import { ProductGridSkel } from "@/components/skeletons";
 import { apiGet, type ProductDetail } from "@/lib/api";
 import { interpolate, localized } from "@/lib/format";
+import { metaDescription, shareMetadata, SITE_URL } from "@/lib/seo";
 import { getDictionary, getLocale } from "@/app/[lang]/dictionaries";
 
 // Stock and prices change often; keep cached pages fresh.
@@ -32,21 +33,30 @@ async function getProduct({ params }: Props): Promise<ProductDetail> {
 
 export async function generateMetadata(props: Props): Promise<Metadata> {
   const product = await getProduct(props);
-  const { lang, shop, slug } = await props.params;
-  const path = `/${lang}/p/${shop}/${slug}`;
-  // Shared links show this text under the photo; without a description, the shop's name.
-  const description = product.description?.slice(0, 160) || `${product.shop.name} · MC Mart`;
-  return {
+  const lang = await getLocale();
+  const { shop, slug } = await props.params;
+  const price = product.priceMax && product.priceMax > product.price
+    ? `${formatMoney(product.price, lang)} – ${formatMoney(product.priceMax, lang)}`
+    : formatMoney(product.price, lang);
+  // Like the big marketplaces: price first, then what the shop wrote, then who sells it.
+  const description = metaDescription(price, product.description, product.shop.name);
+  const { category } = product;
+  const meta = shareMetadata({
+    lang,
+    path: `/p/${shop}/${slug}`,
     title: product.name,
     description,
-    alternates: { canonical: path },
-    openGraph: {
-      type: "website",
-      siteName: "MC Mart",
-      url: path,
-      title: product.name,
-      description,
-      images: product.imageUrls.slice(0, 1),
+    image: product.imageUrls[0],
+    keywords: [product.name, product.brand?.name, localized(category.name, lang), category.parent && localized(category.parent.name, lang), product.shop.name],
+  });
+  return {
+    ...meta,
+    // Facebook and Pinterest read the price of a shared product from these.
+    other: {
+      "product:price:amount": String(product.price),
+      "product:price:currency": "LAK",
+      "product:availability": product.stock > 0 ? "in stock" : "out of stock",
+      ...(product.brand && { "product:brand": product.brand.name }),
     },
   };
 }
@@ -58,21 +68,42 @@ export default async function ProductPage(props: Props) {
   const { product: dict, cart: cartDict, cartErrors, account, feed, freeDelivery } = await getDictionary();
   const { category } = product;
 
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "Product",
-    name: product.name,
-    sku: product.sku,
-    image: product.imageUrls,
-    description: product.description ?? undefined,
-    offers: {
-      "@type": "AggregateOffer",
-      priceCurrency: "LAK",
-      lowPrice: product.price,
-      highPrice: product.priceMax ?? product.price,
-      availability: `https://schema.org/${product.stock > 0 ? "InStock" : "OutOfStock"}`,
+  const url = `${SITE_URL}/${locale}/p/${product.shop.slug}/${product.slug}`;
+  const jsonLd = [
+    {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      name: product.name,
+      sku: product.sku,
+      url,
+      image: product.imageUrls,
+      description: product.description ?? undefined,
+      ...(product.brand && { brand: { "@type": "Brand", name: product.brand.name } }),
+      ...(product.ratingCount > 0 && {
+        aggregateRating: { "@type": "AggregateRating", ratingValue: product.ratingAvg, reviewCount: product.ratingCount },
+      }),
+      offers: {
+        "@type": "AggregateOffer",
+        url,
+        priceCurrency: "LAK",
+        lowPrice: product.price,
+        highPrice: product.priceMax ?? product.price,
+        availability: `https://schema.org/${product.stock > 0 ? "InStock" : "OutOfStock"}`,
+        itemCondition: "https://schema.org/NewCondition",
+        seller: { "@type": "Organization", name: product.shop.name, url: `${SITE_URL}/${locale}/s/${product.shop.slug}` },
+      },
     },
-  };
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { name: dict.home, url: `${SITE_URL}/${locale}` },
+        ...(category.parent ? [{ name: localized(category.parent.name, locale), url: `${SITE_URL}/${locale}/c/${category.parent.slug}` }] : []),
+        { name: localized(category.name, locale), url: `${SITE_URL}/${locale}/c/${category.slug}` },
+        { name: product.name, url },
+      ].map((item, i) => ({ "@type": "ListItem", position: i + 1, name: item.name, item: item.url })),
+    },
+  ];
 
   return (
     // Bottom padding on phones leaves room for the fixed buy bar.

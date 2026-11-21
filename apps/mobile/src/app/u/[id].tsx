@@ -5,12 +5,13 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
+import { HeaderShare } from '@/components/header-share';
 import { Icon } from '@/components/icon';
 import { ThemedText } from '@/components/themed-text';
 import { Button, EmptyState, LoadError, Loading, Pill } from '@/components/ui';
 import { BrandGreen, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { api, ApiError, avatarSrc, type FeedPost, type LikedVideo, type PublicProfile } from '@/lib/api';
+import { api, ApiError, avatarSrc, SITE_URL, type FeedPost, type LikedVideo, type PublicProfile } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { count, date } from '@/lib/format';
 import { fill, useI18n } from '@/lib/i18n';
@@ -113,7 +114,12 @@ export default function VideoProfileScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: p?.name ?? '' }} />
+      <Stack.Screen
+        options={{
+          title: p?.name ?? '',
+          headerRight: () => (p ? <HeaderShare text={fill(t.feed.shareText, { name: p.name })} url={`${SITE_URL}/${locale}/u/${p.id}`} /> : null),
+        }}
+      />
       <ScrollView
         style={{ backgroundColor: theme.background }}
         contentContainerStyle={styles.content}

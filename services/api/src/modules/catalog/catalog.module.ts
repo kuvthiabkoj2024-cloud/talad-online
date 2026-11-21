@@ -27,6 +27,8 @@ import { PhotoSearchService } from './image-search/photo-search.service.js';
 import { VoiceSearchService } from './voice-search/voice-search.service.js';
 import { VisionKeywordsService } from './image-search/vision-keywords.service.js';
 import { ProductsController } from './products/products.controller.js';
+import { SitemapController } from './sitemap/sitemap.controller.js';
+import { SitemapService } from './sitemap/sitemap.service.js';
 import { ProductsService } from './products/products.service.js';
 import { ShopProductsController } from './products/shop-products.controller.js';
 import { ShopProductsService } from './products/shop-products.service.js';
@@ -43,8 +45,8 @@ import { ProfilesService } from './videos/profiles.service.js';
 /** Categories, units, products, variants and moderation (§2.5, §2.6, §3.3). */
 @Module({
   imports: [AuthModule, CmsModule, MediaModule, PromotionsModule, NotificationsModule, OrdersModule],
-  controllers: [BrandsController, AdminVideosController, ChatController, AdminAssistantController, PhotoSearchController, CategoriesController, UnitsController, ProductsController, ShopProductsController, AdminProductsController, AdminCatalogController, VideosController, MyVideosController, ShopVideosController, FeedPostsController, MyFeedPostsController, ProfilesController, MyProfileFollowsController, MyLikedVideosController, ShopCommissionController, ShopCommissionPreviewController, AdminCommissionController],
-  providers: [
+  controllers: [SitemapController, BrandsController, AdminVideosController, ChatController, AdminAssistantController, PhotoSearchController, CategoriesController, UnitsController, ProductsController, ShopProductsController, AdminProductsController, AdminCatalogController, VideosController, MyVideosController, ShopVideosController, FeedPostsController, MyFeedPostsController, ProfilesController, MyProfileFollowsController, MyLikedVideosController, ShopCommissionController, ShopCommissionPreviewController, AdminCommissionController],
+  providers: [SitemapService,
     BrandsService,
     AdminVideosService,
     CommissionRequestsService,

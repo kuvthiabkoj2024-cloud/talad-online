@@ -7,6 +7,7 @@ import { FaqAccordion } from "@/components/faq-accordion";
 import { apiGet } from "@/lib/api";
 import { isHtml, parseCmsBody, type CmsDocument, type CmsSection } from "@/lib/cms-page";
 import { interpolate } from "@/lib/format";
+import { metaDescription, shareMetadata } from "@/lib/seo";
 import { getDictionary, getLocale } from "@/app/[lang]/dictionaries";
 
 // Admins edit these in the console (§2.11); refresh at most every 5 minutes.
@@ -28,9 +29,11 @@ async function getPage(slug: string, locale: Locale) {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const page = await getPage((await params).slug, await getLocale());
+  const lang = await getLocale();
+  const { slug } = await params;
+  const page = await getPage(slug, lang);
   const text = isHtml(page.body) ? page.body.replace(/<[^>]+>/g, " ") : page.body.replace(/^#\s+/gm, "");
-  return { title: page.title, description: text.replace(/\s+/g, " ").trim().slice(0, 160) };
+  return shareMetadata({ lang, path: `/pages/${slug}`, title: page.title, description: metaDescription(text) });
 }
 
 const cn = (...names: (string | false | undefined)[]) => names.filter(Boolean).join(" ");

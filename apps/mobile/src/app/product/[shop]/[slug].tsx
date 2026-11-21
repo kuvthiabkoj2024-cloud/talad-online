@@ -8,6 +8,7 @@ import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CartBadge, useWiggle } from '@/components/cart-badge';
+import { HeaderShare } from '@/components/header-share';
 import { Stepper } from '@/components/stepper';
 import { ThemedText } from '@/components/themed-text';
 import { ProductGrid } from '@/components/product-card';
@@ -17,7 +18,7 @@ import { useCartActions, useCartCount } from '@/hooks/use-cart';
 import { useTheme } from '@/hooks/use-theme';
 import type { Locale } from '@talad/shared';
 
-import { api, ApiError, type ProductCard as ProductCardData, type ProductDetail } from '@/lib/api';
+import { api, ApiError, SITE_URL, type ProductCard as ProductCardData, type ProductDetail } from '@/lib/api';
 import { bulkPrice, bulkRows } from '@/lib/bulk-price';
 import { useAuth } from '@/lib/auth';
 import { count, money, priceRange } from '@/lib/format';
@@ -35,7 +36,18 @@ export default function ProductScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: product.data?.name ?? '' }} />
+      <Stack.Screen
+        options={{
+          title: product.data?.name ?? '',
+          headerRight: () =>
+            product.data ? (
+              <HeaderShare
+                text={fill(t.feed.shareText, { name: product.data.name })}
+                url={`${SITE_URL}/${locale}/p/${product.data.shop.slug}/${product.data.slug}`}
+              />
+            ) : null,
+        }}
+      />
       {product.isPending && <Loading />}
       {product.isError &&
         (product.error instanceof ApiError && product.error.status === 404 ? (

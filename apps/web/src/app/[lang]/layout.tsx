@@ -4,6 +4,7 @@ import { LOCALES } from "@talad/shared";
 import { SessionProvider } from "@/components/auth/session-provider";
 import { LiveUpdates } from "@/components/realtime/live-updates";
 import { PwaBridge } from "@/components/realtime/pwa-bridge";
+import { DEFAULT_OG_IMAGE, OG_LOCALES, SITE_NAME, SITE_URL } from "@/lib/seo";
 import { getDictionary, getLocale } from "./dictionaries";
 import "../globals.css";
 
@@ -16,16 +17,40 @@ export function generateStaticParams() {
 
 export async function generateMetadata(): Promise<Metadata> {
   const { meta } = await getDictionary();
+  const locale = await getLocale();
+  const verification = process.env.GOOGLE_SITE_VERIFICATION;
   return {
     // Share previews need absolute links (og:url, og:image).
-    metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
-    title: { default: meta.title, template: `%s · MC Mart` },
+    metadataBase: new URL(SITE_URL),
+    title: { default: meta.title, template: `%s · ${SITE_NAME}` },
     description: meta.description,
-    alternates: {
-      languages: Object.fromEntries(LOCALES.map((l) => [l, `/${l}`])),
+    keywords: meta.keywords,
+    applicationName: SITE_NAME,
+    authors: [{ name: SITE_NAME, url: SITE_URL }],
+    creator: SITE_NAME,
+    publisher: SITE_NAME,
+    category: "shopping",
+    // Pages set their own canonical and language links (pageAlternates); private pages opt out.
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1, "max-video-preview": -1 },
     },
+    // What a shared link shows when the page sets nothing itself: the MC Mart picture.
+    openGraph: {
+      type: "website",
+      siteName: SITE_NAME,
+      locale: OG_LOCALES[locale],
+      title: meta.title,
+      description: meta.description,
+      images: [DEFAULT_OG_IMAGE],
+    },
+    twitter: { card: "summary_large_image", title: meta.title, description: meta.description, images: [DEFAULT_OG_IMAGE.url] },
+    // Phone numbers in product text aren't links on iOS.
+    formatDetection: { telephone: false },
+    ...(verification && { verification: { google: verification } }),
     // Installed-app look on iOS (Android/desktop read app/manifest.ts).
-    appleWebApp: { capable: true, title: "MC Mart", statusBarStyle: "default" },
+    appleWebApp: { capable: true, title: SITE_NAME, statusBarStyle: "default" },
     icons: {
       icon: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
       apple: "/icons/apple-touch-icon.png",

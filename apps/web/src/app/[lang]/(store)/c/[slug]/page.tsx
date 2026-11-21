@@ -4,7 +4,8 @@ import { notFound } from "next/navigation";
 import { Breadcrumb } from "@/components/breadcrumb";
 import { ProductList } from "@/components/product-grid";
 import { apiGet, listProducts, type BrandItem, type CategoryNode } from "@/lib/api";
-import { localized } from "@/lib/format";
+import { interpolate, localized } from "@/lib/format";
+import { shareMetadata } from "@/lib/seo";
 import { getDictionary, getLocale } from "@/app/[lang]/dictionaries";
 
 export const revalidate = 300;
@@ -24,8 +25,18 @@ async function findCategory(slug: string) {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const locale = await getLocale();
+  const { meta } = await getDictionary();
   const { category } = await findCategory((await params).slug);
-  return { title: localized(category.name, locale, category.slug) };
+  const name = localized(category.name, locale, category.slug);
+  // Brand and sort views point to the plain category page as the one to index.
+  return shareMetadata({
+    lang: locale,
+    path: `/c/${category.slug}`,
+    title: name,
+    description: interpolate(meta.share.category, { name }),
+    image: category.imageUrl,
+    keywords: [name, ...category.children.map((c) => localized(c.name, locale, c.slug))],
+  });
 }
 
 /** Brand slugs as the API makes them (anything else is ignored). */

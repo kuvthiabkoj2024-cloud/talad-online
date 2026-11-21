@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { FeedView } from "@/components/feed/feed-view";
 import { apiGet, feedPath, feedQuery, type FeedEntry, type FeedItem, type FeedPage, type FeedPostItem, type FeedType } from "@/lib/api";
+import { formatMoney } from "@talad/shared";
+import { avatarSrc } from "@/lib/customer";
+import { interpolate } from "@/lib/format";
+import { metaDescription, pageAlternates, shareMetadata } from "@/lib/seo";
 import { getDictionary, getLocale } from "@/app/[lang]/dictionaries";
 
 // New videos show up within a minute; later pages are always fetched live.
@@ -12,13 +16,39 @@ const isId = (v: unknown): v is string => typeof v === "string" && UUID.test(v);
 type Params = Awaited<PageProps<"/[lang]/feed">["searchParams"]>;
 
 export async function generateMetadata({ searchParams }: PageProps<"/[lang]/feed">): Promise<Metadata> {
-  const { feed } = await getDictionary();
+  const { feed, meta } = await getDictionary();
+  const lang = await getLocale();
   const linked = await linkedVideo(await searchParams);
-  if (!linked) return { title: feed.title };
-  const title = linked.kind === "post" ? linked.caption || feed.title : linked.name;
-  const description = linked.kind === "post" ? linked.caption || linked.author.name : linked.shop.name;
-  return { title, description, openGraph: { type: "video.other", title } };
+  if (!linked) return { title: feed.title, alternates: pageAlternates(lang, "/feed") };
+  // A shared video: the caption (or product) as the title, the poster or product photo as the picture.
+  const share =
+    linked.kind === "post"
+      ? {
+          path: `/feed?post=${linked.id}`,
+          title: firstLine(linked.caption) || interpolate(meta.share.video, { name: linked.author.name }),
+          description: metaDescription(linked.caption, interpolate(meta.share.video, { name: linked.author.name })),
+          image: avatarSrc(linked.author),
+        }
+      : {
+          path: `/feed?video=${linked.id}`,
+          title: linked.name,
+          description: metaDescription(formatMoney(linked.price, lang), interpolate(meta.share.productVideo, { name: linked.name, shop: linked.shop.name })),
+          image: linked.imageUrl ?? linked.shop.logoUrl,
+        };
+  const metadata = shareMetadata({ lang, ...share, type: "video.other" });
+  return {
+    ...metadata,
+    title: { absolute: `${share.title} · ${feed.title} · MC Mart` },
+    // The video itself, for apps that play it inside the preview.
+    openGraph: { ...metadata.openGraph, videos: [{ url: linked.videoUrl, type: "video/mp4", width: 720, height: 1280 }] },
+  };
 }
+
+/** A caption's first line, short enough for a title. */
+const firstLine = (text: string) => {
+  const line = text.split("\n")[0]?.trim() ?? "";
+  return line.length > 70 ? `${line.slice(0, 67).trimEnd()}…` : line;
+};
 
 /**
  * A video opened by link: a shared post (`?post=<id>`) or a product video (`?video=<id>`),

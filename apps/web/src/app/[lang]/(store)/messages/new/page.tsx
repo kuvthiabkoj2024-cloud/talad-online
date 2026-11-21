@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Store } from "lucide-react";
 import Link from "next/link";
@@ -8,6 +9,8 @@ import { getSessionToken } from "@/lib/session";
 import { getDictionary, getLocale } from "@/app/[lang]/dictionaries";
 
 type Props = PageProps<"/[lang]/messages/new">;
+
+export const metadata: Metadata = { robots: { index: false } };
 
 const one = (v: string | string[] | undefined) => (typeof v === "string" ? v : "");
 

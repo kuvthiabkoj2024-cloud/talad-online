@@ -7,13 +7,14 @@ import { TrackOrder } from "@/components/track/track-order";
 import { interpolate } from "@/lib/format";
 import { formatDate, type OrderList, type OrderSummary } from "@/lib/orders";
 import { apiGetAsCustomer, getCurrentCustomer } from "@/lib/session";
+import { pageAlternates } from "@/lib/seo";
 import { getDictionary, getLocale } from "@/app/[lang]/dictionaries";
 
 type Props = PageProps<"/[lang]/track">;
 
 export async function generateMetadata(): Promise<Metadata> {
   const { track } = await getDictionary();
-  return { title: track.title, description: track.subtitle };
+  return { title: track.title, description: track.subtitle, alternates: pageAlternates(await getLocale(), "/track") };
 }
 
 /**

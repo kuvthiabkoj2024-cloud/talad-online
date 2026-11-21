@@ -7,7 +7,9 @@ import { ProfileHeader } from "@/components/profile/profile-header";
 import { ProfileLiked } from "@/components/profile/profile-liked";
 import { ProfileVideos } from "@/components/profile/profile-videos";
 import { apiGet, type CustomerProfile, type LikedVideoPage, type ProfileFollowerPage, type ProfileVideoPage } from "@/lib/api";
-import { formatCount } from "@/lib/format";
+import { formatCount, interpolate } from "@/lib/format";
+import { avatarSrc } from "@/lib/customer";
+import { shareMetadata } from "@/lib/seo";
 import { apiGetAsCustomer, getCurrentCustomer } from "@/lib/session";
 import { getDictionary, getLocale } from "@/app/[lang]/dictionaries";
 
@@ -23,8 +25,19 @@ async function getProfile(id: string): Promise<CustomerProfile> {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
+  const lang = await getLocale();
   const profile = await getProfile(id);
-  return { title: profile.name, description: `${profile.name} · MC Mart`, robots: { index: false } };
+  const { meta } = await getDictionary();
+  const description = interpolate(meta.share.profile, {
+    videos: formatCount(profile.videos, lang),
+    followers: formatCount(profile.followers, lang),
+    likes: formatCount(profile.likes, lang),
+  });
+  return {
+    ...shareMetadata({ lang, path: `/u/${id}`, title: profile.name, description, image: avatarSrc(profile), type: "profile" }),
+    // People's profiles aren't for search engines; links shared in chats still show a preview.
+    robots: { index: false, follow: true },
+  };
 }
 
 /** A customer's public video profile: who they are, their videos and their followers. */

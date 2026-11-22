@@ -17,11 +17,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
-import type { ProductCard as Product } from "@/lib/api";
+import type { BrandItem, ProductCard as Product } from "@/lib/api";
 import { interpolate } from "@/lib/format";
 import { loadShopProducts } from "@/lib/shop-actions";
 import type { ShopProductPage, ShopSort } from "@/lib/shop";
-import { BottomSheet } from "../bottom-sheet";
 import { ProductCard } from "../product-card";
 
 /** Wait this long after the last keystroke before searching. */
@@ -35,31 +34,37 @@ const SORTS: { key: ShopSort; icon: typeof Flame; label: keyof Dictionary["shop"
 ];
 
 /**
- * In-shop search (as you type), sort and "Load more". Search and sort live in the URL
- * (shareable, server-rendered). The search box stays mounted across searches so it keeps
- * focus; only the result list resets.
+ * In-shop search (as you type) with the sort in a dropdown beside it, brand chips below, and
+ * "Load more" — the same layout as the app. Search, sort and brand live in the URL (shareable,
+ * server-rendered). The search box stays mounted across searches so it keeps focus; only the
+ * result list resets.
  */
 export function ShopProducts({
   slug,
   locale,
   q,
   sort,
+  brand,
+  brands,
   initial,
   dict,
   soldLabel,
-  closeLabel,
 }: {
   slug: string;
   locale: Locale;
   q: string;
   sort: ShopSort;
+  /** Brand slug the list is narrowed to. */
+  brand?: string;
+  /** Brands this shop sells, for the chips. */
+  brands: BrandItem[];
   initial: ShopProductPage;
   dict: Dictionary["shop"];
   soldLabel: string;
-  closeLabel: string;
 }) {
   const router = useRouter();
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menu = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const [query, setQuery] = useState(q);
   const [navigating, startNavigating] = useTransition();
@@ -76,11 +81,13 @@ export function ShopProducts({
     }
   }
 
-  const href = (next: { q?: string; sort?: ShopSort }) => {
+  const href = (next: { q?: string; sort?: ShopSort; brand?: string | null }) => {
     const params = new URLSearchParams();
     const nq = next.q ?? q;
     const ns = next.sort ?? sort;
+    const nb = next.brand === undefined ? brand : next.brand;
     if (nq) params.set("q", nq);
+    if (nb) params.set("brand", nb);
     if (ns !== "popular") params.set("sort", ns);
     const s = params.toString();
     return s ? `${pathname}?${s}` : pathname;
@@ -100,13 +107,25 @@ export function ShopProducts({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the typed text or applied query changes
   }, [query, q]);
 
+  // The sort dropdown closes on a click elsewhere or Escape.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (!menu.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenuOpen(false);
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
   return (
-    <section className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <h2 className="text-lg font-bold sm:text-xl">
-          {q ? interpolate(dict.resultsFor, { n: initial.total, q }) : dict.allProducts}
-        </h2>
-        <div className="flex items-center gap-2 lg:w-80">
+    <section className="flex flex-col gap-3">
+      {/* Search and the sort dropdown side by side. */}
+      <div className="flex items-center justify-between gap-2">
         <form
           role="search"
           className="relative min-w-0 flex-1"
@@ -145,79 +164,87 @@ export function ShopProducts({
             </button>
           )}
         </form>
-        {/* Phones: sort options live in a bottom sheet instead of a row of chips */}
-        <button
-          type="button"
-          onClick={() => setSheetOpen(true)}
-          aria-label={dict.filter}
-          className="relative flex size-11 shrink-0 items-center justify-center rounded-full border border-border bg-card text-foreground transition-colors hover:bg-muted sm:hidden"
-        >
-          <SlidersHorizontal className="size-5" />
-          {sort !== "popular" && (
-            <span aria-hidden className="absolute right-2 top-2 size-2 rounded-full bg-primary ring-2 ring-card" />
+
+        <div ref={menu} className="relative shrink-0">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((o) => !o)}
+            aria-label={dict.sortLabel}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            className={`relative flex size-11 items-center justify-center rounded-full border bg-card transition-colors hover:bg-muted ${
+              menuOpen ? "border-primary text-primary" : "border-border text-foreground"
+            }`}
+          >
+            <SlidersHorizontal className="size-5" />
+            {sort !== "popular" && <span aria-hidden className="absolute right-2 top-2 size-2 rounded-full bg-primary ring-2 ring-card" />}
+          </button>
+          {menuOpen && (
+            <div role="menu" aria-label={dict.sortLabel} className="absolute right-0 top-full z-30 mt-2 w-60 rounded-2xl bg-card p-1.5 shadow-lg ring-1 ring-border">
+              <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{dict.sortLabel}</p>
+              {SORTS.map(({ key, icon: Icon, label, pricePrefix }) => {
+                const active = key === sort;
+                return (
+                  <Link
+                    key={key}
+                    role="menuitemradio"
+                    aria-checked={active}
+                    href={href({ sort: key })}
+                    replace
+                    scroll={false}
+                    onClick={() => setMenuOpen(false)}
+                    className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${
+                      active ? "bg-primary-soft font-semibold text-primary" : "hover:bg-muted"
+                    }`}
+                  >
+                    <Icon className="size-4" />
+                    <span className="flex-1">
+                      {pricePrefix && dict.sortPricePrefix} {dict[label]}
+                    </span>
+                    {active && <Check className="size-4" />}
+                  </Link>
+                );
+              })}
+            </div>
           )}
-        </button>
         </div>
       </div>
 
-      <nav aria-label={dict.sortLabel} className="hidden flex-wrap gap-2 sm:flex">
-        {SORTS.map(({ key, icon: Icon, label, pricePrefix }) => {
-          const active = key === sort;
-          return (
-            <Link
-              key={key}
-              href={href({ sort: key })}
-              replace
-              scroll={false}
-              aria-current={active ? "true" : undefined}
-              className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                active
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "bg-card text-muted-foreground ring-1 ring-border hover:text-foreground"
-              }`}
-            >
-              <Icon className="size-4" />
-              {pricePrefix && dict.sortPricePrefix} {dict[label]}
-            </Link>
-          );
-        })}
-      </nav>
-
-      <BottomSheet open={sheetOpen} onClose={() => setSheetOpen(false)} title={dict.sortLabel} closeLabel={closeLabel}>
-        <ul className="flex flex-col gap-1 pb-2">
-          {SORTS.map(({ key, icon: Icon, label, pricePrefix }) => {
-            const active = key === sort;
+      {/* The shop's brands, as on a category page. */}
+      {brands.length > 0 && (
+        <nav aria-label={dict.brand} className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
+          {[{ slug: null, name: dict.allBrands }, ...brands].map((b) => {
+            const active = (b.slug ?? undefined) === brand;
             return (
-              <li key={key}>
-                <Link
-                  href={href({ sort: key })}
-                  replace
-                  scroll={false}
-                  onClick={() => setSheetOpen(false)}
-                  aria-current={active ? "true" : undefined}
-                  className={`flex items-center gap-3 rounded-2xl px-4 py-3.5 text-sm transition-colors ${
-                    active ? "bg-primary-soft font-semibold text-primary" : "hover:bg-muted"
-                  }`}
-                >
-                  <Icon className="size-5" />
-                  <span className="flex-1">
-                    {pricePrefix && dict.sortPricePrefix} {dict[label]}
-                  </span>
-                  {active && <Check className="size-5" />}
-                </Link>
-              </li>
+              <Link
+                key={b.slug ?? "all"}
+                href={href({ brand: b.slug })}
+                replace
+                scroll={false}
+                aria-current={active ? "true" : undefined}
+                className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                  active ? "bg-primary text-primary-foreground shadow-sm" : "bg-card text-muted-foreground ring-1 ring-border hover:text-foreground"
+                }`}
+              >
+                {b.name}
+              </Link>
             );
           })}
-        </ul>
-      </BottomSheet>
+        </nav>
+      )}
+
+      <h2 className="text-sm font-medium text-muted-foreground">
+        {q ? interpolate(dict.resultsFor, { n: initial.total, q }) : `${dict.allProducts} (${initial.total})`}
+      </h2>
 
       <ShopResults
         // A new search or sort starts a fresh list (and resets "Load more").
-        key={`${q}|${sort}`}
+        key={`${q}|${sort}|${brand ?? ""}`}
         slug={slug}
         locale={locale}
         q={q}
         sort={sort}
+        brand={brand}
         initial={initial}
         dict={dict}
         soldLabel={soldLabel}
@@ -236,6 +263,7 @@ function ShopResults({
   locale,
   q,
   sort,
+  brand,
   initial,
   dict,
   soldLabel,
@@ -246,6 +274,7 @@ function ShopResults({
   locale: Locale;
   q: string;
   sort: ShopSort;
+  brand?: string;
   initial: ShopProductPage;
   dict: Dictionary["shop"];
   soldLabel: string;
@@ -259,7 +288,7 @@ function ShopResults({
 
   function loadMore() {
     startLoading(async () => {
-      const next = await loadShopProducts(slug, { q: q || undefined, sort, page: page + 1 });
+      const next = await loadShopProducts(slug, { q: q || undefined, sort, brand, page: page + 1 });
       if (!next) return;
       // Skip anything already shown (e.g. a product republished between pages).
       setItems((prev) => {

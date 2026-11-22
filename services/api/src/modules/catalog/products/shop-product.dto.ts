@@ -247,6 +247,11 @@ export class ListShopProductsQuery {
   @IsIn(['with', 'without'])
   video?: 'with' | 'without';
 
+  /** Products without a brand yet (`none`), to give them one. */
+  @IsOptional()
+  @IsIn(['none'])
+  brand?: 'none';
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -259,4 +264,23 @@ export class ListShopProductsQuery {
   @Min(1)
   @Max(50)
   pageSize: number = 20;
+}
+
+/** Products are capped per request so one call stays quick (the Seller Center pages by 50). */
+export const BULK_BRAND_MAX = 100;
+
+/** Give many products the same brand at once (or none), e.g. products listed before brands existed. */
+export class BulkBrandDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(BULK_BRAND_MAX)
+  @IsUUID('7', { each: true })
+  productIds: string[];
+
+  /** Brand name: an existing brand is reused, case ignored; empty or null = remove the brand. */
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(BRAND_RULES.nameMax)
+  brand?: string | null;
 }

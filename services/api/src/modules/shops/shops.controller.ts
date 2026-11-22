@@ -15,6 +15,12 @@ class ShopProductsQuery {
   @MaxLength(100)
   q?: string;
 
+  /** Brand slug: only this brand's products (the shop page's brand chips). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  brand?: string;
+
   @IsOptional()
   @IsIn(SHOP_PRODUCT_SORTS)
   sort: ShopProductSort = 'popular';
@@ -44,10 +50,10 @@ export class ShopsController {
     return this.shops.profile(slug);
   }
 
-  /** `?q=&sort=popular|new|price_asc|price_desc&page=1&pageSize=12` */
+  /** `?q=&brand=&sort=popular|new|price_asc|price_desc&page=1&pageSize=12` */
   @Get('products')
   products(@Param('slug') slug: string, @Query() query: ShopProductsQuery) {
-    return this.shops.products(slug, query.q, query.sort, query.page, query.pageSize);
+    return this.shops.products(slug, query.q, query.sort, query.page, query.pageSize, query.brand);
   }
 }
 

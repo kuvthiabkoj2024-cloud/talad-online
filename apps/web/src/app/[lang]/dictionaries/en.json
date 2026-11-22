@@ -783,7 +783,9 @@
     "closesAt": "Closes at {time}",
     "opensToday": "Opens today at {time}",
     "opensOn": "Opens {day} at {time}",
-    "closedDay": "Closed"
+    "closedDay": "Closed",
+    "brand": "Brand",
+    "allBrands": "All"
   },
   "common": {
     "loading": "Loading…"

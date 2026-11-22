@@ -4,6 +4,7 @@ import { shopOpenState, WEEKDAY_NAMES, WEEKDAYS, type BusinessHours, type Locale
 import { Clock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { interpolate } from "@/lib/format";
+import { ShopSection } from "./shop-section";
 
 export interface ShopHoursDict {
   hours: string;
@@ -30,12 +31,13 @@ export function ShopHours({ hours, locale, dict }: { hours: BusinessHours; local
 
   if (!WEEKDAYS.some((d) => hours[d])) return null;
   const names = WEEKDAY_NAMES[locale === "lo" ? "lo" : "en"];
+  // "Open now · Closes at 18:00" shows on the folded row, so it's seen without opening it.
   const status = state && (
-    <p className="mb-2 flex flex-wrap items-center gap-x-2 text-sm">
+    <>
       <span className={state.open ? "font-semibold text-primary" : "font-semibold text-destructive"}>
-        {state.open ? dict.openNow : dict.closedNow}
-      </span>
-      <span className="text-muted-foreground">
+        · {state.open ? dict.openNow : dict.closedNow}
+      </span>{" "}
+      <span className="text-muted-foreground max-sm:hidden">
         {state.open && state.today
           ? interpolate(dict.closesAt, { time: state.today.close })
           : state.next &&
@@ -43,16 +45,11 @@ export function ShopHours({ hours, locale, dict }: { hours: BusinessHours; local
               ? interpolate(dict.opensToday, { time: state.next.open })
               : interpolate(dict.opensOn, { day: names[state.next.day], time: state.next.open }))}
       </span>
-    </p>
+    </>
   );
 
   return (
-    <div className="border-t border-border px-5 py-4 sm:px-6">
-      <h2 className="mb-1 flex items-center gap-1.5 text-sm font-semibold">
-        <Clock className="size-4" />
-        {dict.hours}
-      </h2>
-      {status}
+    <ShopSection icon={<Clock className="size-4" />} title={dict.hours} summary={status}>
       <dl className="grid max-w-sm grid-cols-[auto_1fr] gap-x-6 gap-y-0.5 text-sm">
         {WEEKDAYS.map((d) => (
           <div key={d} className="contents">
@@ -63,6 +60,6 @@ export function ShopHours({ hours, locale, dict }: { hours: BusinessHours; local
           </div>
         ))}
       </dl>
-    </div>
+    </ShopSection>
   );
 }

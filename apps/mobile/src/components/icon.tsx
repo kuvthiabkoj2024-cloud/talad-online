@@ -76,6 +76,8 @@ import {
   Heart,
   MessageCircle,
   Share2,
+  SlidersHorizontal,
+  Info,
   SunMoon,
   type LucideIcon,
 } from 'lucide-react-native';
@@ -164,6 +166,8 @@ const ICONS = {
   heart: Heart,
   comment: MessageCircle,
   share: Share2,
+  sliders: SlidersHorizontal,
+  info: Info,
   theme: SunMoon,
 } satisfies Record<string, LucideIcon>;
 

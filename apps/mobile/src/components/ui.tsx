@@ -23,10 +23,13 @@ export function Button({
   disabled,
   loading,
   style,
+  size = 'md',
 }: {
   label: string;
   onPress: () => void;
   variant?: 'primary' | 'outline';
+  /** "sm": a compact button (e.g. the shop header's follow and chat). */
+  size?: 'md' | 'sm';
   icon?: IconName;
   disabled?: boolean;
   loading?: boolean;
@@ -42,12 +45,13 @@ export function Button({
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
+        size === 'sm' && styles.buttonSm,
         filled ? { backgroundColor: theme.primary } : { borderColor: theme.primary, borderWidth: 1.5, backgroundColor: theme.card },
         (pressed || disabled) && { opacity: disabled ? 0.5 : 0.85 },
         style,
       ]}>
-      {loading ? <ActivityIndicator color={color} /> : icon && <Icon name={icon} size={18} color={color} />}
-      <ThemedText type="smallBold" style={{ color, fontSize: 15 }}>
+      {loading ? <ActivityIndicator color={color} /> : icon && <Icon name={icon} size={size === 'sm' ? 16 : 18} color={color} />}
+      <ThemedText type="smallBold" style={{ color, fontSize: size === 'sm' ? 14 : 15 }}>
         {label}
       </ThemedText>
     </Pressable>
@@ -147,6 +151,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: Spacing.two,
   },
+  buttonSm: { minHeight: 38, paddingHorizontal: Spacing.three, gap: 6 },
   empty: { alignItems: 'center', gap: Spacing.two, paddingVertical: Spacing.five, paddingHorizontal: Spacing.four },
   emptyIcon: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.one },
   center: { textAlign: 'center' },

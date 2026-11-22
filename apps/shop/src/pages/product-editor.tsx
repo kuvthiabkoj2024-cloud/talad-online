@@ -1,4 +1,4 @@
-import { BRAND_RULES, MEDIA_LIMITS, PRICE_TIER_RULES, PRODUCT_RULES, formatMoney, type ProductSaveIntent, DEPOSIT_RULES, DEPOSIT_TYPES, GUARANTEE_RULES, GUARANTEE_UNITS, customerGuarantee, type DepositType, type GuaranteeUnit } from '@talad/shared'
+import { MEDIA_LIMITS, PRICE_TIER_RULES, PRODUCT_RULES, formatMoney, type ProductSaveIntent, DEPOSIT_RULES, DEPOSIT_TYPES, GUARANTEE_RULES, GUARANTEE_UNITS, customerGuarantee, type DepositType, type GuaranteeUnit } from '@talad/shared'
 import { Button } from '@talad/ui/components/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@talad/ui/components/card'
 import { Input } from '@talad/ui/components/input'
@@ -10,10 +10,11 @@ import { Textarea } from '@talad/ui/components/textarea'
 import { cn } from '@talad/ui/lib/utils'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, ImagePlus, Info, LoaderCircle, Plus, Shuffle, Trash2, TriangleAlert, Video, X } from 'lucide-react'
-import { useDeferredValue, useId, useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { Link } from 'react-router'
 import { toast } from 'sonner'
+import { BrandInput } from '@/components/brand-input'
 import { CommissionCard, NewProductCommission } from '@/components/commission-card'
 import { askBody, askProblem, type CommissionAsk } from '@/lib/commission-ask'
 import { PageBody, TopBar } from '@/components/page-header'
@@ -929,27 +930,6 @@ function ProductForm({ product, title }: { product?: ShopProductDetail; title: s
  * Free text with the platform's brands as suggestions (GET /brands?q=), so shops pick "Samsung"
  * rather than typing a new spelling; the API reuses a brand whatever the case or spacing.
  */
-function BrandInput({ id, value, placeholder, onChange }: { id: string; value: string; placeholder: string; onChange: (v: string) => void }) {
-  const term = useDeferredValue(value.trim())
-  const suggestions = useQuery({
-    queryKey: ['brands', 'suggest', term],
-    queryFn: () => api<{ slug: string; name: string }[]>(`/brands?${new URLSearchParams({ limit: '12', ...(term && { q: term }) })}`),
-    staleTime: 60_000,
-    placeholderData: (previous) => previous,
-  })
-  const listId = `${id}-options`
-  return (
-    <>
-      <Input id={id} list={listId} value={value} maxLength={BRAND_RULES.nameMax} placeholder={placeholder} autoComplete="off" onChange={(e) => onChange(e.target.value)} />
-      <datalist id={listId}>
-        {suggestions.data?.map((b) => (
-          <option key={b.slug} value={b.name} />
-        ))}
-      </datalist>
-    </>
-  )
-}
-
 function BulkPreview({ price, tiers, t, locale }: { price: string; tiers: TierRow[]; t: Dict; locale: ReturnType<typeof useI18n>['locale'] }) {
   const base = num(price)
   const rows = tiers.map((r) => ({ from: num(r.minQuantity), price: num(r.price) }))

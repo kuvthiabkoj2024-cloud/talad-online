@@ -95,6 +95,8 @@ export interface ShopProductRow {
   variantCount: number
   soldCount: number
   updatedAt: string
+  /** The brand's name, or null. */
+  brand: string | null
 }
 
 /** Mirrors `ShopVideoView` / `ShopVideoList` (API `me/shop/videos`). */

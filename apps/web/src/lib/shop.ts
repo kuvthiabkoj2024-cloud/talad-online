@@ -39,8 +39,12 @@ export interface ShopProductPage {
 
 export const SHOP_PAGE_SIZE = 12;
 
-export function shopProductsPath(slug: string, { q, sort, page }: { q?: string; sort: ShopSort; page: number }) {
+/** Brand slugs as the API makes them (anything else is ignored). */
+export const isBrandSlug = (v: unknown): v is string => typeof v === "string" && /^[a-z0-9-]{1,60}$/.test(v);
+
+export function shopProductsPath(slug: string, { q, sort, page, brand }: { q?: string; sort: ShopSort; page: number; brand?: string }) {
   const params = new URLSearchParams({ sort, page: String(page), pageSize: String(SHOP_PAGE_SIZE) });
   if (q) params.set("q", q);
+  if (brand) params.set("brand", brand);
   return `/shops/${encodeURIComponent(slug)}/products?${params}`;
 }

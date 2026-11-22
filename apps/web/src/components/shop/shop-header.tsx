@@ -1,5 +1,5 @@
 import { dateFormatter, type Locale } from "@talad/shared";
-import { BadgeCheck, CalendarDays, MessageCircleMore, Package, Star, Store, Users } from "lucide-react";
+import { BadgeCheck, CalendarDays, Info, MessageCircleMore, Package, Star, Store, Users } from "lucide-react";
 import Link from "next/link";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import { formatCount, interpolate } from "@/lib/format";
@@ -7,7 +7,7 @@ import type { PublicShop } from "@/lib/shop";
 import { ShareButton } from "../product/share-button";
 import type { ShareSheetDict } from "../feed/share-sheet";
 import { FollowButton, FollowerCount } from "./follow-button";
-import { ShopDescription } from "./shop-description";
+import { ShopSection } from "./shop-section";
 import { ShopHours } from "./shop-hours";
 
 /** Shop hero: cover, logo, name, trust signals and description (§3.2). */
@@ -97,7 +97,7 @@ export function ShopHeader({
           <FollowButton shopId={shop.id} labels={{ follow: dict.follow, following: dict.following }} />
           <Link
             href={`/${locale}/messages/new?shop=${shop.slug}`}
-            className="flex h-11 items-center justify-center gap-1.5 rounded-full border border-primary px-4 text-sm font-semibold text-primary transition-colors hover:bg-primary-soft sm:px-5"
+            className="flex h-9 items-center justify-center gap-1.5 rounded-full border border-primary px-3.5 text-sm font-semibold text-primary transition-colors hover:bg-primary-soft sm:px-5"
           >
             <MessageCircleMore className="size-4" />
             {dict.chat}
@@ -106,11 +106,11 @@ export function ShopHeader({
         </div>
       </div>
 
+      {/* More about the shop, folded away until tapped (as in the app). */}
       {shop.description && (
-        <div className="border-t border-border px-5 py-4 sm:px-6">
-          <h2 className="mb-1 text-sm font-semibold">{dict.about}</h2>
-          <ShopDescription text={shop.description} labels={{ more: dict.readMore, less: dict.readLess }} />
-        </div>
+        <ShopSection icon={<Info className="size-4" />} title={dict.about}>
+          <p className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{shop.description}</p>
+        </ShopSection>
       )}
       {shop.businessHours && <ShopHours hours={shop.businessHours} locale={locale} dict={dict} />}
     </section>

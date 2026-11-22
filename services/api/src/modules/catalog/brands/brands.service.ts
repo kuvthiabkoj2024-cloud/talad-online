@@ -19,7 +19,7 @@ export class BrandsService {
    * that category (a top-level one includes its subcategories), for the category page's brand
    * filter. `q`: names containing it, for the product form's suggestions.
    */
-  async list({ category, q, limit }: { category?: string; q?: string; limit: number }): Promise<BrandItem[]> {
+  async list({ category, shop, q, limit }: { category?: string; shop?: string; q?: string; limit: number }): Promise<BrandItem[]> {
     const term = q ? brandKey(q) : '';
     const pattern = term ? `%${term.replace(/[\\%_]/g, '\\$&')}%` : null;
     const rows = await this.prisma.$queryRaw<{ slug: string; name: string; productCount: number }[]>`
@@ -34,6 +34,7 @@ export class BrandsService {
                 WHERE c.id = p."categoryId" AND (c.slug = ${category} OR pc.slug = ${category}))`
             : Prisma.empty
         }
+        ${shop ? Prisma.sql`AND EXISTS (SELECT 1 FROM "Shop" sh WHERE sh.id = p."shopId" AND sh.slug = ${shop})` : Prisma.empty}
       ${pattern ? Prisma.sql`WHERE b.key ILIKE ${pattern}` : Prisma.empty}
       GROUP BY b.id
       ${pattern ? Prisma.empty : Prisma.sql`HAVING COUNT(p.id) > 0`}

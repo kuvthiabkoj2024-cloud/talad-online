@@ -13,18 +13,21 @@ export function SellerScroll({
   refreshing = false,
   onRefresh,
   children,
+  contentStyle,
 }: {
   loading?: boolean;
   error?: boolean;
   refreshing?: boolean;
   onRefresh: () => void;
   children?: ReactNode;
+  /** Extra content padding, e.g. room for a bar fixed at the bottom. */
+  contentStyle?: StyleProp<ViewStyle>;
 }) {
   const theme = useTheme();
   return (
     <ScrollView
       style={{ backgroundColor: theme.background }}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, contentStyle]}
       keyboardShouldPersistTaps="handled"
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}>
       {loading ? <Loading /> : error ? <LoadError onRetry={onRefresh} /> : children}

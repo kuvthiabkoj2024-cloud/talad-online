@@ -323,13 +323,14 @@ export class ProductsService {
    * One page of a shop's products, searched and sorted in SQL. Price sorts use the
    * real lowest price (cheapest variant), matching what the cards show.
    */
-  async searchShop(shopId: string, q: string | undefined, sort: ShopProductSort, page: number, pageSize: number) {
+  async searchShop(shopId: string, q: string | undefined, sort: ShopProductSort, page: number, pageSize: number, brand?: string) {
     const term = q?.trim();
     // Escape LIKE wildcards; the value itself is always a bound parameter.
     const pattern = term ? `%${term.replace(/[\\%_]/g, '\\$&')}%` : null;
     const where = Prisma.sql`
       p."shopId" = ${shopId} AND p.status = 'PUBLISHED'
-      ${pattern ? Prisma.sql`AND (p.name ILIKE ${pattern} OR p.sku ILIKE ${pattern})` : Prisma.empty}`;
+      ${pattern ? Prisma.sql`AND (p.name ILIKE ${pattern} OR p.sku ILIKE ${pattern})` : Prisma.empty}
+      ${brand ? Prisma.sql`AND p."brandId" = (SELECT id FROM "Brand" WHERE slug = ${brand})` : Prisma.empty}`;
 
     const [ids, [{ total }]] = await Promise.all([
       this.prisma.$queryRaw<{ id: string }[]>`

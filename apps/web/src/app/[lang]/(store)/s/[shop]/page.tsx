@@ -3,8 +3,8 @@ import { notFound } from "next/navigation";
 import { ShopHeader } from "@/components/shop/shop-header";
 import { FreeDeliveryBadge } from "@/components/free-delivery-badge";
 import { ShopProducts } from "@/components/shop/shop-products";
-import { apiGet } from "@/lib/api";
-import { isShopSort, shopProductsPath, type PublicShop, type ShopProductPage } from "@/lib/shop";
+import { apiGet, type BrandItem } from "@/lib/api";
+import { isBrandSlug, isShopSort, shopProductsPath, type PublicShop, type ShopProductPage } from "@/lib/shop";
 import { formatCount, interpolate } from "@/lib/format";
 import { metaDescription, shareMetadata } from "@/lib/seo";
 import { getDictionary, getLocale } from "@/app/[lang]/dictionaries";
@@ -39,15 +39,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 /** Shop storefront (§3.2): profile, in-shop search, sort and "Load more". */
 export default async function ShopPage({ params, searchParams }: Props) {
   const locale = await getLocale();
-  const { shop: dict, product, auth, feed, freeDelivery } = await getDictionary();
+  const { shop: dict, product, feed, freeDelivery } = await getDictionary();
   const { shop: slug } = await params;
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q.trim().slice(0, 100) : "";
   const sort = isShopSort(sp.sort) ? sp.sort : "popular";
+  const brand = isBrandSlug(sp.brand) ? sp.brand : undefined;
 
-  const [shop, first] = await Promise.all([
+  const [shop, first, brands] = await Promise.all([
     getShop(slug),
-    apiGet<ShopProductPage>(shopProductsPath(slug, { q: q || undefined, sort, page: 1 })),
+    apiGet<ShopProductPage>(shopProductsPath(slug, { q: q || undefined, sort, page: 1, brand })),
+    apiGet<BrandItem[]>(`/brands?shop=${encodeURIComponent(slug)}`).then((b) => b ?? []),
   ]);
 
   return (
@@ -59,10 +61,11 @@ export default async function ShopPage({ params, searchParams }: Props) {
         locale={locale}
         q={q}
         sort={sort}
+        brand={brand}
+        brands={brands}
         initial={first ?? { items: [], page: 1, pageSize: 12, total: 0, hasMore: false }}
         dict={dict}
         soldLabel={product.sold}
-        closeLabel={auth.close}
       />
     </div>
   );

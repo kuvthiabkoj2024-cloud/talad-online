@@ -32,7 +32,7 @@ export function ShareButton({
         onClick={() => setUrl(window.location.origin + window.location.pathname)}
         className={
           variant === "pill"
-            ? `flex h-11 items-center justify-center gap-2 rounded-full border border-border bg-card text-sm font-semibold transition-colors hover:border-primary hover:text-primary ${iconOnlyOnPhones ? "w-11 sm:w-auto sm:px-5" : "px-5"}`
+            ? `flex h-9 items-center justify-center gap-2 rounded-full border border-border bg-card text-sm font-semibold transition-colors hover:border-primary hover:text-primary ${iconOnlyOnPhones ? "w-9 sm:w-auto sm:px-5" : "px-5"}`
             : "flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary"
         }
       >

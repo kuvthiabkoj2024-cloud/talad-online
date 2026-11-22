@@ -11,6 +11,12 @@ class ListBrandsQuery {
   @MaxLength(80)
   category?: string;
 
+  /** Shop slug: brands this shop sells (the shop page's brand chips). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  shop?: string;
+
   /** Name contains this (product form suggestions; also lists brands without products yet). */
   @IsOptional()
   @IsString()
@@ -25,7 +31,7 @@ class ListBrandsQuery {
   limit: number = 40;
 }
 
-/** Product brands: the category page's brand filter and the product form's suggestions. */
+/** Product brands: the category and shop pages' brand filters and the product form's suggestions. */
 @ApiTags('catalog')
 @Controller('brands')
 export class BrandsController {

@@ -37,6 +37,8 @@ export interface ShopProductRow {
   variantCount: number;
   soldCount: number;
   updatedAt: Date;
+  /** The brand's name, or null (the list's "set brand" action fills these in). */
+  brand: string | null;
 }
 
 export interface ShopProductList {
@@ -98,6 +100,7 @@ export class ShopProductsService {
       shopId,
       ...(query.status && { status: query.status }),
       ...(query.video && { videoKey: query.video === 'with' ? { not: null } : null }),
+      ...(query.brand === 'none' && { brandId: null }),
       ...(term && {
         OR: [
           { name: { contains: term, mode: 'insensitive' } },
@@ -126,6 +129,7 @@ export class ShopProductsService {
           updatedAt: true,
           images: { orderBy: { sortOrder: 'asc' }, take: 1, select: { key: true } },
           variants: { select: { price: true, stock: true } },
+          brand: { select: { name: true } },
         },
       }),
       this.prisma.product.count({ where }),
@@ -158,6 +162,7 @@ export class ShopProductsService {
         imageUrl: p.images[0] ? this.media.publicUrl(p.images[0].key) : null,
         hasVideo: p.videoKey !== null,
         videoUrl: p.videoKey ? this.media.publicUrl(p.videoKey) : null,
+        brand: p.brand?.name ?? null,
         variantCount: p.variants.length,
         soldCount: p.soldCount,
         updatedAt: p.updatedAt,
@@ -246,6 +251,20 @@ export class ShopProductsService {
     } catch (e) {
       throw this.conflict(e);
     }
+  }
+
+  /**
+   * The same brand for many products at once (or none). Only the shop's own products change; a
+   * brand is a label, so published products stay published (no new review).
+   */
+  async setBrand(shopId: string, productIds: string[], brand: string | null | undefined): Promise<{ updated: number; brand: string | null }> {
+    const brandId = await this.brands.resolve(brand);
+    const { count } = await this.prisma.product.updateMany({
+      where: { id: { in: [...new Set(productIds)] }, shopId },
+      data: { brandId },
+    });
+    const name = brandId ? (await this.prisma.brand.findUnique({ where: { id: brandId }, select: { name: true } }))?.name ?? null : null;
+    return { updated: count, brand: name };
   }
 
   async update(shop: Shop, id: string, dto: ShopProductDto): Promise<ShopProductDetail> {

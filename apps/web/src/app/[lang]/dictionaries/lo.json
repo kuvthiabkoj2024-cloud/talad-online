@@ -783,7 +783,9 @@
     "closesAt": "ປິດເວລາ {time}",
     "opensToday": "ເປີດມື້ນີ້ເວລາ {time}",
     "opensOn": "ເປີດ{day} ເວລາ {time}",
-    "closedDay": "ປິດ"
+    "closedDay": "ປິດ",
+    "brand": "ຍີ່ຫໍ້",
+    "allBrands": "ທັງໝົດ"
   },
   "common": {
     "loading": "ກຳລັງໂຫຼດ…"

@@ -153,9 +153,9 @@ export class ShopsService {
     };
   }
 
-  async products(slug: string, q: string | undefined, sort: ShopProductSort, page: number, pageSize: number) {
+  async products(slug: string, q: string | undefined, sort: ShopProductSort, page: number, pageSize: number, brand?: string) {
     const shop = await this.prisma.shop.findFirst({ where: { slug, status: 'APPROVED' }, select: { id: true } });
     if (!shop) throw new NotFoundException('Shop not found');
-    return this.catalog.searchShop(shop.id, q, sort, page, pageSize);
+    return this.catalog.searchShop(shop.id, q, sort, page, pageSize, brand);
   }
 }

@@ -19,7 +19,7 @@ import { MEDIA_LIMITS } from '@talad/shared';
 import type { Shop } from '../../../generated/prisma/client.js';
 import { CurrentShop, ShopOwnerGuard } from '../../auth/shop-owner.guard.js';
 import { tempFileStorage } from '../../media/temp-file-storage.js';
-import { ListShopProductsQuery, ShopProductDto } from './shop-product.dto.js';
+import { BulkBrandDto, ListShopProductsQuery, ShopProductDto } from './shop-product.dto.js';
 import { ShopProductsService } from './shop-products.service.js';
 
 const id = new ParseUUIDPipe({ version: '7' });
@@ -54,6 +54,13 @@ export class ShopProductsController {
   )
   uploadVideo(@CurrentShop() shop: Shop, @UploadedFile() file?: Express.Multer.File) {
     return this.products.uploadVideo(shop.id, file);
+  }
+
+  /** One brand for several products (`brand` empty = remove it), e.g. ones listed before brands. */
+  @Post('brand')
+  @HttpCode(200)
+  setBrand(@CurrentShop() shop: Shop, @Body() dto: BulkBrandDto) {
+    return this.products.setBrand(shop.id, dto.productIds, dto.brand);
   }
 
   @Get(':id')

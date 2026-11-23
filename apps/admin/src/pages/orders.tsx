@@ -4,11 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@talad/ui/components/c
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@talad/ui/components/table'
 import { cn } from '@talad/ui/lib/utils'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Banknote, Coins, Eye, EyeOff, HandCoins, ImageOff, Landmark, Phone, ReceiptText, ScanSearch, TriangleAlert } from 'lucide-react'
+import { ArchiveRestore, Banknote, Coins, Eye, EyeOff, HandCoins, ImageOff, Landmark, Phone, ReceiptText, ScanSearch, Trash2, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
-import { can, useAuth } from '@/auth/context'
+import { can, isSuperAdmin, useAuth } from '@/auth/context'
 import { OrderStatusBadge } from '@/components/badges'
 import { ConfirmDialog, type ConfirmOptions } from '@/components/confirm-dialog'
 import { FilterTabs, Pager, SearchBox } from '@/components/list-controls'
@@ -17,6 +17,7 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/states'
 import { useSearchParamInput, useUrlParams } from '@/hooks/use-url-params'
 import { useI18n } from '@/i18n/context'
 import { api, send } from '@/lib/api'
+import { ALERTS_KEY } from '@/nav'
 import { fill, formatDate, formatMoney, formatNumber } from '@/lib/format'
 import { PrivateFileThumb } from '@/components/file-viewer'
 import type { OrderDetail, OrderList, OrderRow } from '@/lib/types'
@@ -41,12 +42,15 @@ export function OrdersPage() {
   const tab = isShopOrderTab(params.get('status')) && tabs.includes(params.get('status') as ShopOrderTab) ? (params.get('status') as ShopOrderTab) : 'all'
   const q = params.get('q') ?? ''
   const [search, setSearch] = useSearchParamInput(q, set)
+  // Super Admins can list the orders they deleted (test orders), to restore one.
+  const deleted = isSuperAdmin(admin) && params.get('deleted') === '1'
   const query = new URLSearchParams({ page: String(page), method })
   if (tab !== 'all') query.set('status', tab)
   if (q) query.set('q', q)
+  if (deleted) query.set('deleted', '1')
   const checks = can(admin, 'payments')
   const list = useQuery({
-    queryKey: ['admin', 'orders', { method, tab, q, page }],
+    queryKey: ['admin', 'orders', { method, tab, q, page, deleted }],
     queryFn: () => api<OrderList>(`/admin/orders?${query}`),
     placeholderData: keepPreviousData,
   })
@@ -56,31 +60,45 @@ export function OrdersPage() {
       <TopBar title={t.orders.title} />
       <PageBody>
         <PageIntro title={t.orders.title} description={t.orders.description} />
-        <div role="tablist" className="grid grid-cols-2 gap-1 self-start rounded-xl bg-muted p-1 sm:w-80">
-          {METHODS.map((m) => {
-            const Icon = m === 'cod' ? HandCoins : Landmark
-            return (
-              <button
-                key={m}
-                type="button"
-                role="tab"
-                aria-selected={method === m}
-                onClick={() => set({ method: m === 'transfer' ? undefined : m, status: undefined, page: undefined })}
-                className={cn(
-                  'flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors',
-                  method === m ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <Icon className="size-4" />
-                {t.orders.methodTabs[m]}
-                {!!list.data?.open?.[m] && (
-                  <span className="min-w-5 rounded-full bg-red-500 px-1.5 text-center text-[11px] font-bold leading-5 text-white tabular-nums">
-                    {list.data.open[m] > 99 ? '99+' : list.data.open[m]}
-                  </span>
-                )}
-              </button>
-            )
-          })}
+        {deleted && <Note danger>{t.orders.delete.listNote}</Note>}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div role="tablist" className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1 sm:w-80">
+            {METHODS.map((m) => {
+              const Icon = m === 'cod' ? HandCoins : Landmark
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  role="tab"
+                  aria-selected={method === m}
+                  onClick={() => set({ method: m === 'transfer' ? undefined : m, status: undefined, page: undefined })}
+                  className={cn(
+                    'flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+                    method === m ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <Icon className="size-4" />
+                  {t.orders.methodTabs[m]}
+                  {!!list.data?.open?.[m] && (
+                    <span className="min-w-5 rounded-full bg-red-500 px-1.5 text-center text-[11px] font-bold leading-5 text-white tabular-nums">
+                      {list.data.open[m] > 99 ? '99+' : list.data.open[m]}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+          {isSuperAdmin(admin) && (
+            <Button
+              variant={deleted ? 'default' : 'outline'}
+              size="sm"
+              aria-pressed={deleted}
+              onClick={() => set({ deleted: deleted ? undefined : '1', status: undefined, page: undefined })}
+            >
+              <Trash2 />
+              {t.orders.delete.showDeleted}
+            </Button>
+          )}
         </div>
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <FilterTabs
@@ -167,6 +185,7 @@ export function OrderDetailPage() {
   const { t, locale } = useI18n()
   const { admin } = useAuth()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const [confirm, setConfirm] = useState<ConfirmOptions | null>(null)
   const order = useQuery({ queryKey: ['admin', 'orders', number], queryFn: () => api<OrderDetail>(`/admin/orders/${encodeURIComponent(number)}`) })
 
@@ -193,8 +212,59 @@ export function OrderDetailPage() {
               {o.shop.name}
             </Link>
           </span>
+          {/* Super Admins remove test orders: hidden from the console, kept in the database. */}
+          {isSuperAdmin(admin) && o.deletedAt && (
+            <Button
+              size="sm"
+              className="ml-auto"
+              onClick={() =>
+                setConfirm({
+                  title: fill(t.orders.delete.restoreTitle, { number: o.number }),
+                  description: t.orders.delete.restoreBody,
+                  confirmLabel: t.orders.delete.restore,
+                  onConfirm: async () => {
+                    await send('POST', `/admin/orders/${encodeURIComponent(o.number)}/restore`)
+                    toast.success(t.orders.delete.restored)
+                    void queryClient.invalidateQueries({ queryKey: ['admin'] })
+                    void queryClient.invalidateQueries({ queryKey: ALERTS_KEY })
+                  },
+                  errorText: () => t.orders.delete.failed,
+                })
+              }
+            >
+              <ArchiveRestore />
+              {t.orders.delete.restore}
+            </Button>
+          )}
+          {isSuperAdmin(admin) && !o.deletedAt && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto text-destructive hover:text-destructive"
+              onClick={() =>
+                setConfirm({
+                  title: fill(t.orders.delete.title, { number: o.number }),
+                  description: t.orders.delete.body,
+                  confirmLabel: t.orders.delete.confirm,
+                  destructive: true,
+                  onConfirm: async () => {
+                    await send('DELETE', `/admin/orders/${encodeURIComponent(o.number)}`)
+                    toast.success(t.orders.delete.done)
+                    navigate('/orders')
+                    void queryClient.invalidateQueries({ queryKey: ['admin'] })
+                    void queryClient.invalidateQueries({ queryKey: ALERTS_KEY })
+                  },
+                  errorText: () => t.orders.delete.failed,
+                })
+              }
+            >
+              <Trash2 />
+              {t.orders.delete.button}
+            </Button>
+          )}
         </div>
-        {waitsOnShop(o) && <ShopSeenNote order={o} />}
+        {o.deletedAt && <Note danger>{fill(t.orders.delete.deletedNote, { time: formatDate(o.deletedAt, locale, true) })}</Note>}
+        {!o.deletedAt && waitsOnShop(o) && <ShopSeenNote order={o} />}
         {o.cancelReason && o.status === 'CANCELLED' && <Note>{fill(t.orders.cancelReason, { reason: o.cancelReason })}</Note>}
         {o.dispute && <Note danger>{fill(t.orders.disputeOpen, { reason: o.dispute.reason })}</Note>}
         {/* A transfer waiting for MC Mart: check the slips and approve right here. */}

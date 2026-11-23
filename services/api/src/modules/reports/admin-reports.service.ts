@@ -7,7 +7,8 @@ const DAY = 86_400_000;
 const toDay = (d: Date) => new Date(d.getTime() + 7 * 3_600_000).toISOString().slice(0, 10);
 const num = (v: Prisma.Decimal | number | bigint | null | undefined) => (v === null || v === undefined ? 0 : Number(v));
 /** Orders that count as sales: everything but cancellations. */
-const COUNTED = Prisma.sql`so.status <> 'CANCELLED'`;
+// Deleted (test) orders never count; cancelled ones aren't sales.
+const COUNTED = Prisma.sql`so.status <> 'CANCELLED' AND so."deletedAt" IS NULL`;
 
 export type SalesGroup = 'shop' | 'category' | 'product';
 
@@ -32,7 +33,7 @@ export class AdminReportsService {
       this.prisma.$queryRaw<{ all: number; refunded: number }[]>`
         SELECT COUNT(*)::int AS all,
                COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM "Payment" p WHERE p."shopOrderId" = so.id AND p.status = 'REFUNDED'))::int AS refunded
-        FROM "ShopOrder" so WHERE ${inRange(from, to)}`,
+        FROM "ShopOrder" so WHERE so."deletedAt" IS NULL AND ${inRange(from, to)}`,
       this.prisma.$queryRaw<{ day: Date; orders: number; gmv: Prisma.Decimal | null }[]>`
         SELECT (so."createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Vientiane')::date AS day, COUNT(*)::int AS orders, SUM(so.total) AS gmv
         FROM "ShopOrder" so WHERE ${COUNTED} AND ${inRange(from, to)} GROUP BY 1`,
@@ -84,8 +85,8 @@ export class AdminReportsService {
       // Completed orders a payout will settle now (cash on delivery is the shop's already).
       this.prisma.shopOrder.count({ where: settleableOrders(new Date()) }),
       // Transfers waiting for a check, and paid orders cancelled that still need a refund.
-      this.prisma.order.count({ where: { shopOrders: { some: { status: 'PENDING' } }, slips: { some: { status: 'PENDING' } } } }),
-      this.prisma.shopOrder.count({ where: { status: 'CANCELLED', payments: { some: { method: { not: 'COD' }, status: 'PAID', amount: { gt: 0 } } } } }),
+      this.prisma.order.count({ where: { shopOrders: { some: { status: 'PENDING', deletedAt: null } }, slips: { some: { status: 'PENDING' } } } }),
+      this.prisma.shopOrder.count({ where: { status: 'CANCELLED', deletedAt: null, payments: { some: { method: { not: 'COD' }, status: 'PAID', amount: { gt: 0 } } } } }),
       this.prisma.commissionRequest.count({ where: { status: 'PENDING' } }),
       this.prisma.codTransfer.count({ where: { status: 'SUBMITTED' } }),
     ]);
@@ -135,10 +136,10 @@ export class AdminReportsService {
   /** Money in and out for the period (§2.9 financial). */
   async finance(from: Date, to: Date) {
     const [gross, completed, refunded, payouts] = await Promise.all([
-      this.prisma.shopOrder.aggregate({ where: { status: { not: 'CANCELLED' }, createdAt: { gte: from, lt: to } }, _sum: { total: true }, _count: { _all: true } }),
-      this.prisma.shopOrder.aggregate({ where: { status: 'COMPLETED', createdAt: { gte: from, lt: to } }, _sum: { total: true, commissionAmount: true, platformDiscount: true } }),
+      this.prisma.shopOrder.aggregate({ where: { status: { not: 'CANCELLED' }, deletedAt: null, createdAt: { gte: from, lt: to } }, _sum: { total: true }, _count: { _all: true } }),
+      this.prisma.shopOrder.aggregate({ where: { status: 'COMPLETED', deletedAt: null, createdAt: { gte: from, lt: to } }, _sum: { total: true, commissionAmount: true, platformDiscount: true } }),
       this.prisma.shopOrder.aggregate({
-        where: { createdAt: { gte: from, lt: to }, payments: { some: { status: 'REFUNDED' } } },
+        where: { createdAt: { gte: from, lt: to }, deletedAt: null, payments: { some: { status: 'REFUNDED' } } },
         _sum: { total: true },
         _count: { _all: true },
       }),

@@ -125,8 +125,8 @@ export class AdminShopsService {
     if (!shop) throw new NotFoundException('Shop not found');
     const [products, orders, revenue, defaultRate] = await Promise.all([
       this.prisma.product.groupBy({ by: ['status'], where: { shopId: id }, _count: { _all: true } }),
-      this.prisma.shopOrder.groupBy({ by: ['status'], where: { shopId: id }, _count: { _all: true } }),
-      this.prisma.shopOrder.aggregate({ where: { shopId: id, status: 'COMPLETED' }, _sum: { total: true, platformDiscount: true, commissionAmount: true } }),
+      this.prisma.shopOrder.groupBy({ by: ['status'], where: { shopId: id, deletedAt: null }, _count: { _all: true } }),
+      this.prisma.shopOrder.aggregate({ where: { shopId: id, status: 'COMPLETED', deletedAt: null }, _sum: { total: true, platformDiscount: true, commissionAmount: true } }),
       this.prisma.setting.findUnique({ where: { key: 'defaultCommissionRate' } }),
     ]);
     return {

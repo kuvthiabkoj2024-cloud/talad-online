@@ -738,6 +738,9 @@ model ShopOrder {
   /// When the shop first opened the order (Seller Center or app), so MC Mart can call shops
   /// that haven't seen a paid order yet. Null until then.
   shopSeenAt          DateTime?
+  /// A Super Admin deleted it (e.g. a test order): hidden from the admin console, its reports
+  /// and payouts, but kept in the database. Null for every real order.
+  deletedAt           DateTime?
   /// The payout that settled this order with the shop (§2.3); null until paid out.
   payoutId            String?
   createdAt           DateTime       @default(now())

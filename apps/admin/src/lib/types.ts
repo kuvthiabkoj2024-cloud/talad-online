@@ -256,6 +256,8 @@ export interface OrderRow {
   shop: { id: string; name: string; slug: string; phone: string }
   /** When the shop first opened the order; null if it hasn't yet. */
   shopSeenAt: string | null
+  /** When a Super Admin deleted it (test order); null for live orders. */
+  deletedAt: string | null
   payment: { method: PaymentMethod; status: PaymentStatus; hasSlip: boolean } | null
   awaitingConfirmation: boolean
   /** While unpaid: slips being checked, rejected (waiting for new ones), or none yet. */
@@ -347,6 +349,8 @@ export interface PayoutDetail {
   createdAt: string
   orders: {
     number: string
+    /** Deleted by a Super Admin (a test order) after being paid out. */
+    deleted: boolean
     placedAt: string
     completedAt: string
     subtotal: number

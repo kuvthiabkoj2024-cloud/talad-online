@@ -42,10 +42,11 @@ const orderInclude = {
 type OrderRow = Prisma.OrderGetPayload<{ include: typeof orderInclude }>;
 
 function queueWhere(queue: PaymentQueue): Prisma.OrderWhereInput {
-  const waiting = { shopOrders: { some: { status: 'PENDING' as const } } };
+  // Orders a Super Admin deleted (test orders) leave every queue.
+  const waiting = { shopOrders: { some: { status: 'PENDING' as const, deletedAt: null } } };
   if (queue === 'review') return { ...waiting, slips: { some: { status: 'PENDING' } } };
   if (queue === 'rejected') return { ...waiting, slips: { some: { status: 'REJECTED' }, none: { status: 'PENDING' } } };
-  return { slips: { some: { status: 'APPROVED' } } };
+  return { shopOrders: { some: { deletedAt: null } }, slips: { some: { status: 'APPROVED' } } };
 }
 
 /**
@@ -246,8 +247,8 @@ export class PaymentReviewService {
   private refundWhere(queue: RefundQueue): Prisma.ShopOrderWhereInput {
     const transfer = { method: { not: 'COD' as const } };
     return queue === 'due'
-      ? { status: 'CANCELLED', payments: { some: { ...transfer, status: 'PAID', amount: { gt: 0 } } } }
-      : { payments: { some: { ...transfer, status: 'REFUNDED', refundedAt: { not: null } } } };
+      ? { status: 'CANCELLED', deletedAt: null, payments: { some: { ...transfer, status: 'PAID', amount: { gt: 0 } } } }
+      : { deletedAt: null, payments: { some: { ...transfer, status: 'REFUNDED', refundedAt: { not: null } } } };
   }
 
   private readonly refundSelect = {

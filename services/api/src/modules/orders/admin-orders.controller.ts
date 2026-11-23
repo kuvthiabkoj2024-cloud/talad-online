@@ -5,7 +5,7 @@ import { BANK_CODES, isShopOrderTab, type BankCode } from '@talad/shared';
 import { IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import type { AdminUser, DisputeStatus, PayoutStatus } from '../../generated/prisma/client.js';
 import { AdminPageQuery, ReasonDto } from '../admins/admin.dto.js';
-import { AdminAuthGuard, ClientIp, CurrentAdmin, Permission } from '../auth/admin-auth.guard.js';
+import { AdminAuthGuard, ClientIp, CurrentAdmin, Permission, SuperAdminOnly, type AdminWithRole } from '../auth/admin-auth.guard.js';
 import { AdminOrdersService, type DisputeDecision, type PayoutAction } from './admin-orders.service.js';
 import { PAYMENT_QUEUES, PaymentReviewService, REFUND_QUEUES, type PaymentQueue, type RefundQueue } from './payment-review.service.js';
 import { PlatformAccountService } from './platform-account.service.js';
@@ -25,6 +25,11 @@ class AdminOrdersQuery extends AdminPageQuery {
   @IsOptional()
   @IsIn(['transfer', 'cod'])
   method?: 'transfer' | 'cod';
+
+  /** `1`: only orders a Super Admin deleted (Super Admins only; ignored for others). */
+  @IsOptional()
+  @IsIn(['1'])
+  deleted?: '1';
 }
 
 class ReferenceDto {
@@ -58,14 +63,29 @@ export class AdminOrdersController {
 
   /** `?method=transfer|cod&status=<shop order tab>&q=&shopId=&customerId=&page=` */
   @Get()
-  list(@Query() q: AdminOrdersQuery) {
-    return this.orders.list(null, { tab: isShopOrderTab(q.status) ? q.status : undefined, q: q.q, page: q.page, pageSize: q.pageSize }, q.customerId, q.method);
+  list(@CurrentAdmin() a: AdminWithRole, @Query() q: AdminOrdersQuery) {
+    const deleted = q.deleted === '1' && a.role.isSuper;
+    return this.orders.list(null, { tab: isShopOrderTab(q.status) ? q.status : undefined, q: q.q, page: q.page, pageSize: q.pageSize }, q.customerId, q.method, deleted);
   }
 
   @Get(':number')
   async detail(@Param('number') number: string) {
     const { actions: _, ...order } = await this.orders.detail(null, number);
     return order;
+  }
+
+  /** Super Admin only: hide a test order (soft delete, kept in the database). */
+  @Delete(':number')
+  @SuperAdminOnly()
+  deleteOrder(@CurrentAdmin() a: AdminUser, @Param('number') number: string, @ClientIp() ip: string) {
+    return this.admin.deleteOrder(a, number, ip);
+  }
+
+  @Post(':number/restore')
+  @HttpCode(200)
+  @SuperAdminOnly()
+  restoreOrder(@CurrentAdmin() a: AdminUser, @Param('number') number: string, @ClientIp() ip: string) {
+    return this.admin.restoreOrder(a, number, ip);
   }
 
   @Get(':number/slip')

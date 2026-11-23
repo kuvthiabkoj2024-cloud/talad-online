@@ -52,7 +52,7 @@ export class AdminCustomersService {
       ? await this.prisma.$queryRaw<{ id: string; spent: Prisma.Decimal | null }[]>`
           SELECT o."customerId" AS id, SUM(so.total) AS spent
           FROM "ShopOrder" so JOIN "Order" o ON o.id = so."orderId"
-          WHERE o."customerId" IN (${Prisma.join(rows.map((r) => r.id))}) AND so.status <> 'CANCELLED'
+          WHERE o."customerId" IN (${Prisma.join(rows.map((r) => r.id))}) AND so.status <> 'CANCELLED' AND so."deletedAt" IS NULL
           GROUP BY 1`
       : [];
     const spent = new Map(spend.map((s) => [s.id, s.spent ? Number(s.spent) : 0]));
@@ -92,7 +92,7 @@ export class AdminCustomersService {
     });
     if (!c) throw new NotFoundException('Customer not found');
     const [spent, sessions, disputes] = await Promise.all([
-      this.prisma.shopOrder.aggregate({ where: { order: { customerId: id }, status: { not: 'CANCELLED' } }, _sum: { total: true } }),
+      this.prisma.shopOrder.aggregate({ where: { order: { customerId: id }, status: { not: 'CANCELLED' }, deletedAt: null }, _sum: { total: true } }),
       this.prisma.session.count({ where: { actorType: 'CUSTOMER', actorId: id, revokedAt: null, expiresAt: { gt: new Date() } } }),
       this.prisma.dispute.count({ where: { shopOrder: { order: { customerId: id } } } }),
     ]);

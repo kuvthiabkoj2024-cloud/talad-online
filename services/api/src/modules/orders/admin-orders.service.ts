@@ -178,6 +178,35 @@ export class AdminOrdersService {
    * Takes back an order's points by hand, for a return settled outside the app (after the window,
    * or through support). The order itself doesn't change.
    */
+  /**
+   * Super Admin: delete an order made by mistake or for testing. It is only hidden (soft delete):
+   * it leaves the admin console, reports and future payouts, but stays in the database. Any
+   * order can be hidden; a payout it was already in keeps listing it, as that money was sent.
+   */
+  async deleteOrder(admin: AdminUser, number: string, ip?: string): Promise<{ deleted: true }> {
+    const so = await this.prisma.shopOrder.findFirst({ where: { number, deletedAt: null }, select: { id: true, status: true, total: true } });
+    if (!so) throw new NotFoundException('Order not found');
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`UPDATE "ShopOrder" SET "deletedAt" = now() WHERE id = ${so.id}`;
+      await this.audit.log(
+        { adminId: admin.id, action: 'order.delete', entityType: 'ShopOrder', entityId: so.id, changes: { number, status: so.status, total: num(so.total) }, ip },
+        tx,
+      );
+    });
+    return { deleted: true };
+  }
+
+  /** Super Admin: undo a delete. The order is back in the console, its reports and payouts. */
+  async restoreOrder(admin: AdminUser, number: string, ip?: string): Promise<{ restored: true }> {
+    const so = await this.prisma.shopOrder.findFirst({ where: { number, deletedAt: { not: null } }, select: { id: true } });
+    if (!so) throw new NotFoundException('Deleted order not found');
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`UPDATE "ShopOrder" SET "deletedAt" = NULL WHERE id = ${so.id}`;
+      await this.audit.log({ adminId: admin.id, action: 'order.restore', entityType: 'ShopOrder', entityId: so.id, changes: { number }, ip }, tx);
+    });
+    return { restored: true };
+  }
+
   async revokeOrderPoints(admin: AdminUser, number: string, reason: string | null, ip?: string) {
     if (!reason) throw new BadRequestException({ code: 'REASON_REQUIRED', message: 'Say why the points are removed' });
     const so = await this.prisma.shopOrder.findFirst({ where: { number }, select: { id: true, number: true, order: { select: { customerId: true } } } });
@@ -286,6 +315,7 @@ export class AdminOrdersService {
       where: {
         status: 'COMPLETED',
         payoutId: null,
+        deletedAt: null,
         payments: { none: { method: 'COD' } },
         history: { none: { toStatus: 'COMPLETED', createdAt: { lte: cutoff } } },
       },
@@ -376,7 +406,7 @@ export class AdminOrdersService {
         },
         orders: {
           orderBy: { createdAt: 'asc' },
-          select: { number: true, createdAt: true, updatedAt: true, subtotal: true, discountTotal: true, platformDiscount: true, total: true, commissionAmount: true },
+          select: { number: true, createdAt: true, updatedAt: true, subtotal: true, discountTotal: true, platformDiscount: true, total: true, commissionAmount: true, deletedAt: true },
         },
       },
     });
@@ -402,6 +432,8 @@ export class AdminOrdersService {
         const commission = num(o.commissionAmount);
         return {
           number: o.number,
+          // Paid out, then deleted as a test order: still listed, as the money was sent.
+          deleted: o.deletedAt !== null,
           placedAt: o.createdAt,
           completedAt: o.updatedAt,
           subtotal: num(o.subtotal),

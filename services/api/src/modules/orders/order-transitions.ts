@@ -71,6 +71,8 @@ export async function removeSold(tx: Prisma.TransactionClient, shopOrderId: stri
 export const settleableOrders = (now: Date): Prisma.ShopOrderWhereInput => ({
   status: 'COMPLETED',
   payoutId: null,
+  // A deleted (test) order is never paid out.
+  deletedAt: null,
   payments: { none: { method: 'COD' } },
   history: { some: { toStatus: 'COMPLETED', createdAt: { lte: new Date(now.getTime() - RETURN_RULES.windowDays * 86_400_000) } } },
 });

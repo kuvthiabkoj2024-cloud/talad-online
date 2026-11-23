@@ -116,7 +116,15 @@ export function PayoutDetailDialog({
                   <TableBody>
                     {p.orders.map((o) => (
                       <TableRow key={o.number}>
-                        <TableCell className="pl-4 font-mono text-xs">{o.number}</TableCell>
+                        <TableCell className="pl-4 font-mono text-xs">
+                          {o.number}
+                          {/* Paid out, then deleted as a test order: still listed, as the money was sent. */}
+                          {o.deleted && (
+                            <span className="ml-1.5 rounded bg-red-100 px-1.5 py-0.5 font-sans text-[11px] font-medium text-red-800 dark:bg-red-950 dark:text-red-200">
+                              {t.orders.delete.deletedTag}
+                            </span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-xs text-muted-foreground">{formatDate(o.completedAt, locale)}</TableCell>
                         <TableCell className="text-right tabular-nums">
                           {formatMoney(o.total, locale)}

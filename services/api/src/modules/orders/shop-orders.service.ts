@@ -35,6 +35,8 @@ const billPrefix = (shopId: string) => filePrefix(storageFolder.shopOrders(shopI
 const NEEDS_REASON: ShopOrderAction[] = ['cancel', 'reject-return'];
 /** Shops never see a transfer that MC Mart hasn't approved yet (it stays PENDING until then). */
 const SHOP_VISIBLE: Prisma.ShopOrderWhereInput = { status: { not: 'PENDING' } };
+/** The admin console never shows orders a Super Admin deleted (test orders). */
+const NOT_DELETED = { deletedAt: null } satisfies Prisma.ShopOrderWhereInput;
 
 const lineSelect = {
   name: true,
@@ -92,6 +94,8 @@ export interface ShopOrderSummary {
   shop: { id: string; name: string; slug: string; phone: string };
   /** When the shop first opened it; MC Mart calls shops that haven't seen a paid order. */
   shopSeenAt: Date | null;
+  /** When a Super Admin deleted it (a test order); null for live orders. Admin console only. */
+  deletedAt: Date | null;
   payment: { method: PaymentMethod; status: PaymentStatus; hasSlip: boolean } | null;
   /** A transfer whose slips wait for MC Mart's check (admin console only; shops never see these). */
   awaitingConfirmation: boolean;
@@ -174,8 +178,10 @@ export class ShopOrdersService {
    * `shopId` null = every shop (admin console); `customerId` narrows to one buyer; `method`
    * splits transfers (checked by MC Mart) from cash on delivery.
    */
-  async list(shopId: string | null, query: ListShopOrdersQuery, customerId?: string, method?: 'transfer' | 'cod'): Promise<ShopOrderList> {
+  async list(shopId: string | null, query: ListShopOrdersQuery, customerId?: string, method?: 'transfer' | 'cod', deleted = false): Promise<ShopOrderList> {
     const term = query.q?.trim();
+    // The admin console lists live orders, or (Super Admins) only the deleted ones to restore.
+    const adminScope: Prisma.ShopOrderWhereInput = deleted ? { deletedAt: { not: null } } : NOT_DELETED;
     // Older single-shop checkouts keep their payment on the whole order, not the shop order.
     const cod: Prisma.ShopOrderWhereInput = {
       OR: [{ payments: { some: { method: 'COD' } } }, { payments: { none: {} }, order: { payments: { some: { method: 'COD', shopOrderId: null } } } }],
@@ -183,7 +189,7 @@ export class ShopOrdersService {
     const byMethod: Prisma.ShopOrderWhereInput = method === 'cod' ? cod : method === 'transfer' ? { NOT: cod } : {};
     // Visibility and payment method go in AND so they never clash with the search's OR.
     const where: Prisma.ShopOrderWhereInput = {
-      ...(shopId && { shopId }),
+      ...(shopId ? { shopId } : adminScope),
       AND: [...(shopId ? [SHOP_VISIBLE] : []), byMethod],
       ...(customerId && { order: { customerId } }),
       ...(query.tab && { status: { in: [...SHOP_ORDER_TABS[query.tab]] } }),
@@ -196,7 +202,7 @@ export class ShopOrdersService {
       }),
     };
     const openOf = (m: Prisma.ShopOrderWhereInput) =>
-      this.prisma.shopOrder.count({ where: { status: { in: OPEN_STATUSES }, AND: [m], ...(customerId && { order: { customerId } }) } });
+      this.prisma.shopOrder.count({ where: { ...adminScope, status: { in: OPEN_STATUSES }, AND: [m], ...(customerId && { order: { customerId } }) } });
     const [rows, total, byStatus, open] = await Promise.all([
       this.prisma.shopOrder.findMany({
         where,
@@ -209,7 +215,7 @@ export class ShopOrdersService {
       this.prisma.shopOrder.count({ where }),
       this.prisma.shopOrder.groupBy({
         by: ['status'],
-        where: { ...(shopId && { shopId, ...SHOP_VISIBLE }), AND: [byMethod], ...(customerId && { order: { customerId } }) },
+        where: { ...(shopId ? { shopId, ...SHOP_VISIBLE } : adminScope), AND: [byMethod], ...(customerId && { order: { customerId } }) },
         _count: { _all: true },
       }),
       // Only the admin console splits orders by payment method.
@@ -515,6 +521,7 @@ export class ShopOrdersService {
   }
 
   private async find(shopId: string | null, number: string): Promise<OrderRow> {
+    // Admins can still open a deleted order (from the deleted list or a payout) to restore it.
     const row = await this.prisma.shopOrder.findFirst({ where: { number, ...(shopId && { shopId, ...SHOP_VISIBLE }) }, include: orderInclude });
     if (!row) throw new NotFoundException('Order not found');
     return row;
@@ -542,6 +549,7 @@ export class ShopOrdersService {
       customer: { id: r.order.customer.id, name: r.order.customer.name },
       shop: r.shop,
       shopSeenAt: r.shopSeenAt,
+      deletedAt: r.deletedAt,
       payment: payment && { method: payment.method, status: payment.status, hasSlip: payment.slipKey !== null },
       urgent: r.urgentDelivery,
       pickup: r.pickup,

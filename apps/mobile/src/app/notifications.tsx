@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -10,7 +10,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
-import { clearBadge } from '@/lib/push-notifications';
+import { clearBadge, routeFor } from '@/lib/push-notifications';
 
 const TABS = ['all', 'orders', 'promotions', 'updates'] as const;
 type Tab = (typeof TABS)[number];
@@ -22,10 +22,11 @@ interface Page {
   unread: Record<Tab, number>;
 }
 
-/** The customer's notifications, as on the website: tabs, who each is from, tap to mark read. */
+/** The customer's notifications, as on the website: tabs, who each is from, tap to open. */
 export default function NotificationsScreen() {
   const theme = useTheme();
   const queryClient = useQueryClient();
+  const router = useRouter();
   const { t } = useI18n();
   const [tab, setTab] = useState<Tab>('all');
   const list = useInfiniteQuery({
@@ -44,9 +45,16 @@ export default function NotificationsScreen() {
     void queryClient.invalidateQueries({ queryKey: ['me', 'notifications'] });
     void queryClient.invalidateQueries({ queryKey: ['me', 'notifications-unread'] });
   };
-  /** Tapping marks it read (it doesn't open other screens). */
+  /**
+   * Tapping marks it read and opens what it's about: the order, product, chat… or, for seller
+   * news (`seller:` links), that Seller Center screen. Ones about nothing in particular stay here.
+   */
   function read(n: NotificationItem) {
     if (!n.readAt) void api(`/me/notifications/${n.id}/read`, { method: 'POST' }).then(refresh).catch(() => {});
+    const link = n.data?.link;
+    if (!link) return;
+    const to = routeFor({ link });
+    if (to !== '/notifications' && to !== '/seller/notifications') router.push(to);
   }
   async function readAll() {
     await api(`/me/notifications/read-all${tab === 'all' ? '' : `?tab=${tab}`}`, { method: 'POST' }).catch(() => {});

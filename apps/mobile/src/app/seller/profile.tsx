@@ -152,7 +152,9 @@ function ProfileForm({ profile: p, onImage }: { profile: ShopProfile; onImage: (
   }
 
   async function save() {
-    const enablingCod = cod && !p.cod.termsAcceptedAt;
+    // Turning COD on (even again, after turning it off) means accepting its terms; the API
+    // asks for the acceptance each time.
+    const enablingCod = cod && !p.cod.enabled;
     if (enablingCod && !codTerms) return setShowTerms(true);
     setSaving(true);
     try {
@@ -417,7 +419,7 @@ function ProfileForm({ profile: p, onImage }: { profile: ShopProfile; onImage: (
             {i + 1}. {line}
           </ThemedText>
         ))}
-        {!p.cod.termsAcceptedAt && (
+        {!p.cod.enabled && (
           <>
             {toggleRow(s.cod.accept, undefined, codTerms, setCodTerms)}
             <Button

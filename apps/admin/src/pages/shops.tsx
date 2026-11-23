@@ -12,6 +12,7 @@ import { toast } from 'sonner'
 import { can, useAuth } from '@/auth/context'
 import { ShopStatusBadge } from '@/components/badges'
 import { CommissionInput } from '@/components/commission-input'
+import { ContactButtons } from '@/components/contact-buttons'
 import { commissionFrom, commissionLabel, draftOf } from '@/lib/commission'
 import { ConfirmDialog, type ConfirmOptions } from '@/components/confirm-dialog'
 import { FilterTabs, Pager, SearchBox } from '@/components/list-controls'
@@ -189,6 +190,7 @@ export function ShopDetailPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
+            <ContactButtons phone={s.phone} callLabel={t.shops.call} chatLabel={t.shops.whatsapp} />
             {s.status === 'APPROVED' && (
               <Button asChild variant="outline">
                 <a href={storefrontUrl.shop(locale, s.slug)} target="_blank" rel="noreferrer">

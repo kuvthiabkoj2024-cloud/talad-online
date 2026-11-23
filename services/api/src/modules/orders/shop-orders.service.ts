@@ -52,7 +52,7 @@ const orderInclude = {
   items: { select: lineSelect, orderBy: { id: 'asc' } },
   payments: { orderBy: { createdAt: 'desc' }, take: 1 },
   deliveryProvider: { select: { id: true, name: true } },
-  shop: { select: { id: true, name: true, slug: true } },
+  shop: { select: { id: true, name: true, slug: true, phone: true } },
   order: {
     select: {
       number: true,
@@ -89,7 +89,9 @@ export interface ShopOrderSummary {
   itemCount: number;
   items: ShopOrderLine[];
   customer: { id: string; name: string };
-  shop: { id: string; name: string; slug: string };
+  shop: { id: string; name: string; slug: string; phone: string };
+  /** When the shop first opened it; MC Mart calls shops that haven't seen a paid order. */
+  shopSeenAt: Date | null;
   payment: { method: PaymentMethod; status: PaymentStatus; hasSlip: boolean } | null;
   /** A transfer whose slips wait for MC Mart's check (admin console only; shops never see these). */
   awaitingConfirmation: boolean;
@@ -232,6 +234,14 @@ export class ShopOrdersService {
       counts,
       ...(open && { open: { transfer: open[0], cod: open[1] } }),
     };
+  }
+
+  /**
+   * The shop opened the order: kept the first time only. Raw SQL so `updatedAt` (shown as the
+   * completed / cancelled time) doesn't move.
+   */
+  async markSeen(shopId: string, number: string): Promise<void> {
+    await this.prisma.$executeRaw`UPDATE "ShopOrder" SET "shopSeenAt" = now() WHERE "number" = ${number} AND "shopId" = ${shopId} AND "shopSeenAt" IS NULL`;
   }
 
   async detail(shopId: string | null, number: string): Promise<ShopOrderDetail> {
@@ -531,6 +541,7 @@ export class ShopOrdersService {
       })),
       customer: { id: r.order.customer.id, name: r.order.customer.name },
       shop: r.shop,
+      shopSeenAt: r.shopSeenAt,
       payment: payment && { method: payment.method, status: payment.status, hasSlip: payment.slipKey !== null },
       urgent: r.urgentDelivery,
       pickup: r.pickup,

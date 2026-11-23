@@ -735,6 +735,9 @@ model ShopOrder {
   autoConfirmAt       DateTime?
   extensionsUsed      Int            @default(0)
   cancelReason        String?
+  /// When the shop first opened the order (Seller Center or app), so MC Mart can call shops
+  /// that haven't seen a paid order yet. Null until then.
+  shopSeenAt          DateTime?
   /// The payout that settled this order with the shop (§2.3); null until paid out.
   payoutId            String?
   createdAt           DateTime       @default(now())

@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet } from 'react-native';
 
@@ -10,7 +10,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
-import { clearBadge } from '@/lib/push-notifications';
+import { clearBadge, routeFor } from '@/lib/push-notifications';
 import { sellerKeys } from '@/lib/seller';
 
 interface InboxPage {
@@ -23,6 +23,7 @@ interface InboxPage {
 export default function SellerNotificationsScreen() {
   const theme = useTheme();
   const queryClient = useQueryClient();
+  const router = useRouter();
   const { t } = useI18n();
   const list = useInfiniteQuery({
     queryKey: ['seller', 'notifications'],
@@ -40,9 +41,13 @@ export default function SellerNotificationsScreen() {
     void queryClient.invalidateQueries({ queryKey: sellerKeys.badges });
     void queryClient.invalidateQueries({ queryKey: ['seller', 'inbox-unread'] });
   };
-  /** Tapping marks it read (it doesn't open other screens). */
+  /** Tapping marks it read and opens what it's about (the order, chat, product…), if anything. */
   function read(n: NotificationItem) {
     if (!n.readAt) void api(`/me/shop/notifications/${n.id}/read`, { method: 'POST' }).then(refresh).catch(() => {});
+    const link = n.data?.link;
+    if (!link) return;
+    const to = routeFor({ app: 'seller', link });
+    if (to !== '/seller/notifications') router.push(to);
   }
   async function readAll() {
     await api('/me/shop/notifications/read-all', { method: 'POST' }).catch(() => {});

@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { can, useAuth } from '@/auth/context'
 import { FlagBadge, OrderStatusBadge, ShopStatusBadge } from '@/components/badges'
 import { ConfirmDialog, type ConfirmOptions } from '@/components/confirm-dialog'
+import { ContactButtons } from '@/components/contact-buttons'
 import { FilterTabs, Pager, SearchBox } from '@/components/list-controls'
 import { PageBody, PageIntro, TopBar } from '@/components/page-header'
 import { EmptyState, ErrorState, LoadingState } from '@/components/states'
@@ -166,9 +167,12 @@ export function CustomerDetailPage() {
               {t.customers.joined} {formatDate(c.createdAt, locale)}
             </p>
           </div>
-          <Button variant={c.isActive ? 'outline' : 'default'} className={c.isActive ? 'text-destructive hover:text-destructive' : ''} onClick={toggle}>
-            {c.isActive ? t.customers.suspend : t.customers.reactivate}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {c.phone && <ContactButtons phone={c.phone} callLabel={t.customers.call} chatLabel={t.customers.whatsapp} />}
+            <Button variant={c.isActive ? 'outline' : 'default'} className={c.isActive ? 'text-destructive hover:text-destructive' : ''} onClick={toggle}>
+              {c.isActive ? t.customers.suspend : t.customers.reactivate}
+            </Button>
+          </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

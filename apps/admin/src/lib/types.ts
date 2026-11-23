@@ -253,7 +253,9 @@ export interface OrderRow {
   itemCount: number
   items: OrderLine[]
   customer: { id: string; name: string }
-  shop: { id: string; name: string; slug: string }
+  shop: { id: string; name: string; slug: string; phone: string }
+  /** When the shop first opened the order; null if it hasn't yet. */
+  shopSeenAt: string | null
   payment: { method: PaymentMethod; status: PaymentStatus; hasSlip: boolean } | null
   awaitingConfirmation: boolean
   /** While unpaid: slips being checked, rejected (waiting for new ones), or none yet. */

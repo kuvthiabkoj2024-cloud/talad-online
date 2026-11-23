@@ -136,6 +136,7 @@ function customerRoute(link: string): Href {
 
 function sellerRoute(link: string): Href {
   const parts = link.split('?')[0]!.split('/').filter(Boolean);
+  if (!parts.length) return '/seller';
   switch (parts[0]) {
     case 'orders':
       return parts[1] ? `/seller/orders/${parts[1]}` : '/seller/orders';

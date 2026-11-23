@@ -39,8 +39,10 @@ export class ShopOrdersController {
   }
 
   @Get(':number')
-  detail(@CurrentShop() shop: Shop, @Param('number') number: string) {
-    return this.orders.detail(shop.id, number);
+  async detail(@CurrentShop() shop: Shop, @Param('number') number: string) {
+    const order = await this.orders.detail(shop.id, number);
+    await this.orders.markSeen(shop.id, number);
+    return order;
   }
 
   @Get(':number/slip')

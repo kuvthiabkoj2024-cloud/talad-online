@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@talad/ui/components/c
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@talad/ui/components/table'
 import { cn } from '@talad/ui/lib/utils'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Banknote, Coins, HandCoins, ImageOff, Landmark, ReceiptText, ScanSearch, TriangleAlert } from 'lucide-react'
+import { Banknote, Coins, Eye, EyeOff, HandCoins, ImageOff, Landmark, Phone, ReceiptText, ScanSearch, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
@@ -19,7 +19,7 @@ import { useI18n } from '@/i18n/context'
 import { api, send } from '@/lib/api'
 import { fill, formatDate, formatMoney, formatNumber } from '@/lib/format'
 import { PrivateFileThumb } from '@/components/file-viewer'
-import type { OrderDetail, OrderList } from '@/lib/types'
+import type { OrderDetail, OrderList, OrderRow } from '@/lib/types'
 import { PaymentCheckPanel } from '@/pages/payments'
 
 const TABS = Object.keys(SHOP_ORDER_TABS) as ShopOrderTab[]
@@ -138,6 +138,7 @@ export function OrdersPage() {
                           {o.status === 'PENDING' && !o.awaitingConfirmation && o.payment?.method !== 'COD' && (
                             <span className="text-xs text-muted-foreground">{o.paymentCheck === 'rejected' ? t.orders.waitingSlips : t.orders.noSlips}</span>
                           )}
+                          {waitsOnShop(o) && <SeenLabel seenAt={o.shopSeenAt} />}
                           {o.awaitingConfirmation && checks && (
                             <Button asChild size="sm" variant="outline" className="h-7 border-amber-300 text-amber-800 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-200 dark:hover:bg-amber-950">
                               <Link to={`/orders/${o.number}`}>
@@ -193,6 +194,7 @@ export function OrderDetailPage() {
             </Link>
           </span>
         </div>
+        {waitsOnShop(o) && <ShopSeenNote order={o} />}
         {o.cancelReason && o.status === 'CANCELLED' && <Note>{fill(t.orders.cancelReason, { reason: o.cancelReason })}</Note>}
         {o.dispute && <Note danger>{fill(t.orders.disputeOpen, { reason: o.dispute.reason })}</Note>}
         {/* A transfer waiting for MC Mart: check the slips and approve right here. */}
@@ -333,6 +335,52 @@ export function OrderDetailPage() {
       </PageBody>
       <ConfirmDialog options={confirm} onClose={() => setConfirm(null)} />
     </>
+  )
+}
+
+/** The shop has to act on it (pack a paid order, or take a cash on delivery one). */
+function waitsOnShop(o: { status: OrderRow['status']; payment: { method: string } | null }) {
+  return o.status === 'CONFIRMED' || (o.status === 'PENDING' && o.payment?.method === 'COD')
+}
+
+/** In the list: has the shop opened the order yet? */
+function SeenLabel({ seenAt }: { seenAt: string | null }) {
+  const { t } = useI18n()
+  return seenAt ? (
+    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+      <Eye className="size-3.5" />
+      {t.orders.seen.short}
+    </span>
+  ) : (
+    <span className="flex items-center gap-1 text-xs font-medium text-red-700 dark:text-red-300">
+      <EyeOff className="size-3.5" />
+      {t.orders.seen.notShort}
+    </span>
+  )
+}
+
+/** On the order: when the shop opened it, or a call button if it hasn't yet. */
+function ShopSeenNote({ order }: { order: Pick<OrderRow, 'shop' | 'shopSeenAt'> }) {
+  const { t, locale } = useI18n()
+  if (order.shopSeenAt) {
+    return (
+      <p className="flex items-center gap-2 rounded-xl border bg-muted p-3 text-sm text-muted-foreground">
+        <Eye className="size-4 shrink-0" />
+        {fill(t.orders.seen.at, { time: formatDate(order.shopSeenAt, locale, true) })}
+      </p>
+    )
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100">
+      <EyeOff className="size-4 shrink-0" />
+      <span className="flex-1">{t.orders.seen.not}</span>
+      <Button asChild size="sm" variant="outline" className="h-8 border-red-300 bg-background text-red-800 hover:bg-red-100 dark:border-red-800 dark:text-red-100">
+        <a href={`tel:${order.shop.phone}`}>
+          <Phone />
+          {fill(t.orders.seen.call, { phone: formatPhone(order.shop.phone) })}
+        </a>
+      </Button>
+    </div>
   )
 }
 

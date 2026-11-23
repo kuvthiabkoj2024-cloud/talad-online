@@ -1,3 +1,4 @@
+import { GoogleAnalytics } from "@next/third-parties/google";
 import type { Metadata, Viewport } from "next";
 import { Noto_Sans_Lao_Looped } from "next/font/google";
 import { LOCALES } from "@talad/shared";
@@ -10,6 +11,9 @@ import "../globals.css";
 
 // One font for everything, Lao and English.
 const font = Noto_Sans_Lao_Looped({ variable: "--font-main", subsets: ["lao", "latin"] });
+
+/** Google Analytics 4 measurement ID (G-…), baked in at build time. */
+const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
 
 export function generateStaticParams() {
   return LOCALES.map((lang) => ({ lang }));
@@ -87,6 +91,8 @@ export default async function RootLayout({ children }: LayoutProps<"/[lang]">) {
           <PwaBridge />
         </SessionProvider>
       </body>
+      {/* Google Analytics 4 (visits, pages, where visitors come from); off until an ID is set. */}
+      {GA_ID && <GoogleAnalytics gaId={GA_ID} />}
     </html>
   );
 }

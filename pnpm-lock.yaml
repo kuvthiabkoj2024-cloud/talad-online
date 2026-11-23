@@ -471,6 +471,9 @@ importers:
       '@formatjs/intl-localematcher':
         specifier: ^0.9.0
         version: 0.9.0
+      '@next/third-parties':
+        specifier: ^16.4.6
+        version: 16.4.6(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@types/node@24.13.6)(@types/react@19.3.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)
       '@talad/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -2333,6 +2336,12 @@ packages:
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [win32]
+
+  '@next/third-parties@16.4.6':
+    resolution: {integrity: sha512-Pp2FLFGkiy6FwLcuVTK1U/TNoZuC/+MK31wcp+MAM4dwjoGKufF3RxvgtnTlkBI14Oq1HSyeBqEw0KVoSsZlmg==}
+    peerDependencies:
+      next: ^13.0.0 || ^14.0.0 || ^15.0.0 || ^16.0.0
+      react: ^18.2.0 || 19.0.0-rc-de68d2f4-20241204 || ^19.0.0
 
   '@noble/hashes@1.8.0':
     resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
@@ -8637,6 +8646,9 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
+  third-party-capital@1.0.20:
+    resolution: {integrity: sha512-oB7yIimd8SuGptespDAZnNkzIz+NWaJCu2RMsbs4Wmp9zSDUM8Nhi3s2OOcqYuv3mN4hitXc8DVx+LyUmbUDiA==}
+
   throat@5.0.0:
     resolution: {integrity: sha512-fcwX4mndzpLQKBS1DVYhGAcYaYt7vsHNIvQV+WXMvnow5cgjPphq5CaayLaGsjRdSCKZFNGt7/GYAuXaNOiYCA==}
 
@@ -10865,6 +10877,12 @@ snapshots:
 
   '@next/swc-win32-x64-msvc@16.3.6':
     optional: true
+
+  '@next/third-parties@16.4.6(next@16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@types/node@24.13.6)(@types/react@19.3.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)':
+    dependencies:
+      next: 16.3.6(@babel/core@7.29.7(supports-color@8.1.1))(@types/node@24.13.6)(@types/react@19.3.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      react: 19.2.8
+      third-party-capital: 1.0.20
 
   '@noble/hashes@1.8.0': {}
 
@@ -17878,6 +17896,8 @@ snapshots:
       acorn: 8.18.0
       commander: 2.20.3
       source-map-support: 0.5.21
+
+  third-party-capital@1.0.20: {}
 
   throat@5.0.0: {}
 
